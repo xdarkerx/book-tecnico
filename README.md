@@ -34,53 +34,106 @@ O log do MongoDB não aparece no terminal: ele vai para `/data/db/mongod.log` de
 (`docker exec book-tecnico-mongo tail -f /data/db/mongod.log`). Com `BOOK_STORAGE` definido, ⚙️ Configurações
 mostra só o armazenamento em uso e se está conectado.
 
-### Instalar, atualizar e remover com um comando (Windows, PowerShell 7)
+## Instalar, atualizar e remover com um comando (Windows)
 
-#### Podman
+O **instalar** baixa o projeto para **Downloads**, cria o `.env` a partir do exemplo, sobe o app com o MongoDB e abre o navegador.
+O **atualizar** baixa a versão mais nova do GitHub e mantém o `.env` e os dados (books, usuários, MongoDB).
+O **remover** apaga containers, volumes (**inclusive os dados do MongoDB**), imagens e arquivos baixados.
 
-Instalar — baixa o projeto para **Downloads**, cria o `.env` a partir do exemplo, sobe o app com o MongoDB e abre o navegador:
+### > Docker
 
-```powershell
-Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && Copy-Item .env.example .env && podman compose up -d --build && Start-Process http://localhost:5173
-```
+Requisito: **Docker Desktop** aberto (já traz o `docker compose`).
 
-Atualizar — versão mais nova do GitHub, mantendo o `.env` e os dados (books, usuários, MongoDB):
+#### PowerShell 7
 
-```powershell
-Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && podman compose up -d --build
-```
-
-Remover — containers, volumes (**apaga os dados do MongoDB**), imagens e arquivos baixados:
-
-```powershell
-Set-Location $HOME\Downloads\book-tecnico-main && podman compose down -v --rmi all && podman rmi --ignore docker.io/library/node:22-alpine && Set-Location $HOME && Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force
-```
-
-#### Docker
-
-Instalar — baixa o projeto para **Downloads**, cria o `.env` a partir do exemplo, sobe o app com o MongoDB e abre o navegador:
+Instalar:
 
 ```powershell
 Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && Copy-Item .env.example .env && docker compose up -d --build && Start-Process http://localhost:5173
 ```
 
-Atualizar — versão mais nova do GitHub, mantendo o `.env` e os dados (books, usuários, MongoDB):
+Atualizar:
 
 ```powershell
 Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && docker compose up -d --build
 ```
 
-Remover — containers, volumes (**apaga os dados do MongoDB**), imagens e arquivos baixados:
+Remover:
 
 ```powershell
 Set-Location $HOME\Downloads\book-tecnico-main && docker compose down -v --rmi all && Set-Location $HOME && Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force; docker rmi node:22-alpine
 ```
 
-Requisitos: PowerShell 7 (o `&&` não existe no Windows PowerShell 5.1) e um destes:
-- **Podman** com a máquina iniciada (`podman machine start`) e um provedor de compose (`podman compose` usa o docker-compose ou o podman-compose);
-- **Docker Desktop** aberto (já traz o `docker compose`). No Docker, a imagem base do Node é removida por último, após `;`: se ela já não existir, o erro não interrompe o resto.
+#### PowerShell 5.1
 
-O `.env` criado usa a senha de exemplo do MongoDB: para uso real, edite o `.env` antes de subir.
+Instalar:
+
+```powershell
+$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol='Tls12'; Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip -UseBasicParsing; Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force; Set-Location $HOME\Downloads\book-tecnico-main; Copy-Item .env.example .env; docker compose up -d --build; if ($LASTEXITCODE) { throw 'compose falhou' }; Start-Process http://localhost:5173
+```
+
+Atualizar:
+
+```powershell
+$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol='Tls12'; Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip -UseBasicParsing; Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force; Set-Location $HOME\Downloads\book-tecnico-main; docker compose up -d --build; if ($LASTEXITCODE) { throw 'compose falhou' }
+```
+
+Remover:
+
+```powershell
+$ErrorActionPreference='Stop'; Set-Location $HOME\Downloads\book-tecnico-main; docker compose down -v --rmi all; if ($LASTEXITCODE) { throw 'compose falhou' }; Set-Location $HOME; Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force; docker rmi node:22-alpine 2>$null
+```
+
+No Docker, a imagem base do Node é removida por último: se ela já não existir, o erro não interrompe o resto.
+
+### > Podman
+
+Requisitos: Podman com a máquina iniciada (`podman machine start`) e um provedor de compose (`podman compose` usa o docker-compose ou o podman-compose).
+
+#### PowerShell 7
+
+Instalar:
+
+```powershell
+Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && Copy-Item .env.example .env && podman compose up -d --build && Start-Process http://localhost:5173
+```
+
+Atualizar:
+
+```powershell
+Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && podman compose up -d --build
+```
+
+Remover:
+
+```powershell
+Set-Location $HOME\Downloads\book-tecnico-main && podman compose down -v --rmi all && podman rmi --ignore docker.io/library/node:22-alpine && Set-Location $HOME && Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force
+```
+
+#### PowerShell 5.1
+
+Instalar:
+
+```powershell
+$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol='Tls12'; Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip -UseBasicParsing; Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force; Set-Location $HOME\Downloads\book-tecnico-main; Copy-Item .env.example .env; podman compose up -d --build; if ($LASTEXITCODE) { throw 'compose falhou' }; Start-Process http://localhost:5173
+```
+
+Atualizar:
+
+```powershell
+$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol='Tls12'; Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip -UseBasicParsing; Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force; Set-Location $HOME\Downloads\book-tecnico-main; podman compose up -d --build; if ($LASTEXITCODE) { throw 'compose falhou' }
+```
+
+Remover:
+
+```powershell
+$ErrorActionPreference='Stop'; Set-Location $HOME\Downloads\book-tecnico-main; podman compose down -v --rmi all; if ($LASTEXITCODE) { throw 'compose falhou' }; podman rmi --ignore docker.io/library/node:22-alpine; Set-Location $HOME; Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force
+```
+
+### Observações
+
+- **PowerShell 7** usa `&&`, que para no primeiro erro. O **PowerShell 5.1** não tem `&&`, então usa `;` com `$ErrorActionPreference='Stop'` e `if ($LASTEXITCODE) { throw … }`, que fazem o mesmo papel. O `Tls12` e o `-UseBasicParsing` evitam falhas de download no 5.1. O `Stop` continua valendo naquela janela: feche e abra o PowerShell se incomodar.
+- O `.env` criado usa a senha de exemplo do MongoDB: para uso real, edite o `.env` antes de subir.
 
 A página é dividida em partes, na pasta `html/`:
 
