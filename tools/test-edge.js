@@ -35,6 +35,20 @@ async function main() {
   const bk = (c, a, m, ar) => `?cliente=${encodeURIComponent(c)}&ano=${a}&mes=${m}&area=${encodeURIComponent(ar)}`;
   const st = (cliente, area, extra = {}) => Object.assign({ meta: { cliente, area }, groups: [] }, extra);
 
+  // ── o que a página carrega existe e está no Git (quem baixa do GitHub recebe tudo) ──
+  const root = path.join(__dirname, '..');
+  const refs = ['html/scripts.html', 'html/head.html'].flatMap((f) => [...fs.readFileSync(path.join(root, f), 'utf8').matchAll(/(?:src|href)="((?:js|css|assets)\/[^"]+)"/g)].map((m) => m[1]));
+  assert.ok(refs.length > 50);
+  for (const r of refs) assert.strictEqual((await fetch(base + '/' + r)).status, 200, 'não servido: ' + r);
+  ok(`os ${refs.length} scripts e estilos da página são servidos`);
+  let tracked = null;
+  try { tracked = new Set(require('child_process').execSync('git ls-files', { cwd: root, encoding: 'utf8' }).split('\n')); } catch (e) { /* sem git (ex.: zip baixado) */ }
+  if (tracked && tracked.size > 1) {
+    const missing = refs.filter((r) => !tracked.has(r));
+    assert.deepStrictEqual(missing, [], 'fora do Git (confira o .gitignore): ' + missing.join(', '));
+    ok('todos estão no Git (nada ignorado por engano pelo .gitignore)');
+  }
+
   // ── entradas malformadas ────────────────────────────────
   assert.strictEqual((await call('GET', '/api/clients', undefined, { cookie: 'outro=100%; x=%E0%A4%A' })).status, 200); ok('cookie malformado de outro app não derruba a API');
   assert.match(await raw(port, 'GET /%E0%A4%A HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n'), /^HTTP\/1\.1 400/); ok('URL com codificação inválida → 400');
