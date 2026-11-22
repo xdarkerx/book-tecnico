@@ -34,30 +34,53 @@ O log do MongoDB não aparece no terminal: ele vai para `/data/db/mongod.log` de
 (`docker exec book-tecnico-mongo tail -f /data/db/mongod.log`). Com `BOOK_STORAGE` definido, ⚙️ Configurações
 mostra só o armazenamento em uso e se está conectado.
 
-### Instalar e remover com um comando (Windows, PowerShell 7 + Podman)
+### Instalar, atualizar e remover com um comando (Windows, PowerShell 7)
 
-Baixa o projeto para **Downloads**, cria o `.env` a partir do exemplo, sobe o app com o MongoDB e abre o navegador:
+#### Podman
+
+Instalar — baixa o projeto para **Downloads**, cria o `.env` a partir do exemplo, sobe o app com o MongoDB e abre o navegador:
 
 ```powershell
 Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && Copy-Item .env.example .env && podman compose up -d --build && Start-Process http://localhost:5173
 ```
 
-Atualiza para a versão mais nova do GitHub mantendo o `.env` e os dados (books, usuários, MongoDB):
+Atualizar — versão mais nova do GitHub, mantendo o `.env` e os dados (books, usuários, MongoDB):
 
 ```powershell
 Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && podman compose up -d --build
 ```
 
-Remove os containers, os volumes (**apaga os dados do MongoDB**), as imagens e os arquivos baixados:
+Remover — containers, volumes (**apaga os dados do MongoDB**), imagens e arquivos baixados:
 
 ```powershell
 Set-Location $HOME\Downloads\book-tecnico-main && podman compose down -v --rmi all && podman rmi --ignore docker.io/library/node:22-alpine && Set-Location $HOME && Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force
 ```
 
-Requisitos: PowerShell 7 (o `&&` não existe no Windows PowerShell 5.1), Podman com a máquina iniciada
-(`podman machine start`) e um provedor de compose (`podman compose` usa o docker-compose ou o podman-compose).
-O `.env` criado usa a senha de exemplo do MongoDB: para uso real, edite o `.env` antes de subir. Com Docker,
-troque `podman` por `docker` nos dois comandos.
+#### Docker
+
+Instalar — baixa o projeto para **Downloads**, cria o `.env` a partir do exemplo, sobe o app com o MongoDB e abre o navegador:
+
+```powershell
+Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && Copy-Item .env.example .env && docker compose up -d --build && Start-Process http://localhost:5173
+```
+
+Atualizar — versão mais nova do GitHub, mantendo o `.env` e os dados (books, usuários, MongoDB):
+
+```powershell
+Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && docker compose up -d --build
+```
+
+Remover — containers, volumes (**apaga os dados do MongoDB**), imagens e arquivos baixados:
+
+```powershell
+Set-Location $HOME\Downloads\book-tecnico-main && docker compose down -v --rmi all && Set-Location $HOME && Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force; docker rmi node:22-alpine
+```
+
+Requisitos: PowerShell 7 (o `&&` não existe no Windows PowerShell 5.1) e um destes:
+- **Podman** com a máquina iniciada (`podman machine start`) e um provedor de compose (`podman compose` usa o docker-compose ou o podman-compose);
+- **Docker Desktop** aberto (já traz o `docker compose`). No Docker, a imagem base do Node é removida por último, após `;`: se ela já não existir, o erro não interrompe o resto.
+
+O `.env` criado usa a senha de exemplo do MongoDB: para uso real, edite o `.env` antes de subir.
 
 A página é dividida em partes, na pasta `html/`:
 
