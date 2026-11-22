@@ -90,7 +90,8 @@ conexões de cloud ficam indisponíveis.
 
 **Excluir:** na lista de clientes, passe o mouse no card e use 🗑 (ou **🗑 Excluir cliente** na página do cliente)
 para remover o cliente com **todos os anos, books e conexões**. Na página do cliente, **🗑 Excluir 2026** remove
-todos os books daquele ano. Há sempre uma confirmação e não dá para desfazer.
+todos os books daquele ano. Há sempre uma confirmação, e o que é excluído vai para a **lixeira**: um administrador
+restaura em ⚙️ › Lixeira por até 30 dias (veja "Lixeira" abaixo). Sem servidor (`book-tecnico.html`), a exclusão é definitiva.
 
 O link pode ser compartilhado ou salvo nos favoritos. Recarregar a página volta exatamente ao mesmo lugar: a URL,
 o cookie `bt_book`/`bt_route` e o arquivo no servidor guardam tudo. O botão Voltar do navegador também funciona.
