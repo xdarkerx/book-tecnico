@@ -29,7 +29,13 @@ async function connect(url, dbName) {
   const { MongoClient } = driver();
   const c = new MongoClient(url, { serverSelectionTimeoutMS: 5000 });
   try { await c.connect(); await c.db(dbName).command({ ping: 1 }); }
-  catch (e) { try { await c.close(); } catch (x) { /* nada */ } throw httpError(503, `Não foi possível conectar ao MongoDB em ${maskUrl(url)}: ${e.message}`); }
+  catch (e) {
+    try { await c.close(); } catch (x) { /* nada */ }
+    // nenhum MongoDB nesta máquina: explica como ter um, em vez de só "ECONNREFUSED"
+    const local = /ECONNREFUSED|ECONNRESET|timed out|Server selection/i.test(e.message) && /\/\/([^@/]*@)?(127\.0\.0\.1|localhost)(:27017)?\b/.test(url);
+    const hint = local ? ' — não há MongoDB rodando nesta máquina. Use o docker-compose do projeto (já sobe app + MongoDB) ou suba só o banco com: podman run -d --name book-mongo -p 27017:27017 docker.io/library/mongo:7' : '';
+    throw httpError(503, `Não foi possível conectar ao MongoDB em ${maskUrl(url)}: ${e.message}${hint}`);
+  }
   return c;
 }
 async function db() {
