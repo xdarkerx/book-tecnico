@@ -1,7 +1,7 @@
 # dependências
-node_modules/
+/node_modules/
 # dados locais: bancos, logs, backups, configurações com senhas
-data/
+/data/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
