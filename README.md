@@ -135,6 +135,8 @@ $ErrorActionPreference='Stop'; Set-Location $HOME\Downloads\book-tecnico-main; p
 - **PowerShell 7** usa `&&`, que para no primeiro erro. O **PowerShell 5.1** não tem `&&`, então usa `;` com `$ErrorActionPreference='Stop'` e `if ($LASTEXITCODE) { throw … }`, que fazem o mesmo papel. O `Tls12` e o `-UseBasicParsing` evitam falhas de download no 5.1. O `Stop` continua valendo naquela janela: feche e abra o PowerShell se incomodar.
 - O `.env` criado usa a senha de exemplo do MongoDB: para uso real, edite o `.env` antes de subir.
 
+## Como a página e os dados são organizados
+
 A página é dividida em partes, na pasta `html/`:
 
 | Arquivo | Conteúdo |
