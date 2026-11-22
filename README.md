@@ -34,6 +34,25 @@ O log do MongoDB não aparece no terminal: ele vai para `/data/db/mongod.log` de
 (`docker exec book-tecnico-mongo tail -f /data/db/mongod.log`). Com `BOOK_STORAGE` definido, ⚙️ Configurações
 mostra só o armazenamento em uso e se está conectado.
 
+### Instalar e remover com um comando (Windows, PowerShell 7 + Podman)
+
+Baixa o projeto para **Downloads**, cria o `.env` a partir do exemplo, sobe o app com o MongoDB e abre o navegador:
+
+```powershell
+Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && Copy-Item .env.example .env && podman compose up -d --build && Start-Process http://localhost:5173
+```
+
+Remove os containers, os volumes (**apaga os dados do MongoDB**), as imagens e os arquivos baixados:
+
+```powershell
+Set-Location $HOME\Downloads\book-tecnico-main && podman compose down -v && podman rmi --ignore localhost/book-tecnico:latest docker.io/library/mongo:7 docker.io/library/node:22-alpine && Set-Location $HOME && Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force
+```
+
+Requisitos: PowerShell 7 (o `&&` não existe no Windows PowerShell 5.1), Podman com a máquina iniciada
+(`podman machine start`) e um provedor de compose (`podman compose` usa o docker-compose ou o podman-compose).
+O `.env` criado usa a senha de exemplo do MongoDB: para uso real, edite o `.env` antes de subir. Com Docker,
+troque `podman` por `docker` nos dois comandos.
+
 A página é dividida em partes, na pasta `html/`:
 
 | Arquivo | Conteúdo |

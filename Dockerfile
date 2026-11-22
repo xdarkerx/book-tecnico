@@ -1,6 +1,6 @@
 # ═══ Book Técnico — imagem do container ═══
 # Node 22 já traz o servidor HTTP, crypto e SQLite; dependências opcionais: MongoDB, SAML e FTP (backup).
-FROM node:22-alpine
+FROM docker.io/library/node:22-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production \

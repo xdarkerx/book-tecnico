@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
 
   mongo:
-    image: mongo:${MONGO_VERSION:-7}
+    image: docker.io/library/mongo:${MONGO_VERSION:-7}
     container_name: book-tecnico-mongo
     environment:
       # Na primeira subida (volume vazio) o MongoDB cria este usuário administrador
