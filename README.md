@@ -42,6 +42,12 @@ Baixa o projeto para **Downloads**, cria o `.env` a partir do exemplo, sobe o ap
 Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && Copy-Item .env.example .env && podman compose up -d --build && Start-Process http://localhost:5173
 ```
 
+Atualiza para a versão mais nova do GitHub mantendo o `.env` e os dados (books, usuários, MongoDB):
+
+```powershell
+Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/main.zip -OutFile $HOME\Downloads\book-tecnico.zip && Expand-Archive $HOME\Downloads\book-tecnico.zip $HOME\Downloads -Force && Set-Location $HOME\Downloads\book-tecnico-main && podman compose up -d --build
+```
+
 Remove os containers, os volumes (**apaga os dados do MongoDB**), as imagens e os arquivos baixados:
 
 ```powershell
