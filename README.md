@@ -1,4 +1,4 @@
-# Book Técnico — versão modular
+# Book Técnico
 
 Editor de books técnicos multicloud (OCI · AWS · Azure · GCP · VMware), com menus customizáveis,
 blocos arrastáveis e exportação para **PDF**, **Word** e **HTML**.
