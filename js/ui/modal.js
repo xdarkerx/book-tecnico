@@ -10,7 +10,9 @@
     const before = document.activeElement; // devolve o foco ao fechar
     const close = () => {
       wrap.remove(); document.removeEventListener('keydown', onKey); onClose && onClose();
-      if (before && before.focus && document.contains(before)) before.focus();
+      // devolve o foco DEPOIS que a tecla atual termina: devolvido no meio de um Enter, o navegador
+      // "clicava" no botão que abriu a janela e ela abria de novo (ex.: Novo cliente duas vezes)
+      setTimeout(() => { if (before && before.focus && document.contains(before) && !root().lastElementChild) before.focus(); }, 0);
     };
     const onKey = (e) => {
       if (wrap !== root().lastElementChild) return; // só o modal de cima responde
@@ -80,7 +82,7 @@
         extraEls.forEach(({ x, inp }) => (out[x.key] = x.type === 'checkbox' ? inp.checked : inp.value));
         resolve(out);
       };
-      nameIn.addEventListener('keydown', (e) => e.key === 'Enter' && save());
+      nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }); // Enter consumido aqui
       const m = open({
         title,
         body: [h('div', { style: { display: 'flex', gap: '8px' } }, [iconIn, nameIn]), grid, ...extraEls.map((e) => e.el)],
@@ -102,7 +104,7 @@
         if (msg) { err.textContent = msg; inp.focus(); return; }
         done = true; m.close(); resolve(v);
       };
-      inp.addEventListener('keydown', (e) => e.key === 'Enter' && ok());
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ok(); } }); // Enter consumido aqui
       const m = open({
         title,
         body: [label ? h('label', { class: 'lbl', style: { display: 'block', marginBottom: '6px' } }, label) : null, inp, err],
