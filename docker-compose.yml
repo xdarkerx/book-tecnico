@@ -3,6 +3,9 @@
 #   docker compose up -d --build   →  http://localhost:5173
 # O MongoDB sobe junto, já com usuário e senha (variáveis do .env), e o app conecta nele sozinho.
 # Sem .env, os valores padrão abaixo são usados — TROQUE a senha antes de usar em produção.
+# Nome fixo do projeto: a pasta pode se chamar book-tecnico ou book-tecnico-main (zip do GitHub) e
+# continua sendo a mesma instalação (mesmos containers e volumes).
+name: book-tecnico
 services:
   book-tecnico:
     build: .
@@ -47,7 +50,8 @@ services:
     volumes:
       - mongo-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--username", "${MONGO_USER:-booktecnico}", "--password", "${MONGO_PASSWORD:-troque-esta-senha}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]
+      # ping não exige login: funciona com ou sem usuário criado no volume
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 30s
       timeout: 5s
       start_period: 20s

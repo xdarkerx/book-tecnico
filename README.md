@@ -45,7 +45,7 @@ Invoke-WebRequest https://github.com/xdarkerx/book-tecnico/archive/refs/heads/ma
 Remove os containers, os volumes (**apaga os dados do MongoDB**), as imagens e os arquivos baixados:
 
 ```powershell
-Set-Location $HOME\Downloads\book-tecnico-main && podman compose down -v && podman rmi --ignore localhost/book-tecnico:latest docker.io/library/mongo:7 docker.io/library/node:22-alpine && Set-Location $HOME && Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force
+Set-Location $HOME\Downloads\book-tecnico-main && podman compose down -v --rmi all && podman rmi --ignore docker.io/library/node:22-alpine && Set-Location $HOME && Remove-Item $HOME\Downloads\book-tecnico-main, $HOME\Downloads\book-tecnico.zip -Recurse -Force
 ```
 
 Requisitos: PowerShell 7 (o `&&` não existe no Windows PowerShell 5.1), Podman com a máquina iniciada
