@@ -1,0 +1,13 @@
+.modal-wrap{position:fixed;inset:0;background:rgba(5,6,15,.72);backdrop-filter:blur(3px);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:5vh 16px;overflow-y:auto;animation:fadeIn .15s}
+.modal{background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r-lg);box-shadow:var(--shadow);width:100%;max-width:560px;display:flex;flex-direction:column;max-height:90vh}
+.modal.lg{max-width:1040px}
+.modal.md{max-width:720px}
+.modal-hd{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--bd)}
+.modal-hd h3{font-size:15px;font-weight:700;flex:1}
+.modal-bd{padding:18px 20px;overflow-y:auto;flex:1}
+.modal-ft{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--bd);flex-wrap:wrap}
+.modal-ft .spacer{flex:1}
+.icon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(38px,1fr));gap:6px;margin-top:8px}
+.icon-grid button{height:38px;border-radius:8px;border:1px solid var(--bd);font-size:17px;background:var(--sf2)}
+.icon-grid button:hover,.icon-grid button.on{border-color:var(--p);background:rgba(94,63,225,.15)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}

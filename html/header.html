@@ -1,0 +1,47 @@
+<!-- ═══ html/header.html — Barra superior: título do book, status de salvamento, sessão, dados de cloud, arquivo e exportar (com pré-visualização) ═══ -->
+<header class="topbar">
+  <button class="btn-icon only-mobile" id="btn-menu" title="Menu">☰</button>
+  <div class="tb-title">
+    <span class="tb-doc" id="tb-doc">Book Técnico</span>
+    <span class="tb-status" id="tb-status">—</span>
+  </div>
+  <button class="sess-chip hide-sm" id="btn-session" title="Voltar para Clientes › Ano › Books">🗂 <span id="sess-label">—</span></button>
+  <div class="tb-actions">
+    <div class="dropdown" id="dd-import">
+      <button class="btn btn-ghost btn-sm" data-dd-toggle title="Trazer dados de cloud">☁️ <span class="hide-sm">Dados de cloud</span> ▾</button>
+      <div class="dropdown-menu">
+        <button data-action="sync">🔄 Sincronizar (clouds · Zabbix · GLPI)</button>
+        <button data-action="connections">🔑 Conexões do cliente (clouds · Zabbix · GLPI)</button>
+        <hr>
+        <button data-action="file">📄 Importar arquivo CSV/XLSX</button>
+        <button data-action="zip">📦 Importar ZIP (várias seções)</button>
+      </div>
+    </div>
+    <div class="dropdown" id="dd-file">
+      <button class="btn btn-ghost btn-sm" data-dd-toggle>📁 <span class="hide-sm">Arquivo</span> ▾</button>
+      <div class="dropdown-menu">
+        <button data-action="clients">🗂 Clientes › Ano › Books</button>
+        <button data-action="new">🆕 Novo book…</button>
+        <button data-action="template">⭐ Salvar como template</button>
+        <button data-action="zip-template">⬇ Baixar modelo de ZIP</button>
+        <hr>
+        <button data-action="open">📂 Abrir projeto (.json)</button>
+        <button data-action="save">💾 Salvar projeto (.json)</button>
+        <hr>
+        <button data-action="settings">⚙️ Configurações</button>
+      </div>
+    </div>
+    <div id="tb-user"></div>
+    <button class="btn-icon" id="btn-settings" title="⚙️ Configurações globais (menus padrão dos novos books, comparativo, onde salvar)">⚙️</button>
+    <div class="dropdown dd-right" id="dd-export">
+      <button class="btn btn-primary btn-sm" id="btn-export" data-dd-toggle title="Exportar">⬇ <span class="hide-sm">Exportar ▾</span></button>
+      <div class="dropdown-menu">
+        <button data-export="preview">👁 Pré-visualizar</button>
+        <hr>
+        <button data-export="pdf">📄 PDF…</button>
+        <button data-export="word">📝 Word (.doc)…</button>
+        <button data-export="html">🌐 HTML…</button>
+      </div>
+    </div>
+  </div>
+</header>

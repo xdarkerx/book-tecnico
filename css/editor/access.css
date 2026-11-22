@@ -1,0 +1,62 @@
+/* ═══ Login (js/core/auth.js) ═══ */
+.auth{position:fixed;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;padding:24px 16px;overflow-y:auto;background:radial-gradient(ellipse at 20% 0%,var(--glow),transparent 55%),radial-gradient(ellipse at 100% 100%,rgba(134,210,239,.08),transparent 50%),var(--bg)}
+.auth-card{width:100%;max-width:400px;padding:30px 28px;box-shadow:var(--shadow)}
+.auth-logo{height:26px;display:block}
+.auth-title{font-size:22px;font-weight:800;letter-spacing:-.5px;margin:20px 0 4px}
+.auth-sub{font-size:12px;color:var(--mt);line-height:1.6;margin-bottom:6px}
+.auth-form{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.auth-form .btn{padding:11px 16px;font-size:13px}
+.auth-hint{display:block;font-size:10.5px;color:var(--mt);margin-top:4px}
+.auth-err{min-height:16px;font-size:12px;color:var(--pink)}
+.auth-err:empty{display:none}
+.auth-or{display:flex;align-items:center;gap:10px;color:var(--mt);font-size:11px}
+.auth-or::before,.auth-or::after{content:'';flex:1;border-top:1px solid var(--bd)}
+.auth-ms{text-decoration:none;gap:10px}
+.ms-logo{display:grid;grid-template-columns:7px 7px;gap:2px}
+.ms-logo i{width:7px;height:7px;display:block}
+
+/* usuário logado (topo) */
+.user-chip{display:flex;align-items:center;gap:8px;padding:3px 4px 3px 3px;border:1px solid var(--bd);border-radius:20px}
+.user-av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--p),var(--vi))}
+.user-name{display:flex;flex-direction:column;line-height:1.15;max-width:150px}
+.user-name b{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-name small{font-size:9.5px;color:var(--mt)}
+.user-chip .btn{border-radius:14px}
+
+/* ═══ Book em edição por outra pessoa (js/core/lock.js) ═══ */
+.lock-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 18px;background:rgba(240,180,41,.12);border-bottom:1px solid rgba(240,180,41,.45);font-size:12px}
+.lock-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:220px}
+.lock-info span{color:var(--tx2);font-size:11.5px}
+.lock-act{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lock-note{color:var(--tx2);font-size:11.5px}
+.lock-ask{line-height:1.6;margin-bottom:8px}
+body.bk-readonly #view{opacity:.85}
+body.bk-readonly .tb-status{visibility:hidden}
+.nv-lock-tag{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:9px;font-size:10px;background:rgba(240,180,41,.14);color:var(--warn);border:1px solid rgba(240,180,41,.35)}
+
+/* ═══ ⚙️ Configurações › Login e acesso ═══ */
+.set-access{margin-top:18px}
+.acc-users-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 8px}
+.acc-table-wrap{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--r)}
+.acc-table{width:100%;border-collapse:collapse;font-size:12px}
+.acc-table th{text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--mt);padding:8px 10px;background:var(--sf2);border-bottom:1px solid var(--bd);white-space:nowrap}
+.acc-table td{padding:8px 10px;border-bottom:1px solid var(--bd);vertical-align:middle}
+.acc-table tr:last-child td{border-bottom:none}
+.acc-table tr.off td{opacity:.55}
+.acc-act{white-space:nowrap;text-align:right}
+.acc-off{margin-left:6px;font-size:9.5px;color:var(--pink)}
+.acc-saml{margin-top:12px}
+.acc-steps{margin:0 0 14px 18px;font-size:11.5px;color:var(--tx2);line-height:1.7}
+.acc-steps li{margin-bottom:6px}
+.acc-kv{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;margin:6px 0;padding:8px 10px;border-radius:var(--r);background:var(--sf2);border:1px solid var(--bd)}
+.acc-kv span{font-size:11px;color:var(--mt)}
+.acc-kv code{font-family:var(--mono);font-size:10.5px;color:var(--sky);word-break:break-all}
+.acc-how{margin:14px 0 0 18px;font-size:11.5px;color:var(--tx2);line-height:1.65}
+.acc-how li{margin-bottom:4px}
+@media (max-width:640px){.acc-kv{grid-template-columns:1fr}.lock-banner{padding:10px 12px}}
+/* celular: chip do usuário só com o avatar e "Sair" (o nome some), para a barra caber */
+@media (max-width:640px){
+  .user-name{display:none}
+  .user-chip{gap:4px;padding:2px}
+  .tb-actions{gap:4px}
+}

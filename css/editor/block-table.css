@@ -1,0 +1,32 @@
+/* ═══ Bloco planilha (editável) ═══ */
+.tb-actions-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center}
+.tb-actions-row .grow{flex:1}
+.tb-search{max-width:200px}
+.tb-wrap{border:1px solid var(--bd);border-radius:10px;overflow:auto;max-height:520px}
+.etbl{border-collapse:separate;border-spacing:0;width:100%;font-size:11.5px;min-width:max-content}
+.etbl th{position:sticky;top:0;z-index:2;background:var(--sf3);border-bottom:1px solid var(--bd2);padding:0;text-align:left;min-width:110px}
+.etbl th.rowh,.etbl td.rowh{min-width:34px;width:34px;text-align:center;color:var(--mt);font-family:var(--mono);font-size:9px;background:var(--sf2);position:sticky;left:0;z-index:1}
+.etbl th.rowh{z-index:3}
+.etbl th.act,.etbl td.act{min-width:34px;width:34px}
+.th-wrap{display:flex;align-items:center;gap:2px;padding:4px 4px 4px 8px}
+.th-in{flex:1;background:transparent;border:none;outline:none;color:var(--tx2);font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;padding:4px 2px;min-width:60px}
+.th-in:focus{color:var(--tx-strong);border-bottom:1px dashed var(--p)}
+.th-badge{font-size:9px;color:var(--mt)}
+.th-badge.on{color:var(--sky)}
+.etbl td{border-bottom:1px solid var(--bd);padding:0;vertical-align:top}
+.etbl tr:hover td{background:rgba(94,63,225,.05)}
+.etbl tr.row-sel td{background:rgba(94,63,225,.12)}
+.cell{display:block;min-height:30px;padding:7px 9px;outline:none;color:var(--tx);white-space:pre-wrap;word-break:break-word;line-height:1.45}
+.cell:focus{background:var(--sf3);box-shadow:inset 0 0 0 1px var(--p)}
+.row-del{opacity:0;color:var(--mt);width:26px;height:26px;border-radius:5px;margin:2px}
+tr:hover .row-del{opacity:1}
+.row-del:hover{color:var(--pink);background:rgba(220,82,130,.12)}
+.etbl tr.dragging{opacity:.4}
+.etbl .rowh{cursor:grab}
+.tb-foot{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.tb-foot .btn-dashed{flex:1;width:auto}
+.tb-info{font-family:var(--mono);font-size:9.5px;color:var(--mt);margin-left:auto}
+.col-menu{position:fixed;z-index:500;background:var(--sf2);border:1px solid var(--bd2);border-radius:var(--r);box-shadow:var(--shadow);padding:5px;min-width:200px}
+.col-menu button{display:flex;width:100%;text-align:left;padding:7px 10px;border-radius:6px;font-size:12px;color:var(--tx2)}
+.col-menu button:hover{background:var(--sf3);color:var(--tx-strong)}
+.col-menu hr{margin:4px 0}

@@ -1,0 +1,60 @@
+/* ═══ Menu lateral e paleta recolhíveis (js/editor/panels.js) ═══ */
+/* ── botões de recolher ── */
+.sb-top{display:flex;align-items:center;gap:8px}
+.sb-brand{flex:1;min-width:0}
+.sb-mark{display:none;width:26px;height:26px}
+.sb-toggle,.pl-toggle{width:28px;height:28px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;color:var(--mt);font-size:14px;flex-shrink:0;border:1px solid transparent}
+.sb-toggle:hover,.pl-toggle:hover{background:var(--sf3);color:var(--tx);border-color:var(--bd)}
+.pl-toggle{position:sticky;top:0;float:right;margin:10px 10px 0 0;z-index:2;background:var(--sf)}
+.pl-tg-lbl{display:none}
+.ng-ic{display:none}
+
+/* ── MENU recolhido: só ícones (telas > 900px) ── */
+@media (min-width:901px){
+  .sb{transition:width .18s ease,min-width .18s ease}
+  .app.sb-mini .sb{width:58px;min-width:58px;overflow:hidden}
+  .app.sb-mini .sb-top{flex-direction:column;padding:14px 0 10px;gap:10px}
+  .app.sb-mini .sb-brand{display:none}
+  .app.sb-mini .sb-mark{display:block}
+  .app.sb-mini .ni{padding:8px 0;justify-content:center;gap:0}
+  .app.sb-mini .ni .ic{font-size:15px;width:auto}
+  .app.sb-mini .ni-lbl,.app.sb-mini .ni-count,.app.sb-mini .ni-tools,.app.sb-mini .ni-add,.app.sb-mini .sb-ft,
+  .app.sb-mini .ng-title,.app.sb-mini .ng-tools,.app.sb-mini .ng-caret{display:none!important}
+  .app.sb-mini .ng-hd{justify-content:center;padding:8px 0 4px;cursor:pointer}
+  .app.sb-mini .ng-ic{display:block;font-size:12px;opacity:.7}
+  .app.sb-mini .ng.collapsed .ng-body{display:block}
+  .app.sb-mini .sb-actions{padding:8px}
+  .app.sb-mini .sb-actions .btn{padding:6px 0;justify-content:center}
+  .app.sb-mini .sb,.app.sb-mini .sb *{cursor:pointer}
+  /* aberto por cima do editor (peek) */
+  .app.sb-mini.sb-peek .sb{position:fixed;left:0;top:0;bottom:0;width:var(--sb-w);min-width:var(--sb-w);box-shadow:var(--shadow);z-index:70;overflow:visible}
+  .app.sb-mini.sb-peek .main{margin-left:58px}
+  .app.sb-mini.sb-peek .sb *{cursor:revert}
+  .app.sb-mini.sb-peek .sb-top{flex-direction:row;padding:18px 16px 14px}
+  .app.sb-mini.sb-peek .sb-brand{display:block}
+  .app.sb-mini.sb-peek .sb-mark,.app.sb-mini.sb-peek .ng-ic{display:none}
+  .app.sb-mini.sb-peek .ni{padding:7px 10px 7px 16px;justify-content:flex-start;gap:9px}
+  .app.sb-mini.sb-peek .ni .ic{font-size:13px;width:18px}
+  .app.sb-mini.sb-peek .ni-lbl,.app.sb-mini.sb-peek .ng-title,.app.sb-mini.sb-peek .ng-caret{display:block!important}
+  .app.sb-mini.sb-peek .ni-add,.app.sb-mini.sb-peek .sb-ft{display:block!important}
+  .app.sb-mini.sb-peek .ng-tools{display:flex!important}
+  .app.sb-mini.sb-peek .ng-hd{justify-content:flex-start;padding:9px 10px 5px 12px}
+  .app.sb-mini.sb-peek .ng.collapsed .ng-body{display:none}
+  .app.sb-mini.sb-peek .sb-backdrop{display:block;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:65}
+}
+
+/* ── PALETA recolhida: só ícones ── */
+.palette{transition:width .18s ease,min-width .18s ease;position:relative}
+.palette.compact{width:58px;min-width:58px;overflow-x:hidden}
+.palette.compact .pl-toggle{float:none;display:flex;margin:10px auto 6px}
+.palette.compact .pl-head{padding:8px 0 4px;text-align:center}
+.palette.compact .pl-title{font-size:8px;letter-spacing:.5px}
+.palette.compact .pl-sub,.palette.compact .pl-item > span:not(.pl-ic){display:none}
+.palette.compact .pl-list{padding:4px 8px}
+.palette.compact .pl-item{padding:6px;justify-content:center;border-color:transparent;background:transparent}
+.palette.compact .pl-item:hover{transform:none;background:var(--sf3);border-color:var(--bd)}
+
+@media (max-width:1180px){
+  /* expandida em telas médias: abre por cima do editor */
+  .palette:not(.compact){position:fixed;right:0;top:var(--topbar-h);bottom:0;z-index:60;box-shadow:var(--shadow)}
+}

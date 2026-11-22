@@ -1,0 +1,46 @@
+/* ═══ ⚙️ Configurações › Onde salvar (SQLite / MongoDB) ═══ */
+.set-grid > *{min-width:0} /* caminhos longos não esticam a coluna */
+.db-status{display:flex;flex-direction:column;gap:6px;margin:12px 0 14px}
+.db-pill{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;padding:6px 12px;border-radius:20px;font-size:12px;border:1px solid var(--bd2);background:var(--sf2)}
+.db-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--mt);flex-shrink:0}
+.db-pill span:last-child{color:var(--mt);font-size:11px}
+.db-pill.ok{border-color:rgba(0,196,154,.4)}
+.db-pill.ok .dot{background:var(--ok);box-shadow:0 0 0 3px rgba(0,196,154,.18)}
+.db-pill.err{border-color:rgba(220,82,130,.5)}
+.db-pill.err .dot{background:var(--pink)}
+.db-pill.warn{border-color:rgba(240,180,41,.45);color:var(--warn);border-radius:var(--r);line-height:1.5}
+.db-loc{font-size:10.5px;color:var(--mt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-counts{font-size:11.5px;color:var(--tx2)}
+
+.db-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.db-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:14px;text-align:left;border:1.5px solid var(--bd);border-radius:var(--r-lg);background:var(--sf2);transition:border-color .15s,background .15s,transform .15s}
+.db-card:hover:not(:disabled){border-color:var(--bd2);transform:translateY(-1px)}
+.db-card.on{border-color:var(--p);background:rgba(94,63,225,.10)}
+.db-card:focus-visible{outline:none;box-shadow:var(--focus)}
+.db-card:disabled{opacity:.45;cursor:not-allowed}
+.db-ic{font-size:24px;line-height:1}
+.db-txt b{display:block;font-size:13.5px}
+.db-txt small{display:block;font-size:11px;color:var(--mt);line-height:1.45;margin-top:2px}
+.db-badge{position:absolute;top:10px;right:10px;font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:10px;background:rgba(0,196,154,.14);color:var(--ok)}
+
+.db-mongo{margin-top:14px;padding:14px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)}
+.db-mongo-h{font-weight:700;font-size:12.5px;margin-bottom:10px}
+.db-mongo-act{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.db-result{margin-top:10px;padding:8px 12px;border-radius:var(--r);font-size:11.5px;line-height:1.5;word-break:break-word}
+.db-result.ok{background:rgba(0,196,154,.08);border:1px solid rgba(0,196,154,.3);color:var(--ok)}
+.db-result.err{background:rgba(220,82,130,.08);border:1px solid rgba(220,82,130,.3);color:var(--pink)}
+
+.db-switch{display:flex;flex-direction:column;gap:10px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--bd2)}
+.db-switch .btn{align-self:flex-start}
+.set-more{margin-top:16px}
+.set-more summary{cursor:pointer;font-size:11.5px;color:var(--sky);user-select:none}
+.set-more summary:hover{text-decoration:underline}
+@media (max-width:480px){.db-cards{grid-template-columns:1fr}}
+
+/* ═══ Botão de tema ═══ */
+.theme-btn{font-size:14px}
+
+/* ═══ Ajustes do tema claro (o resto vem dos tokens em variables.css) ═══ */
+[data-theme="light"] .modal-wrap{background:rgba(23,28,55,.45)}
+[data-theme="light"] .nv-card:hover{box-shadow:var(--shadow-sm)}
+[data-theme="light"] .mode-badge.server{border-color:rgba(0,138,104,.35)}

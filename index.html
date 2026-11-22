@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Book Técnico — inventCloud</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <!--
+    Página dividida em partes (pasta html/). Cada marcador "@include" é trocado pelo arquivo:
+      • npm run dev        → o servidor monta a página antes de enviar
+      • outro servidor     → js/core/include.js busca as partes no navegador
+      • abrir sem servidor → use book-tecnico.html (gerado por "npm run build")
+  -->
+  <!-- @include html/head.html -->
+</head>
+<body>
+<div class="app" id="app">
+  <!-- @include html/menu.html -->
+
+  <div class="main">
+    <!-- @include html/header.html -->
+
+    <div class="workspace">
+      <!-- @include html/editor.html -->
+      <!-- @include html/palette.html -->
+    </div>
+  </div>
+</div>
+
+<!-- @include html/preview.html -->
+<!-- @include html/settings.html -->
+<!-- @include html/layers.html -->
+
+<script src="js/core/include.js"></script>
+<!-- @include html/scripts.html -->
+</body>
+</html>

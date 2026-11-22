@@ -1,0 +1,45 @@
+/* ═══ Sidebar com menus e seções customizáveis ═══ */
+.sb{width:var(--sb-w);min-width:var(--sb-w);background:var(--sf);border-right:1px solid var(--bd);display:flex;flex-direction:column;height:100%;z-index:50}
+.sb-top{padding:18px 16px 14px;border-bottom:1px solid var(--bd)}
+.sb-logo{height:22px;display:block}
+.sb-tag{font-family:var(--mono);font-size:9px;color:var(--mt);letter-spacing:2px;text-transform:uppercase;margin-top:9px}
+.sb-fixed{padding:8px 0;border-bottom:1px solid var(--bd)}
+.sb-scroll{flex:1;overflow-y:auto;padding:4px 0 12px}
+.sb-actions{padding:10px 12px;border-top:1px solid var(--bd)}
+.sb-ft{padding:10px 16px;border-top:1px solid var(--bd);font-family:var(--mono);font-size:9px;color:var(--mt);line-height:1.6}
+.sb-backdrop{display:none}
+
+/* Grupo (menu) */
+.ng{margin-top:2px}
+.ng.dragging{opacity:.4}
+.ng-hd{display:flex;align-items:center;gap:6px;padding:9px 10px 5px 12px;font-family:var(--mono);font-size:9.5px;color:var(--label);letter-spacing:1.6px;text-transform:uppercase;font-weight:700;cursor:grab;user-select:none;border-top:1px solid var(--bd)}
+.ng:first-child .ng-hd{border-top:none}
+.ng-hd .ng-caret{width:12px;color:var(--mt);transition:transform .15s;flex-shrink:0;cursor:pointer}
+.ng.collapsed .ng-caret{transform:rotate(-90deg)}
+.ng.collapsed .ng-body{display:none}
+.ng-hd .ng-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ng-hd .ng-tools{display:flex;gap:2px;opacity:0;transition:opacity .15s}
+.ng-hd:hover .ng-tools,.ng-hd:focus-within .ng-tools{opacity:1}
+.ng-off .ng-title{text-decoration:line-through;opacity:.5}
+.mini-btn{width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;color:var(--mt);font-size:12px;letter-spacing:0}
+.mini-btn:hover{background:var(--sf3);color:var(--tx)}
+
+/* Item (seção) */
+.ni{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px 7px 16px;cursor:pointer;color:var(--tx2);font-size:12px;font-weight:500;transition:background .15s,color .15s;border-left:2px solid transparent;user-select:none;text-align:left;position:relative}
+.ni:hover{color:var(--tx);background:var(--sf2)}
+.ni.on{color:var(--tx-strong);border-left-color:var(--p);background:rgba(94,63,225,.14)}
+.ni .ic{font-size:13px;width:18px;text-align:center;flex-shrink:0}
+.ni .ni-lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ni .ni-count{font-family:var(--mono);font-size:9px;color:var(--mt);background:var(--sf3);border-radius:8px;padding:1px 6px}
+.ni.ni-off .ni-lbl{opacity:.45;text-decoration:line-through}
+.ni .ni-tools{display:none;gap:1px}
+.ni:hover .ni-tools{display:flex}
+.ni:hover .ni-count{display:none}
+.ni.dragging{opacity:.35}
+.ni.drop-target{background:rgba(94,63,225,.22);outline:1px dashed var(--p)}
+.ni-add{padding:5px 10px 7px 43px;font-size:11px;color:var(--mt);cursor:pointer;display:block;width:100%;text-align:left}
+.ni-add:hover{color:var(--p)}
+.ni-cover{font-weight:600}
+
+/* Indicadores de soltar (drag & drop) */
+.drop-line{height:2px;background:var(--p);margin:0 10px;border-radius:2px;box-shadow:0 0 8px var(--p)}

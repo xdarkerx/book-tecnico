@@ -1,0 +1,59 @@
+# ═══ Book Técnico + MongoDB ═══
+#   cp .env.example .env      (ajuste usuário/senha do MongoDB e o que mais quiser)
+#   docker compose up -d --build   →  http://localhost:5173
+# O MongoDB sobe junto, já com usuário e senha (variáveis do .env), e o app conecta nele sozinho.
+# Sem .env, os valores padrão abaixo são usados — TROQUE a senha antes de usar em produção.
+services:
+  book-tecnico:
+    build: .
+    image: book-tecnico:latest
+    container_name: book-tecnico
+    ports:
+      - "${BOOK_PORT:-5173}:5173"
+    environment:
+      # Banco: mongo (MongoDB) | sqlite. Vazio = escolher em ⚙️ Configurações › Administrador.
+      BOOK_STORAGE: ${BOOK_STORAGE:-mongo}
+      # Conexão montada a partir das variáveis do MongoDB (mesmo usuário criado no container "mongo")
+      MONGO_URL: mongodb://${MONGO_USER:-booktecnico}:${MONGO_PASSWORD:-troque-esta-senha}@mongo:27017/?authSource=admin
+      MONGO_DB: ${MONGO_DB:-book_tecnico}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - book-data:/data                 # settings.json, logs, backups locais e (se usado) o banco SQLite
+      # Backup em caminho de rede: monte o compartilhamento e use /backup-rede em ⚙️ › Backup
+      # - /mnt/compartilhamento/book-tecnico:/backup-rede
+      # Credenciais de cloud lidas pelo servidor (somente leitura)
+      # - ~/.oci:/home/node/.oci:ro
+      # - ~/.aws:/home/node/.aws:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:${MONGO_VERSION:-7}
+    container_name: book-tecnico-mongo
+    environment:
+      # Na primeira subida (volume vazio) o MongoDB cria este usuário administrador
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-booktecnico}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-troque-esta-senha}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-book_tecnico}
+      TZ: ${TZ:-America/Sao_Paulo}
+    # Log do MongoDB vai para um arquivo dentro do volume (não polui o terminal).
+    # Para ver: docker exec book-tecnico-mongo tail -f /data/db/mongod.log
+    command: ["--quiet", "--logpath", "/data/db/mongod.log", "--logappend"]
+    # Para abrir o banco no Compass etc., defina MONGO_EXPOSE_PORT no .env e descomente:
+    # ports:
+    #   - "${MONGO_EXPOSE_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--username", "${MONGO_USER:-booktecnico}", "--password", "${MONGO_PASSWORD:-troque-esta-senha}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  book-data:
+  mongo-data:

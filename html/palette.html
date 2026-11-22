@@ -1,0 +1,27 @@
+<!-- ═══ html/palette.html — Paleta de blocos (arrastar e soltar) + atalhos de dados de cloud. Recolhida = só ícones (js/editor/panels.js) ═══ -->
+<!-- ═══ PALETA de blocos (arrastar e soltar) ═══ -->
+<aside class="palette" id="palette">
+  <button class="pl-toggle" id="pl-toggle" title="Recolher / expandir blocos"><span class="pl-tg-ic">⇥</span><span class="pl-tg-lbl">Blocos</span></button>
+  <div class="pl-head">
+    <div class="pl-title">Blocos</div>
+    <div class="pl-sub">Arraste para a seção ou clique para adicionar ao final</div>
+  </div>
+  <div class="pl-list" id="palette-list"><!-- render: js/editor/palette.js --></div>
+  <div class="pl-head pl-head-2">
+    <div class="pl-title">Dados de cloud</div>
+  </div>
+  <div class="pl-list">
+    <button class="pl-item pl-item-cloud" id="pl-sync" title="Sincronizar (clouds · Zabbix · GLPI)">
+      <span class="pl-ic">🔄</span>
+      <span><b>Sincronizar</b><small>Clouds, Zabbix e GLPI direto das APIs</small></span>
+    </button>
+    <button class="pl-item pl-item-cloud" id="pl-import" title="Importar CSV/XLSX">
+      <span class="pl-ic">☁️</span>
+      <span><b>Importar CSV/XLSX</b><small>OCI · AWS · Azure · GCP · VMware</small></span>
+    </button>
+    <button class="pl-item pl-item-cloud" id="pl-zip" title="Importar ZIP">
+      <span class="pl-ic">📦</span>
+      <span><b>Importar ZIP</b><small>Preenche várias seções de uma vez</small></span>
+    </button>
+  </div>
+</aside>

@@ -1,0 +1,25 @@
+<!-- ═══ html/menu.html — Barra lateral: capa, menus/seções (js/editor/sidebar.js) e "Novo menu". Recolhida = só ícones; clique abre o menu completo (js/editor/panels.js) ═══ -->
+<!-- ═══ SIDEBAR: menus customizáveis ═══ -->
+<aside class="sb" id="sidebar">
+  <div class="sb-top">
+    <div class="sb-brand">
+      <img class="sb-logo" data-logo src="assets/img/logo-inventcloud-white.svg" alt="inventCloud">
+      <div class="sb-tag">Book Técnico</div>
+    </div>
+    <img class="sb-mark" src="assets/img/favicon.svg" alt="">
+    <button class="sb-toggle" id="sb-toggle" title="Recolher menu (só ícones)">⇤</button>
+  </div>
+
+  <div class="sb-fixed">
+    <button class="ni ni-cover" data-route="cover"><span class="ic">📘</span><span class="ni-lbl">Capa &amp; Cliente</span></button>
+  </div>
+
+  <div class="sb-scroll" id="menu-tree"><!-- render: js/editor/sidebar.js --></div>
+
+  <div class="sb-actions">
+    <button class="btn btn-ghost btn-sm w-100" id="btn-add-group" title="Novo menu">＋ <span class="ni-lbl">Novo menu</span></button>
+  </div>
+  <div class="sb-ft">inventCloud © <span id="sb-year"></span> · Book Técnico <span id="sb-ver"></span></div>
+</aside>
+
+<div class="sb-backdrop" id="sb-backdrop"></div>

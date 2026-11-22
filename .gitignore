@@ -1,0 +1,11 @@
+# dependências
+node_modules/
+# dados locais: bancos, logs, backups, configurações com senhas
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.btbk
+.env
+# configurações locais do editor/Claude
+.claude/

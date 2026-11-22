@@ -1,0 +1,25 @@
+{
+  "name": "book-tecnico",
+  "version": "7.0.1",
+  "private": true,
+  "description": "Book Técnico multicloud — editor modular com API local e sincronização com OCI, AWS, Azure e GCP",
+  "scripts": {
+    "dev": "node server/index.js",
+    "start": "node server/index.js",
+    "build": "node tools/build-book-styles.js && node tools/build-html.js",
+    "build:styles": "node tools/build-book-styles.js",
+    "test": "node tools/test-server.js && node tools/test-edge.js",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f book-tecnico"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "license": "UNLICENSED",
+  "optionalDependencies": {
+    "@node-saml/node-saml": "^5.2.0",
+    "basic-ftp": "^6.2.6",
+    "mongodb": "^6.10.0"
+  }
+}

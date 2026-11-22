@@ -1,0 +1,87 @@
+<!-- ═══ html/scripts.html — Scripts do app, na ordem de carregamento (core → dados → UI → blocos → importação → book → editor → app) ═══ -->
+<!-- ═══ Bibliotecas externas ═══ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- ═══ Core ═══ -->
+<script src="js/core/namespace.js"></script>
+<script src="js/core/utils.js"></script>
+<script src="js/core/charts.js"></script>
+<script src="js/core/sanitize.js"></script>
+<script src="js/core/events.js"></script>
+<script src="js/core/persistence.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/core/api.js"></script>
+<script src="js/core/auth.js"></script>
+<script src="js/core/lock.js"></script>
+<script src="js/core/url.js"></script>
+<script src="js/core/session.js"></script>
+<script src="js/core/zip.js"></script>
+
+<!-- ═══ Dados / configuração ═══ -->
+<script src="js/data/providers.js"></script>
+<script src="js/data/badges.js"></script>
+<script src="js/data/logo.js"></script>
+<script src="js/data/default-template.js"></script>
+<script src="js/data/templates.js"></script>
+
+<!-- ═══ UI genérica ═══ -->
+<script src="js/ui/modal.js"></script>
+<script src="js/ui/toast.js"></script>
+<script src="js/ui/theme.js"></script>
+<script src="js/ui/dropdown.js"></script>
+<script src="js/ui/dnd.js"></script>
+
+<!-- ═══ Blocos (cada tipo é um módulo) ═══ -->
+<script src="js/blocks/registry.js"></script>
+<script src="js/blocks/heading.js"></script>
+<script src="js/blocks/text.js"></script>
+<script src="js/blocks/table.js"></script>
+<script src="js/blocks/image.js"></script>
+<script src="js/blocks/kpi.js"></script>
+<script src="js/blocks/chart.js"></script>
+<script src="js/blocks/compare.js"></script>
+<script src="js/blocks/monitor.js"></script>
+<script src="js/blocks/callout.js"></script>
+<script src="js/blocks/divider.js"></script>
+<script src="js/blocks/pagebreak.js"></script>
+
+<!-- ═══ Importação de cloud ═══ -->
+<script src="js/import/file-reader.js"></script>
+<script src="js/import/detect.js"></script>
+<script src="js/import/mappers/common.js"></script>
+<script src="js/import/mappers/servers.js"></script>
+<script src="js/import/mappers/storage.js"></script>
+<script src="js/import/mappers/network.js"></script>
+<script src="js/import/mappers/baseline.js"></script>
+<script src="js/import/mappers/raw.js"></script>
+<script src="js/import/wizard.js"></script>
+<script src="js/import/zip-import.js"></script>
+<script src="js/import/cloud-sync.js"></script>
+
+<!-- ═══ Book + exportação ═══ -->
+<script src="js/book/renderer.js"></script>
+<script src="js/book/book-styles.js"></script>
+<script src="js/book/preview.js"></script>
+<script src="js/export/export-dialog.js"></script>
+<script src="js/export/pdf.js"></script>
+<script src="js/export/word.js"></script>
+<script src="js/export/html.js"></script>
+<script src="js/export/project-file.js"></script>
+
+<!-- ═══ Editor ═══ -->
+<script src="js/editor/sidebar.js"></script>
+<script src="js/editor/palette.js"></script>
+<script src="js/editor/panels.js"></script>
+<script src="js/editor/cover-form.js"></script>
+<script src="js/editor/canvas.js"></script>
+<script src="js/editor/router.js"></script>
+<script src="js/editor/nav-screen.js"></script>
+<script src="js/editor/settings.js"></script>
+<script src="js/editor/access-settings.js"></script>
+<script src="js/editor/admin-backup.js"></script>
+<script src="js/editor/admin-trash.js"></script>
+<script src="js/editor/admin-logs.js"></script>
+
+<!-- ═══ Bootstrap ═══ -->
+<script src="js/app.js"></script>

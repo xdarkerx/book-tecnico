@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Book Técnico — inventCloud</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <!--
+    Página dividida em partes (pasta html/). Cada marcador "@include" é trocado pelo arquivo:
+      • npm run dev        → o servidor monta a página antes de enviar
+      • outro servidor     → js/core/include.js busca as partes no navegador
+      • abrir sem servidor → use book-tecnico.html (gerado por "npm run build")
+  -->
+  <!-- ═══ html/head.html — Fontes e folhas de estilo (ordem importa: base → layout → componentes → editor → book) ═══ -->
+  <!-- Tema antes de pintar (evita piscar): escolha salva ou preferência do sistema. Lógica: js/ui/theme.js -->
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem("bt-theme")||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark")}catch(e){}</script>
+  <!-- Fontes -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Trispace:wght@300;400;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Base -->
+  <link rel="stylesheet" href="css/base/variables.css">
+  <link rel="stylesheet" href="css/base/reset.css">
+  <!-- Layout -->
+  <link rel="stylesheet" href="css/layout/app-shell.css">
+  <link rel="stylesheet" href="css/layout/sidebar.css">
+  <link rel="stylesheet" href="css/layout/palette.css">
+  <link rel="stylesheet" href="css/layout/panels.css">
+  <link rel="stylesheet" href="css/layout/responsive.css">
+  <!-- Componentes -->
+  <link rel="stylesheet" href="css/components/buttons.css">
+  <link rel="stylesheet" href="css/components/forms.css">
+  <link rel="stylesheet" href="css/components/modal.css">
+  <link rel="stylesheet" href="css/components/toast.css">
+  <!-- Editor de blocos -->
+  <link rel="stylesheet" href="css/editor/canvas.css">
+  <link rel="stylesheet" href="css/editor/block-text.css">
+  <link rel="stylesheet" href="css/editor/block-table.css">
+  <link rel="stylesheet" href="css/editor/block-image.css">
+  <link rel="stylesheet" href="css/editor/block-misc.css">
+  <link rel="stylesheet" href="css/editor/nav-screen.css">
+  <link rel="stylesheet" href="css/editor/settings.css">
+  <link rel="stylesheet" href="css/editor/storage.css">
+  <link rel="stylesheet" href="css/editor/access.css">
+  <link rel="stylesheet" href="css/editor/admin.css">
+  <!-- Importação -->
+  <link rel="stylesheet" href="css/import/import-wizard.css">
+  <!-- Book (preview + impressão) -->
+  <link rel="stylesheet" href="css/book/book.css">
+  <link rel="stylesheet" href="css/book/print.css">
+</head>
+<body>
+<div class="app" id="app">
+  <!-- ═══ html/menu.html — Barra lateral: capa, menus/seções (js/editor/sidebar.js) e "Novo menu". Recolhida = só ícones; clique abre o menu completo (js/editor/panels.js) ═══ -->
+  <!-- ═══ SIDEBAR: menus customizáveis ═══ -->
+  <aside class="sb" id="sidebar">
+    <div class="sb-top">
+      <div class="sb-brand">
+        <img class="sb-logo" data-logo src="assets/img/logo-inventcloud-white.svg" alt="inventCloud">
+        <div class="sb-tag">Book Técnico</div>
+      </div>
+      <img class="sb-mark" src="assets/img/favicon.svg" alt="">
+      <button class="sb-toggle" id="sb-toggle" title="Recolher menu (só ícones)">⇤</button>
+    </div>
+  
+    <div class="sb-fixed">
+      <button class="ni ni-cover" data-route="cover"><span class="ic">📘</span><span class="ni-lbl">Capa &amp; Cliente</span></button>
+    </div>
+  
+    <div class="sb-scroll" id="menu-tree"><!-- render: js/editor/sidebar.js --></div>
+  
+    <div class="sb-actions">
+      <button class="btn btn-ghost btn-sm w-100" id="btn-add-group" title="Novo menu">＋ <span class="ni-lbl">Novo menu</span></button>
+    </div>
+    <div class="sb-ft">inventCloud © <span id="sb-year"></span> · Book Técnico <span id="sb-ver"></span></div>
+  </aside>
+  
+  <div class="sb-backdrop" id="sb-backdrop"></div>
+
+  <div class="main">
+    <!-- ═══ html/header.html — Barra superior: título do book, status de salvamento, sessão, dados de cloud, arquivo e exportar (com pré-visualização) ═══ -->
+    <header class="topbar">
+      <button class="btn-icon only-mobile" id="btn-menu" title="Menu">☰</button>
+      <div class="tb-title">
+        <span class="tb-doc" id="tb-doc">Book Técnico</span>
+        <span class="tb-status" id="tb-status">—</span>
+      </div>
+      <button class="sess-chip hide-sm" id="btn-session" title="Voltar para Clientes › Ano › Books">🗂 <span id="sess-label">—</span></button>
+      <div class="tb-actions">
+        <div class="dropdown" id="dd-import">
+          <button class="btn btn-ghost btn-sm" data-dd-toggle title="Trazer dados de cloud">☁️ <span class="hide-sm">Dados de cloud</span> ▾</button>
+          <div class="dropdown-menu">
+            <button data-action="sync">🔄 Sincronizar (clouds · Zabbix · GLPI)</button>
+            <button data-action="connections">🔑 Conexões do cliente (clouds · Zabbix · GLPI)</button>
+            <hr>
+            <button data-action="file">📄 Importar arquivo CSV/XLSX</button>
+            <button data-action="zip">📦 Importar ZIP (várias seções)</button>
+          </div>
+        </div>
+        <div class="dropdown" id="dd-file">
+          <button class="btn btn-ghost btn-sm" data-dd-toggle>📁 <span class="hide-sm">Arquivo</span> ▾</button>
+          <div class="dropdown-menu">
+            <button data-action="clients">🗂 Clientes › Ano › Books</button>
+            <button data-action="new">🆕 Novo book…</button>
+            <button data-action="template">⭐ Salvar como template</button>
+            <button data-action="zip-template">⬇ Baixar modelo de ZIP</button>
+            <hr>
+            <button data-action="open">📂 Abrir projeto (.json)</button>
+            <button data-action="save">💾 Salvar projeto (.json)</button>
+            <hr>
+            <button data-action="settings">⚙️ Configurações</button>
+          </div>
+        </div>
+        <div id="tb-user"></div>
+        <button class="btn-icon" id="btn-settings" title="⚙️ Configurações globais (menus padrão dos novos books, comparativo, onde salvar)">⚙️</button>
+        <div class="dropdown dd-right" id="dd-export">
+          <button class="btn btn-primary btn-sm" id="btn-export" data-dd-toggle title="Exportar">⬇ <span class="hide-sm">Exportar ▾</span></button>
+          <div class="dropdown-menu">
+            <button data-export="preview">👁 Pré-visualizar</button>
+            <hr>
+            <button data-export="pdf">📄 PDF…</button>
+            <button data-export="word">📝 Word (.doc)…</button>
+            <button data-export="html">🌐 HTML…</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <!-- ═══ html/editor.html — Área de edição (canvas da seção ou capa — renderizada por js/editor/canvas.js / cover-form.js) ═══ -->
+      <main class="scroll" id="canvas-scroll">
+        <div class="ct" id="view"><!-- render: js/editor/canvas.js ou cover-form.js --></div>
+      </main>
+      <!-- ═══ html/palette.html — Paleta de blocos (arrastar e soltar) + atalhos de dados de cloud. Recolhida = só ícones (js/editor/panels.js) ═══ -->
+      <!-- ═══ PALETA de blocos (arrastar e soltar) ═══ -->
+      <aside class="palette" id="palette">
+        <button class="pl-toggle" id="pl-toggle" title="Recolher / expandir blocos"><span class="pl-tg-ic">⇥</span><span class="pl-tg-lbl">Blocos</span></button>
+        <div class="pl-head">
+          <div class="pl-title">Blocos</div>
+          <div class="pl-sub">Arraste para a seção ou clique para adicionar ao final</div>
+        </div>
+        <div class="pl-list" id="palette-list"><!-- render: js/editor/palette.js --></div>
+        <div class="pl-head pl-head-2">
+          <div class="pl-title">Dados de cloud</div>
+        </div>
+        <div class="pl-list">
+          <button class="pl-item pl-item-cloud" id="pl-sync" title="Sincronizar (clouds · Zabbix · GLPI)">
+            <span class="pl-ic">🔄</span>
+            <span><b>Sincronizar</b><small>Clouds, Zabbix e GLPI direto das APIs</small></span>
+          </button>
+          <button class="pl-item pl-item-cloud" id="pl-import" title="Importar CSV/XLSX">
+            <span class="pl-ic">☁️</span>
+            <span><b>Importar CSV/XLSX</b><small>OCI · AWS · Azure · GCP · VMware</small></span>
+          </button>
+          <button class="pl-item pl-item-cloud" id="pl-zip" title="Importar ZIP">
+            <span class="pl-ic">📦</span>
+            <span><b>Importar ZIP</b><small>Preenche várias seções de uma vez</small></span>
+          </button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ html/preview.html — Pré-visualização do book (tela cheia) e área usada só na impressão (PDF) ═══ -->
+<!-- Preview do book -->
+<div class="pv" id="pv">
+  <div class="pvbar">
+    <span class="pvt">Pré-visualização · clique numa seção para editá-la</span>
+    <div class="pv-actions">
+      <button class="btn btn-ghost btn-sm" id="pv-export">⬇ Exportar</button>
+      <button class="btn btn-sec btn-sm" id="pv-close">✕ Fechar</button>
+    </div>
+  </div>
+  <div class="pvwrap"><div id="book-out"></div></div>
+</div>
+
+<!-- Área usada só na impressão (PDF) -->
+<div id="print-root"></div>
+<!-- ═══ html/settings.html — ⚙️ Configurações em dois menus:
+     Usuário (todos): Preferências (tema) e Opções de book (menus padrão, comparativo)
+     Administrador: Banco de dados, Login e acesso, Edição simultânea, Backup, Lixeira, Logs e auditoria
+     Lógica: js/editor/settings.js (+ access-settings.js, admin-backup.js, admin-trash.js, admin-logs.js) ═══ -->
+<section class="settings" id="settings" hidden>
+  <div class="st-wrap set-wrap">
+    <div class="st-head">
+      <div class="nv-top">
+        <img src="assets/img/logo-inventcloud-white.svg" data-logo alt="inventCloud" class="st-logo">
+        <span style="margin-left:auto"></span>
+        <button class="btn btn-ghost btn-sm" data-set-close style="margin-left:0">← Voltar</button>
+      </div>
+      <h1 class="st-title">⚙️ Configurações</h1>
+    </div>
+
+    <div class="set-layout">
+      <nav class="set-nav" id="set-nav" aria-label="Seções das configurações"><!-- render: settings.js --></nav>
+
+      <div class="set-main">
+        <!-- ── USUÁRIO ─────────────────────────────────── -->
+        <div class="set-panel" data-panel="prefs" hidden>
+          <div class="card set-card">
+            <div class="subt" style="margin-top:0">🎨 Aparência</div>
+            <div class="set-help">Só para você. Com login, a escolha acompanha seu usuário em qualquer computador.</div>
+            <div class="theme-cards" id="set-theme" role="radiogroup" aria-label="Tema"><!-- render: settings.js --></div>
+          </div>
+        </div>
+
+        <div class="set-panel" data-panel="book" hidden>
+          <div class="card set-card">
+            <div class="subt" style="margin-top:0">🧭 Menus padrão dos novos books</div>
+            <div class="set-help">Valem para todos os usuários e para os <b>novos</b> books — os books já criados não mudam.</div>
+            <div class="fg fg2">
+              <div class="fd">
+                <label for="set-template">Template padrão (pré-selecionado em "Novo book")</label>
+                <select class="inp" id="set-template"></select>
+              </div>
+              <div class="fd">
+                <label for="set-template-edit">Editando os menus do template</label>
+                <select class="inp" id="set-template-edit"></select>
+              </div>
+            </div>
+            <div class="set-help">Desmarque o que <b>não</b> deve aparecer quando um book for criado com este template.</div>
+            <div class="set-tree" id="set-tree"><!-- render: settings.js --></div>
+
+            <div class="subt">➕ Menus extras (entram em todos os templates)</div>
+            <div class="set-help">Ex.: um menu "SAP" com as seções "Landscape" e "Jobs". Uma seção por linha.</div>
+            <div id="set-extras"><!-- render: settings.js --></div>
+            <button class="btn-dashed" id="set-add-extra" style="margin-top:8px">＋ Adicionar menu extra</button>
+
+            <div class="subt">📈 Comparativo mensal</div>
+            <label class="switch"><input type="checkbox" id="set-compare"> Incluir a seção "Comparativo mensal" nos novos books (dá para desligar em cada book)</label>
+            <div class="set-foot">
+              <button class="btn btn-primary btn-sm" id="set-save">Salvar opções de book</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ADMINISTRADOR ───────────────────────────── -->
+        <div class="set-panel" data-panel="db" hidden>
+          <div class="card set-card">
+            <div class="subt" style="margin-top:0">💾 Onde salvar os books</div>
+            <div class="db-status" id="set-storage-now" aria-live="polite"><!-- render: settings.js --></div>
+            <div class="db-cards" id="set-storage-opts" role="radiogroup" aria-label="Banco de dados"><!-- render: settings.js --></div>
+
+            <div class="db-mongo" id="set-mongo">
+              <div class="db-mongo-h">🍃 Conexão do MongoDB</div>
+              <div class="fd">
+                <label for="set-mongo-url">Endereço (MONGO_URL)</label>
+                <input class="inp inp-sm mono" id="set-mongo-url" placeholder="mongodb://usuario:senha@servidor:27017" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="fd" style="margin-top:8px">
+                <label for="set-mongo-db">Banco (MONGO_DB)</label>
+                <input class="inp inp-sm mono" id="set-mongo-db" placeholder="book_tecnico" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="db-mongo-act">
+                <button class="btn btn-ghost btn-sm" id="set-mongo-test">🔌 Testar conexão</button>
+                <button class="btn btn-sec btn-sm" id="set-mongo-save">Salvar conexão</button>
+              </div>
+              <div class="db-result" id="set-mongo-result" hidden></div>
+            </div>
+
+            <div class="db-switch" id="set-switch-box">
+              <label class="switch"><input type="checkbox" id="set-migrate" checked> Copiar books, templates, conexões, usuários e lixeira para o novo banco</label>
+              <button class="btn btn-primary btn-sm" id="set-switch">Trocar para o banco selecionado</button>
+            </div>
+            <details class="set-more">
+              <summary>Como funciona</summary>
+              <div class="set-help">
+                <b>SQLite</b> é um arquivo único (<code>data/book-tecnico.sqlite</code>): não precisa instalar nada.<br>
+                <b>MongoDB</b> é indicado para vários usuários ou servidores. No container, o <code>docker-compose.yml</code> já sobe um MongoDB
+                com usuário e senha definidos no arquivo <code>.env</code>. As variáveis <code>MONGO_URL</code>/<code>MONGO_DB</code> têm prioridade sobre
+                o que for salvo aqui, e <code>BOOK_STORAGE</code> fixa o banco.
+              </div>
+            </details>
+          </div>
+
+          <div class="card set-card danger-zone">
+            <div class="subt" style="margin-top:0">⚠️ Excluir um banco</div>
+            <div class="set-help">Apaga <b>todo</b> o conteúdo do banco escolhido (books, usuários, lixeira, conexões). Antes, um backup dele é salvo na pasta local de backups.
+              Excluir o banco <b>em uso</b> faz o app recomeçar vazio (com o login ligado, será preciso criar o administrador de novo).</div>
+            <div class="db-del" id="set-db-delete"><!-- render: admin-backup.js --></div>
+          </div>
+        </div>
+
+        <div class="set-panel" data-panel="access" hidden><div id="set-access-login"><!-- render: access-settings.js --></div></div>
+        <div class="set-panel" data-panel="lock" hidden><div id="set-access-lock"><!-- render: access-settings.js --></div></div>
+        <div class="set-panel" data-panel="backup" hidden><div id="set-backup"><!-- render: admin-backup.js --></div></div>
+        <div class="set-panel" data-panel="trash" hidden><div id="set-trash"><!-- render: admin-trash.js --></div></div>
+        <div class="set-panel" data-panel="logs" hidden><div id="set-logs"><!-- render: admin-logs.js --></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- ═══ html/layers.html — Camadas de interface: modais, avisos e seletores de arquivo ═══ -->
+<!-- Camadas de UI -->
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+<input type="file" id="file-open" accept=".json,application/json" hidden>
+<input type="file" id="file-zip" accept=".zip,application/zip" hidden>
+
+<!-- ═══ html/scripts.html — Scripts do app, na ordem de carregamento (core → dados → UI → blocos → importação → book → editor → app) ═══ -->
+<!-- ═══ Bibliotecas externas ═══ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- ═══ Core ═══ -->
+<script src="js/core/namespace.js"></script>
+<script src="js/core/utils.js"></script>
+<script src="js/core/charts.js"></script>
+<script src="js/core/sanitize.js"></script>
+<script src="js/core/events.js"></script>
+<script src="js/core/persistence.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/core/api.js"></script>
+<script src="js/core/auth.js"></script>
+<script src="js/core/lock.js"></script>
+<script src="js/core/url.js"></script>
+<script src="js/core/session.js"></script>
+<script src="js/core/zip.js"></script>
+
+<!-- ═══ Dados / configuração ═══ -->
+<script src="js/data/providers.js"></script>
+<script src="js/data/badges.js"></script>
+<script src="js/data/logo.js"></script>
+<script src="js/data/default-template.js"></script>
+<script src="js/data/templates.js"></script>
+
+<!-- ═══ UI genérica ═══ -->
+<script src="js/ui/modal.js"></script>
+<script src="js/ui/toast.js"></script>
+<script src="js/ui/theme.js"></script>
+<script src="js/ui/dropdown.js"></script>
+<script src="js/ui/dnd.js"></script>
+
+<!-- ═══ Blocos (cada tipo é um módulo) ═══ -->
+<script src="js/blocks/registry.js"></script>
+<script src="js/blocks/heading.js"></script>
+<script src="js/blocks/text.js"></script>
+<script src="js/blocks/table.js"></script>
+<script src="js/blocks/image.js"></script>
+<script src="js/blocks/kpi.js"></script>
+<script src="js/blocks/chart.js"></script>
+<script src="js/blocks/compare.js"></script>
+<script src="js/blocks/monitor.js"></script>
+<script src="js/blocks/callout.js"></script>
+<script src="js/blocks/divider.js"></script>
+<script src="js/blocks/pagebreak.js"></script>
+
+<!-- ═══ Importação de cloud ═══ -->
+<script src="js/import/file-reader.js"></script>
+<script src="js/import/detect.js"></script>
+<script src="js/import/mappers/common.js"></script>
+<script src="js/import/mappers/servers.js"></script>
+<script src="js/import/mappers/storage.js"></script>
+<script src="js/import/mappers/network.js"></script>
+<script src="js/import/mappers/baseline.js"></script>
+<script src="js/import/mappers/raw.js"></script>
+<script src="js/import/wizard.js"></script>
+<script src="js/import/zip-import.js"></script>
+<script src="js/import/cloud-sync.js"></script>
+
+<!-- ═══ Book + exportação ═══ -->
+<script src="js/book/renderer.js"></script>
+<script src="js/book/book-styles.js"></script>
+<script src="js/book/preview.js"></script>
+<script src="js/export/export-dialog.js"></script>
+<script src="js/export/pdf.js"></script>
+<script src="js/export/word.js"></script>
+<script src="js/export/html.js"></script>
+<script src="js/export/project-file.js"></script>
+
+<!-- ═══ Editor ═══ -->
+<script src="js/editor/sidebar.js"></script>
+<script src="js/editor/palette.js"></script>
+<script src="js/editor/panels.js"></script>
+<script src="js/editor/cover-form.js"></script>
+<script src="js/editor/canvas.js"></script>
+<script src="js/editor/router.js"></script>
+<script src="js/editor/nav-screen.js"></script>
+<script src="js/editor/settings.js"></script>
+<script src="js/editor/access-settings.js"></script>
+<script src="js/editor/admin-backup.js"></script>
+<script src="js/editor/admin-trash.js"></script>
+<script src="js/editor/admin-logs.js"></script>
+
+<!-- ═══ Bootstrap ═══ -->
+<script src="js/app.js"></script>
+</body>
+</html>

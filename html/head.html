@@ -1,0 +1,37 @@
+<!-- ═══ html/head.html — Fontes e folhas de estilo (ordem importa: base → layout → componentes → editor → book) ═══ -->
+<!-- Tema antes de pintar (evita piscar): escolha salva ou preferência do sistema. Lógica: js/ui/theme.js -->
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("bt-theme")||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark")}catch(e){}</script>
+<!-- Fontes -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Trispace:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<!-- Base -->
+<link rel="stylesheet" href="css/base/variables.css">
+<link rel="stylesheet" href="css/base/reset.css">
+<!-- Layout -->
+<link rel="stylesheet" href="css/layout/app-shell.css">
+<link rel="stylesheet" href="css/layout/sidebar.css">
+<link rel="stylesheet" href="css/layout/palette.css">
+<link rel="stylesheet" href="css/layout/panels.css">
+<link rel="stylesheet" href="css/layout/responsive.css">
+<!-- Componentes -->
+<link rel="stylesheet" href="css/components/buttons.css">
+<link rel="stylesheet" href="css/components/forms.css">
+<link rel="stylesheet" href="css/components/modal.css">
+<link rel="stylesheet" href="css/components/toast.css">
+<!-- Editor de blocos -->
+<link rel="stylesheet" href="css/editor/canvas.css">
+<link rel="stylesheet" href="css/editor/block-text.css">
+<link rel="stylesheet" href="css/editor/block-table.css">
+<link rel="stylesheet" href="css/editor/block-image.css">
+<link rel="stylesheet" href="css/editor/block-misc.css">
+<link rel="stylesheet" href="css/editor/nav-screen.css">
+<link rel="stylesheet" href="css/editor/settings.css">
+<link rel="stylesheet" href="css/editor/storage.css">
+<link rel="stylesheet" href="css/editor/access.css">
+<link rel="stylesheet" href="css/editor/admin.css">
+<!-- Importação -->
+<link rel="stylesheet" href="css/import/import-wizard.css">
+<!-- Book (preview + impressão) -->
+<link rel="stylesheet" href="css/book/book.css">
+<link rel="stylesheet" href="css/book/print.css">

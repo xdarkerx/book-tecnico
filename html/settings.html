@@ -1,0 +1,114 @@
+<!-- ═══ html/settings.html — ⚙️ Configurações em dois menus:
+     Usuário (todos): Preferências (tema) e Opções de book (menus padrão, comparativo)
+     Administrador: Banco de dados, Login e acesso, Edição simultânea, Backup, Lixeira, Logs e auditoria
+     Lógica: js/editor/settings.js (+ access-settings.js, admin-backup.js, admin-trash.js, admin-logs.js) ═══ -->
+<section class="settings" id="settings" hidden>
+  <div class="st-wrap set-wrap">
+    <div class="st-head">
+      <div class="nv-top">
+        <img src="assets/img/logo-inventcloud-white.svg" data-logo alt="inventCloud" class="st-logo">
+        <span style="margin-left:auto"></span>
+        <button class="btn btn-ghost btn-sm" data-set-close style="margin-left:0">← Voltar</button>
+      </div>
+      <h1 class="st-title">⚙️ Configurações</h1>
+    </div>
+
+    <div class="set-layout">
+      <nav class="set-nav" id="set-nav" aria-label="Seções das configurações"><!-- render: settings.js --></nav>
+
+      <div class="set-main">
+        <!-- ── USUÁRIO ─────────────────────────────────── -->
+        <div class="set-panel" data-panel="prefs" hidden>
+          <div class="card set-card">
+            <div class="subt" style="margin-top:0">🎨 Aparência</div>
+            <div class="set-help">Só para você. Com login, a escolha acompanha seu usuário em qualquer computador.</div>
+            <div class="theme-cards" id="set-theme" role="radiogroup" aria-label="Tema"><!-- render: settings.js --></div>
+          </div>
+        </div>
+
+        <div class="set-panel" data-panel="book" hidden>
+          <div class="card set-card">
+            <div class="subt" style="margin-top:0">🧭 Menus padrão dos novos books</div>
+            <div class="set-help">Valem para todos os usuários e para os <b>novos</b> books — os books já criados não mudam.</div>
+            <div class="fg fg2">
+              <div class="fd">
+                <label for="set-template">Template padrão (pré-selecionado em "Novo book")</label>
+                <select class="inp" id="set-template"></select>
+              </div>
+              <div class="fd">
+                <label for="set-template-edit">Editando os menus do template</label>
+                <select class="inp" id="set-template-edit"></select>
+              </div>
+            </div>
+            <div class="set-help">Desmarque o que <b>não</b> deve aparecer quando um book for criado com este template.</div>
+            <div class="set-tree" id="set-tree"><!-- render: settings.js --></div>
+
+            <div class="subt">➕ Menus extras (entram em todos os templates)</div>
+            <div class="set-help">Ex.: um menu "SAP" com as seções "Landscape" e "Jobs". Uma seção por linha.</div>
+            <div id="set-extras"><!-- render: settings.js --></div>
+            <button class="btn-dashed" id="set-add-extra" style="margin-top:8px">＋ Adicionar menu extra</button>
+
+            <div class="subt">📈 Comparativo mensal</div>
+            <label class="switch"><input type="checkbox" id="set-compare"> Incluir a seção "Comparativo mensal" nos novos books (dá para desligar em cada book)</label>
+            <div class="set-foot">
+              <button class="btn btn-primary btn-sm" id="set-save">Salvar opções de book</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ADMINISTRADOR ───────────────────────────── -->
+        <div class="set-panel" data-panel="db" hidden>
+          <div class="card set-card">
+            <div class="subt" style="margin-top:0">💾 Onde salvar os books</div>
+            <div class="db-status" id="set-storage-now" aria-live="polite"><!-- render: settings.js --></div>
+            <div class="db-cards" id="set-storage-opts" role="radiogroup" aria-label="Banco de dados"><!-- render: settings.js --></div>
+
+            <div class="db-mongo" id="set-mongo">
+              <div class="db-mongo-h">🍃 Conexão do MongoDB</div>
+              <div class="fd">
+                <label for="set-mongo-url">Endereço (MONGO_URL)</label>
+                <input class="inp inp-sm mono" id="set-mongo-url" placeholder="mongodb://usuario:senha@servidor:27017" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="fd" style="margin-top:8px">
+                <label for="set-mongo-db">Banco (MONGO_DB)</label>
+                <input class="inp inp-sm mono" id="set-mongo-db" placeholder="book_tecnico" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="db-mongo-act">
+                <button class="btn btn-ghost btn-sm" id="set-mongo-test">🔌 Testar conexão</button>
+                <button class="btn btn-sec btn-sm" id="set-mongo-save">Salvar conexão</button>
+              </div>
+              <div class="db-result" id="set-mongo-result" hidden></div>
+            </div>
+
+            <div class="db-switch" id="set-switch-box">
+              <label class="switch"><input type="checkbox" id="set-migrate" checked> Copiar books, templates, conexões, usuários e lixeira para o novo banco</label>
+              <button class="btn btn-primary btn-sm" id="set-switch">Trocar para o banco selecionado</button>
+            </div>
+            <details class="set-more">
+              <summary>Como funciona</summary>
+              <div class="set-help">
+                <b>SQLite</b> é um arquivo único (<code>data/book-tecnico.sqlite</code>): não precisa instalar nada.<br>
+                <b>MongoDB</b> é indicado para vários usuários ou servidores. No container, o <code>docker-compose.yml</code> já sobe um MongoDB
+                com usuário e senha definidos no arquivo <code>.env</code>. As variáveis <code>MONGO_URL</code>/<code>MONGO_DB</code> têm prioridade sobre
+                o que for salvo aqui, e <code>BOOK_STORAGE</code> fixa o banco.
+              </div>
+            </details>
+          </div>
+
+          <div class="card set-card danger-zone">
+            <div class="subt" style="margin-top:0">⚠️ Excluir um banco</div>
+            <div class="set-help">Apaga <b>todo</b> o conteúdo do banco escolhido (books, usuários, lixeira, conexões). Antes, um backup dele é salvo na pasta local de backups.
+              Excluir o banco <b>em uso</b> faz o app recomeçar vazio (com o login ligado, será preciso criar o administrador de novo).</div>
+            <div class="db-del" id="set-db-delete"><!-- render: admin-backup.js --></div>
+          </div>
+        </div>
+
+        <div class="set-panel" data-panel="access" hidden><div id="set-access-login"><!-- render: access-settings.js --></div></div>
+        <div class="set-panel" data-panel="lock" hidden><div id="set-access-lock"><!-- render: access-settings.js --></div></div>
+        <div class="set-panel" data-panel="backup" hidden><div id="set-backup"><!-- render: admin-backup.js --></div></div>
+        <div class="set-panel" data-panel="trash" hidden><div id="set-trash"><!-- render: admin-trash.js --></div></div>
+        <div class="set-panel" data-panel="logs" hidden><div id="set-logs"><!-- render: admin-logs.js --></div></div>
+      </div>
+    </div>
+  </div>
+</section>

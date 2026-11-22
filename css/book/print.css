@@ -1,0 +1,32 @@
+/* ═══ Impressão / PDF ═══
+   Igual ao book de referência: página A4 sem margem (o navegador não imprime cabeçalho/
+   rodapé com data e URL), capa compacta no topo da 1ª página, faixa roxa no topo de cada
+   página e cada capítulo começando em página nova. Marque "Gráficos de fundo" ao imprimir. */
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  @page{size:A4;margin:0}
+  html,body{background:#fff!important;height:auto!important}
+  body > *:not(#print-root){display:none!important}
+  #print-root{display:block!important}
+  #print-root .book{box-shadow:none;border-radius:0;overflow:visible}
+  .book-page-rule{display:block!important;position:fixed;top:0;left:0;right:0;height:4px;z-index:5;background:linear-gradient(90deg,#5E3FE1,#86D2EF,#5E3FE1)!important}
+  .bcov{overflow:visible!important;border-radius:0!important;background:#0a0c1a!important}
+  .bsec{break-inside:auto}
+  .bh1,.bh2,.bh3,.btbl-title{break-after:avoid}
+  .bh1 + *,.bh2 + *{break-before:avoid}
+  .btbl tr,.bsc_,.biitem,.bcall,.bsg,.bchart,.bmon-card{break-inside:avoid}
+  .btbl thead{display:table-header-group}
+  .btbl th{background:#171C37!important;color:#fff!important}
+  .bsc_{background:linear-gradient(135deg,#f5f4ff,#eef3ff)!important}
+  .bwl-sep{break-before:page;break-after:avoid;break-inside:avoid;background:linear-gradient(135deg,#171C37 0%,#0e1020 60%,#1a1060 100%)!important}
+  .bpb{break-after:page;border:none!important;margin:0!important}
+  .btoc{break-after:page}
+  .bpg-footer-wrap{break-inside:avoid}
+  /* respiro em todas as páginas (thead/tfoot repetem a cada página — ver js/export/pdf.js) */
+  .print-frame{width:100%;border-collapse:collapse;border-spacing:0}
+  .print-frame > thead,.print-frame > tfoot{display:table-header-group}
+  .print-frame > tfoot{display:table-footer-group}
+  .print-frame > * > tr > td{padding:0;vertical-align:top}
+  .print-frame .pf-top{height:12mm}
+  .print-frame .pf-bottom{height:9mm}
+}

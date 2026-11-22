@@ -1,0 +1,14 @@
+/* ═══ Bloco de texto rico ═══ */
+.rt-bar{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:8px;padding:3px;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;width:fit-content}
+.rt-bar button{min-width:28px;height:26px;border-radius:5px;color:var(--tx2);font-size:12px;padding:0 6px}
+.rt-bar button:hover{background:var(--sf3);color:var(--tx-strong)}
+.rt-bar .sep{width:1px;background:var(--bd2);margin:3px 3px}
+.rt{min-height:64px;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;outline:none;line-height:1.7;font-size:13px;color:var(--tx)}
+.rt:focus{border-color:var(--p)}
+.rt:empty::before{content:attr(data-placeholder);color:var(--mt)}
+.rt ul,.rt ol{padding-left:22px}
+.rt a{color:var(--sky)}
+.rt h3{font-size:14px;margin:6px 0}
+.heading-row{display:flex;gap:10px;align-items:center}
+.heading-in{flex:1;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;outline:none;font-weight:700;font-size:15px;color:var(--tx)}
+.heading-in:focus{border-color:var(--p)}
