@@ -362,6 +362,15 @@ async function savePrefs(req, body = {}) {
   if (!a) return { ok: true, local: true };
   const prefs = Object.assign({}, a.user.prefs);
   if (['light', 'dark', 'system'].includes(body.theme)) prefs.theme = body.theme;
+  // padrões de importação (Configurações › Usuário › Importação padrão)
+  if (body.importDefaults && typeof body.importDefaults === 'object') {
+    const d = body.importDefaults; const out = {};
+    if (Array.isArray(d.zabbixSeverities)) out.zabbixSeverities = [...new Set(d.zabbixSeverities.map(Number).filter((n) => n >= 0 && n <= 5))];
+    if (Array.isArray(d.risks)) out.risks = [...new Set(d.risks.filter((r) => ['critica', 'alta', 'media', 'baixa', 'info'].includes(r)))];
+    if (d.newOnly != null) out.newOnly = !!d.newOnly;
+    if (d.zabbixAllHosts != null) out.zabbixAllHosts = !!d.zabbixAllHosts;
+    prefs.importDefaults = out;
+  }
   await db().kvSet('users', a.user.id, Object.assign({}, a.user, { prefs }));
   return { ok: true, prefs };
 }

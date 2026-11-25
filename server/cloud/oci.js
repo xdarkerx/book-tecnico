@@ -30,7 +30,7 @@ async function call(c, method, url, body) {
   const names = ['(request-target)', 'date', 'host'];
   let payload;
   if (body !== undefined) {
-    payload = JSON.stringify(body);
+    payload = body === '' ? '' : JSON.stringify(body); // '' = POST sem corpo (ex.: Cloud Guard securityScores)
     headers['content-type'] = 'application/json';
     headers['content-length'] = String(Buffer.byteLength(payload));
     headers['x-content-sha256'] = crypto.createHash('sha256').update(payload).digest('base64');
@@ -72,10 +72,23 @@ async function test(cfg) {
   return { message: `Conectado à tenancy (${c.region}) — ${comps.length} compartimento(s) acessível(is)` };
 }
 
-async function pull(cfg, kind) {
+/** Regiões a consultar: as informadas na conexão ou, se vazio, todas as regiões assinadas da tenancy. */
+async function regionsOf(c, cfg) {
+  if (String(cfg.regions || '').trim()) return c.regionList;
+  try {
+    const subs = (await call(c, 'GET', `https://identity.${c.region}.oraclecloud.com/20160918/tenancies/${c.tenancy}/regionSubscriptions`)).data || [];
+    const list = subs.filter((s) => !s.status || s.status === 'READY').map((s) => s.regionName).filter(Boolean);
+    return list.length ? list : c.regionList;
+  } catch (e) { return c.regionList; }
+}
+const day = (t) => String(t || '').slice(0, 10);
+
+async function pull(cfg, kind, opts = {}) {
   const c = config(cfg);
+  c.regionList = await regionsOf(c, cfg);
   const comps = await compartments(c);
   const rows = [];
+  if (kind === 'backup') return [U.sheet('backup', 'Backups OCI do período (API)', await backups(c, comps, opts))];
 
   if (kind === 'baseline') {
     // Resource Search: todos os recursos da tenancy em uma consulta
@@ -106,7 +119,7 @@ async function pull(cfg, kind) {
             try { images[i.imageId] = (await call(c, 'GET', `${iaas(r)}/images/${i.imageId}`)).data?.displayName || ''; } catch (e) {}
           }
           rows.push({ 'Display Name': i.displayName, 'Private IP': ip, 'Image': images[i.imageId] || '', 'Lifecycle State': i.lifecycleState, 'Region': i.region || r,
-            'compartment_path': comp.path, 'Shape': i.shape, 'OCPUs': i.shapeConfig?.ocpus ?? '', 'Memory (GB)': i.shapeConfig?.memoryInGBs ?? '', 'Availability Domain': i.availabilityDomain });
+            'compartment_path': comp.path, 'Shape': i.shape, 'OCPUs': i.shapeConfig?.ocpus ?? '', 'Memory (GB)': i.shapeConfig?.memoryInGBs ?? '', 'Availability Domain': i.availabilityDomain, 'Criado em': day(i.timeCreated) });
         });
       });
     }
@@ -115,9 +128,9 @@ async function pull(cfg, kind) {
       try { ns = (await call(c, 'GET', `https://objectstorage.${r}.oraclecloud.com/n/`)).data; } catch (e) {}
       await U.pool(comps, 4, async (comp) => {
         for (const v of await listAll(c, `${iaas(r)}/volumes?compartmentId=${comp.id}&limit=1000`))
-          if (v.lifecycleState !== 'TERMINATED') rows.push({ 'Display Name': v.displayName, 'Volume Type': 'Block Volume', 'Size in GBs': v.sizeInGBs + ' GB', 'Region': r, 'compartment_path': comp.path, 'Lifecycle State': v.lifecycleState });
+          if (v.lifecycleState !== 'TERMINATED') rows.push({ 'Display Name': v.displayName, 'Volume Type': 'Block Volume', 'Size in GBs': v.sizeInGBs + ' GB', 'Region': r, 'compartment_path': comp.path, 'Lifecycle State': v.lifecycleState, 'Criado em': day(v.timeCreated) });
         if (ns) for (const b of await listAll(c, `https://objectstorage.${r}.oraclecloud.com/n/${ns}/b?compartmentId=${comp.id}&limit=1000`))
-          rows.push({ 'Display Name': b.name, 'Volume Type': 'Object Storage', 'Size in GBs': '', 'Region': r, 'compartment_path': comp.path, 'Lifecycle State': 'AVAILABLE' });
+          rows.push({ 'Display Name': b.name, 'Volume Type': 'Object Storage', 'Size in GBs': '', 'Region': r, 'compartment_path': comp.path, 'Lifecycle State': 'AVAILABLE', 'Criado em': day(b.timeCreated) });
       });
     }
     if (kind === 'network') {
@@ -126,12 +139,36 @@ async function pull(cfg, kind) {
         if (!vcns.length) return;
         const subnets = await listAll(c, `${iaas(r)}/subnets?compartmentId=${comp.id}&limit=1000`);
         for (const v of vcns) rows.push({ 'VCN Name': v.displayName, 'CIDRs': (v.cidrBlocks || [v.cidrBlock]).filter(Boolean).join(', '), 'compartment_path': comp.path, 'Region': r,
-          'Subnets': subnets.filter((s) => s.vcnId === v.id).map((s) => `${s.displayName} (${s.cidrBlock})`).join('; ') });
+          'Subnets': subnets.filter((s) => s.vcnId === v.id).map((s) => `${s.displayName} (${s.cidrBlock})`).join('; '), 'Criado em': day(v.timeCreated) });
       });
     }
   }
   const names = { servers: 'Instâncias OCI (API)', storage: 'Volumes + Buckets OCI (API)', network: 'VCNs OCI (API)' };
   return [U.sheet(kind, names[kind], rows)];
+}
+
+/** Backups de volumes e boot volumes criados no período (o book mostra só os do mês). */
+async function backups(c, comps, opts) {
+  const from = opts.from ? new Date(opts.from + 'T00:00:00Z') : new Date(Date.now() - 31 * 86400000);
+  const to = opts.to ? new Date(opts.to + 'T23:59:59Z') : new Date();
+  const rows = [];
+  const STATE = { AVAILABLE: 'OK', CREATING: 'Em andamento', REQUEST_RECEIVED: 'Em andamento', FAULTY: 'Falha', TERMINATED: 'Expirado', TERMINATING: 'Expirando' };
+  for (const r of c.regionList) {
+    await U.pool(comps, 4, async (comp) => {
+      for (const [path, what] of [['bootVolumeBackups', 'Boot Volume'], ['volumeBackups', 'Block Volume']]) {
+        let list = [];
+        try { list = await listAll(c, `${iaas(r)}/${path}?compartmentId=${comp.id}&limit=1000`); } catch (e) { continue; }
+        for (const b of list) {
+          const created = new Date(b.timeCreated);
+          if (!(created >= from && created <= to)) continue;
+          const ret = b.expirationTime ? Math.round((new Date(b.expirationTime) - created) / 86400000) + ' dias' : 'Sem expiração';
+          rows.push({ 'Item': b.displayName, 'Situação': STATE[b.lifecycleState] || b.lifecycleState, 'Ferramenta': `OCI ${what} Backup (${b.type === 'INCREMENTAL' ? 'incremental' : 'completo'})`,
+            'Frequência': b.sourceType === 'SCHEDULED' ? 'Agendado (política)' : 'Manual', 'Retenção': ret, 'Teste Restore': '—', 'Criado em': day(b.timeCreated), 'Região': r, 'compartment_path': comp.path });
+        }
+      }
+    });
+  }
+  return rows.sort((a, b) => String(b['Criado em']).localeCompare(a['Criado em']));
 }
 
 const SEV_PT = { CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Média', LOW: 'Baixa', MINOR: 'Baixa', INFORMATIONAL: 'Informativa', INFO: 'Informativa' };
@@ -151,17 +188,33 @@ async function score(cfg) {
   const CG = `https://cloudguard-cp-api.${c.region}.oci.oraclecloud.com/20200131`;
   const sub = `compartmentId=${c.tenancy}&compartmentIdInSubtree=true&accessLevel=ACCESSIBLE`;
   const out = []; const errs = [];
-  // pontuação: tenta só a tenancy e, se vier vazio, com os compartimentos abaixo dela
+  // pontuação: POST /securityScores (sem corpo, só compartmentId) — API Cloud Guard 20200131
   let scoreMsg = '';
-  for (const q of [`compartmentId=${c.tenancy}`, `${sub}`]) {
-    try {
-      const items = (await call(c, 'GET', `${CG}/securityScoreAggregations?${q}`)).data?.items || [];
-      const it = items.find((x) => x && (x.securityScore != null || x.score != null));
-      if (it) { out.push(U.sheet('score', 'Cloud Guard (API)', [{ 'Fonte': 'OCI Cloud Guard', 'Escopo': 'Tenancy', 'Pontuação': it.securityScore ?? it.score, 'Máximo': 100, 'Classificação': sevPt(it.securityRating) || it.securityRating || '' }])); scoreMsg = ''; break; }
-      scoreMsg = 'o Cloud Guard ainda não calculou a pontuação desta tenancy (a lista veio vazia)';
-    } catch (e) { scoreMsg = e.message; }
-  }
+  const RATING = { EXCELLENT: 'Excelente', GOOD: 'Boa', FAIR: 'Regular', POOR: 'Ruim' };
+  try {
+    const items = (await call(c, 'POST', `${CG}/securityScores?compartmentId=${c.tenancy}`, '')).data?.items || [];
+    const it = items.find((x) => x && x.securityScore != null);
+    if (it) {
+      let risk = '';
+      try { const rs = ((await call(c, 'POST', `${CG}/riskScores?compartmentId=${c.tenancy}`, '')).data?.items || []).find((x) => x && x.riskScore != null); if (rs) risk = ` · risk score ${rs.riskScore}`; } catch (e) { /* opcional */ }
+      out.push(U.sheet('score', 'Cloud Guard (API)', [{ 'Fonte': 'OCI Cloud Guard', 'Escopo': 'Tenancy', 'Pontuação': it.securityScore, 'Máximo': 100, 'Classificação': (RATING[it.securityRating] || it.securityRating || '') + risk }]));
+    } else scoreMsg = 'o Cloud Guard ainda não calculou a pontuação desta tenancy (a lista veio vazia)';
+  } catch (e) { scoreMsg = e.message; }
   if (scoreMsg) errs.push(scoreMsg);
+  // histórico da pontuação (comparativo mensal): último valor de cada mês nos últimos 6 meses
+  try {
+    const end = new Date(); const start = new Date(end.getFullYear(), end.getMonth() - 5, 1);
+    const q = `compartmentId=${c.tenancy}&timeScoreComputedGreaterThanOrEqualTo=${encodeURIComponent(start.toISOString())}&timeScoreComputedLessThanOrEqualTo=${encodeURIComponent(end.toISOString())}`;
+    const items = (await call(c, 'POST', `${CG}/securityScores/actions/summarizeTrend?${q}`, '')).data?.items || [];
+    const byMonth = {};
+    for (const t of items) {
+      if (t.securityScore == null || t.startTimestamp == null) continue;
+      const m = new Date(Number(t.startTimestamp) * 1000).toISOString().slice(0, 7);
+      if (!byMonth[m] || t.startTimestamp > byMonth[m].ts) byMonth[m] = { ts: t.startTimestamp, v: t.securityScore };
+    }
+    const hist = Object.keys(byMonth).sort().map((m) => ({ 'Mês': m, 'Pontuação': byMonth[m].v }));
+    if (hist.length) out.push(U.sheet('score_trend', 'Histórico Cloud Guard', hist));
+  } catch (e) { /* histórico é opcional */ }
   let comp = {};
   try { comp = Object.fromEntries((await compartments(c)).map((x) => [x.id, x.path])); } catch (e) { /* nomes opcionais */ }
   try {
@@ -178,4 +231,4 @@ async function score(cfg) {
   return out;
 }
 
-module.exports = { label: 'Oracle Cloud Infrastructure', test, pull, tenant, score, config, _call: call };
+module.exports = { label: 'Oracle Cloud Infrastructure', test, pull, tenant, score, backups, config, _call: call };

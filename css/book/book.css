@@ -97,6 +97,7 @@
 .bsc_{background:#fff;border:1px solid #e8e6f8;border-radius:10px;padding:14px 12px;text-align:center;box-shadow:0 1px 4px rgba(94,63,225,.06);position:relative;overflow:hidden}
 .bscore-bar{height:6px;border-radius:3px;background:#eeedf7;margin:8px 4px 6px;overflow:hidden}.bscore-bar span{display:block;height:100%;border-radius:3px}
 .bsg:has(.bscore){grid-template-columns:repeat(auto-fill,minmax(150px,230px))}
+.bscore-delta{font-size:10px;font-weight:700;margin-top:4px;font-family:var(--book-mono)}
 .bscore-src{font-size:9px;color:#9098b8;margin-top:4px}.bscore-note{font-size:11px;color:#666;margin:6px 0 0}
 .bsc_::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#5E3FE1,#86D2EF)}
 .bsv{font-size:26px;font-weight:800;color:#5E3FE1;line-height:1}

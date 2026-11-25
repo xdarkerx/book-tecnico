@@ -1,12 +1,14 @@
 /* ═══ Registro dos conectores de cloud ═══
  * Cada conector exporta: { label, test(cfg) → {ok,message}, pull(cfg, kinds) → [sheet] }
- * kinds: 'servers' | 'storage' | 'network' | 'baseline'
+ * kinds: 'servers' | 'storage' | 'network' | 'baseline' | 'backup' (só os do período) | 'tenant' | 'score'
+ * opts: { from, to } período do book; newOnly = servidores/storage/redes só os criados no período (coluna "Criado em")
  * Os resultados têm colunas com os mesmos nomes dos exports das consoles,
  * então os mapeadores do front (js/import/mappers) funcionam igual a um CSV.
  */
 const connectors = { oci: require('./oci'), aws: require('./aws'), azure: require('./azure'), gcp: require('./gcp'), zabbix: require('./zabbix'), glpi: require('./glpi') };
 const TOOLS = ['zabbix', 'glpi']; // monitoramento / chamados: um único "tipo" de dado, com período
-const ALL = ['servers', 'storage', 'network', 'baseline', 'tenant', 'score'];
+const ALL = ['servers', 'storage', 'network', 'baseline', 'backup', 'tenant', 'score'];
+const NEW_ONLY = ['servers', 'storage', 'network']; // dá para trazer só o que foi criado no mês
 // tenant = dados da conta/tenancy/assinatura; score = Cloud Security Score (Cloud Guard, Security Hub, Defender)
 const EXTRA = { tenant: 'tenant', score: 'score' };
 
@@ -37,7 +39,20 @@ module.exports = {
           // avisos parciais (ex.: recomendações vieram, a pontuação não) vão para a lista de erros da tela
           got.filter((r) => r && r.kind === 'warning').forEach((w) => errors.push({ kind, message: w.message }));
           results.push(...got.filter((r) => !(r && r.kind === 'warning')));
-        } else results.push(...(await c.pull(cfg, kind)));
+        } else {
+          const sheets = await c.pull(cfg, kind, opts);
+          if (opts.newOnly && NEW_ONLY.includes(kind)) {
+            // só os criados no período; quem não informa data de criação fica de fora (e a tela avisa)
+            const from = opts.from || '0000', to = opts.to || '9999';
+            for (const sh of sheets) {
+              const before = sh.rows.length; let noDate = 0;
+              sh.rows = sh.rows.filter((r) => { const d = String(r['Criado em'] || ''); if (!d) { noDate++; return false; } return d >= from && d <= to; });
+              sh.name += ' — criados no período';
+              if (noDate) errors.push({ kind, message: `${noDate} de ${before} item(ns) sem data de criação na API ficaram de fora (ex.: redes da AWS).` });
+            }
+          }
+          results.push(...sheets);
+        }
       }
       catch (e) { console.error(`[${provider}/${kind}]`, e.message); errors.push({ kind, message: e.message }); }
     }

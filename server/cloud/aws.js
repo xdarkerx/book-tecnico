@@ -71,9 +71,12 @@ async function test(cfg) {
   return { message: `Conectado à conta ${U.text(U.find(xml, 'Account')[0])} (${U.text(U.find(xml, 'Arn')[0])})` };
 }
 
-async function pull(cfg, kind) {
+const period = (opts = {}) => ({ from: opts.from ? new Date(opts.from + 'T00:00:00Z') : new Date(Date.now() - 31 * 86400000), to: opts.to ? new Date(opts.to + 'T23:59:59Z') : new Date() });
+const inPeriod = (d, p) => { const t = new Date(d); return t >= p.from && t <= p.to; };
+async function pull(cfg, kind, opts = {}) {
   const creds = credentials(cfg);
   const regs = regions(cfg);
+  if (kind === 'backup') return [U.sheet('backup', 'Snapshots EBS do período (API)', await snapshots(creds, regs, period(opts)))];
   if (kind === 'servers') {
     const rows = [];
     for (const r of regs) for (const page of await query(creds, 'ec2', r, 'DescribeInstances', { MaxResults: '1000' }))
@@ -82,7 +85,7 @@ async function pull(cfg, kind) {
           'Name': tag(inst, 'Name') || U.text(inst, 'instanceId'), 'Instance ID': U.text(inst, 'instanceId'),
           'Private IP Address': U.text(inst, 'privateIpAddress'), 'Platform Details': U.text(inst, 'platformDetails') || U.text(inst, 'platform') || 'Linux/UNIX',
           'Instance State': U.text(inst, 'instanceState/name'), 'Availability Zone': U.text(inst, 'placement/availabilityZone'),
-          'VPC ID': U.text(inst, 'vpcId'), 'Instance Type': U.text(inst, 'instanceType'), 'Tag:Environment': tag(inst, 'Environment') || tag(inst, 'env')
+          'VPC ID': U.text(inst, 'vpcId'), 'Instance Type': U.text(inst, 'instanceType'), 'Tag:Environment': tag(inst, 'Environment') || tag(inst, 'env'), 'Criado em': U.text(inst, 'launchTime').slice(0, 10)
         });
       }
     return [U.sheet('servers', 'EC2 (API)', rows)];
@@ -91,11 +94,11 @@ async function pull(cfg, kind) {
     const rows = [];
     for (const r of regs) for (const page of await query(creds, 'ec2', r, 'DescribeVolumes', { MaxResults: '500' }))
       for (const v of U.all(U.child(page, 'DescribeVolumesResponse') || page, 'volumeSet/item'))
-        rows.push({ 'Name': tag(v, 'Name') || U.text(v, 'volumeId'), 'Volume Type': 'EBS ' + U.text(v, 'volumeType'), 'Size (GiB)': U.text(v, 'size') + ' GiB', 'Region': U.text(v, 'availabilityZone'), 'State': U.text(v, 'status') });
+        rows.push({ 'Name': tag(v, 'Name') || U.text(v, 'volumeId'), 'Volume Type': 'EBS ' + U.text(v, 'volumeType'), 'Size (GiB)': U.text(v, 'size') + ' GiB', 'Region': U.text(v, 'availabilityZone'), 'State': U.text(v, 'status'), 'Criado em': U.text(v, 'createTime').slice(0, 10) });
     // S3 (global)
     const { headers } = sign({ method: 'GET', host: 's3.amazonaws.com', region: 'us-east-1', service: 's3', creds });
     const xml = U.parseXml(await (await U.request('https://s3.amazonaws.com/', { headers })).text());
-    for (const b of U.find(xml, 'Bucket')) rows.push({ 'Name': U.text(b, 'Name'), 'Volume Type': 'S3 Bucket', 'Size (GiB)': '', 'Region': 'global', 'State': 'available' });
+    for (const b of U.find(xml, 'Bucket')) rows.push({ 'Name': U.text(b, 'Name'), 'Volume Type': 'S3 Bucket', 'Size (GiB)': '', 'Region': 'global', 'State': 'available', 'Criado em': U.text(b, 'CreationDate').slice(0, 10) });
     return [U.sheet('storage', 'EBS + S3 (API)', rows)];
   }
   if (kind === 'network') {
@@ -180,6 +183,22 @@ async function score(cfg) {
   const ord = { 'Crítica': 0, 'Alta': 1, 'Média': 2, 'Baixa': 3 };
   const recList = Object.values(recs).sort((a, b) => (ord[a.Severidade] ?? 9) - (ord[b.Severidade] ?? 9) || b['Recursos reprovados'] - a['Recursos reprovados']);
   return [U.sheet('score', 'Security Hub (API)', scores), U.sheet('score_recs', 'Controles reprovados (Security Hub)', recList), U.sheet('score_alerts', 'Findings críticos/altos', alerts)];
+}
+
+/** Backup do período: snapshots EBS (manuais, AWS Backup e Data Lifecycle Manager). */
+async function snapshots(creds, regs, p) {
+  const rows = [];
+  const ST = { completed: 'OK', pending: 'Em andamento', error: 'Falha', recoverable: 'Recuperável', recovering: 'Recuperando' };
+  for (const r of regs) for (const page of await query(creds, 'ec2', r, 'DescribeSnapshots', { 'Owner.1': 'self', MaxResults: '1000' }))
+    for (const s of U.find(page, 'snapshotSet').flatMap((x) => U.all(x, 'item'))) {
+      const start = U.text(s, 'startTime');
+      if (!inPeriod(start, p)) continue;
+      const desc = U.text(s, 'description');
+      const how = /AWS Backup/i.test(desc) ? 'AWS Backup (plano)' : tag(s, 'dlm:managed') || /Data Lifecycle/i.test(desc) ? 'Agendado (DLM)' : 'Manual';
+      rows.push({ 'Item': tag(s, 'Name') || `${U.text(s, 'volumeId')} (${U.text(s, 'volumeSize')} GiB)`, 'Situação': ST[U.text(s, 'status')] || U.text(s, 'status'), 'Ferramenta': 'Snapshot EBS',
+        'Frequência': how, 'Retenção': '—', 'Teste Restore': '—', 'Criado em': start.slice(0, 10), 'Região': r });
+    }
+  return rows.sort((a, b) => String(b['Criado em']).localeCompare(a['Criado em']));
 }
 
 module.exports = { label: 'Amazon Web Services', test, pull, tenant, score, sign };

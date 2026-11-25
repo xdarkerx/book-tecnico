@@ -213,7 +213,29 @@ usar ⧉ na lista para gerar o próximo mês.
 ### Dados de cloud direto das APIs (sem ZIP)
 1. Na página do cliente, abra **🔑 Conexões de cloud** e configure OCI, AWS, Azure e/ou GCP. Depois use **⚡ Testar conexão**.
 2. No editor, use **☁️ Dados de cloud › 🔄 Sincronizar com a cloud**, escolha as clouds e o que buscar
-   (servidores, storage, redes, baseline). Na tela de revisão, confira o destino e escolha as linhas antes de aplicar.
+   (servidores, storage, redes, backup, baseline, Geral, Security Score). Na tela de revisão, confira o destino e escolha
+   as linhas antes de aplicar.
+
+**Quais recursos:**
+- **Servidores, storage e redes:** escolha **Todos os recursos** ou **Só os criados no mês** do book (pela coluna
+  "Criado em"). Recursos que a API não informa a data de criação ficam de fora nesse modo, e a tela avisa. Exemplo: as
+  redes (VPC) da AWS.
+- **Abrangência:** a busca cobre todos os compartimentos (OCI), grupos de recursos (Azure) e projetos (GCP).
+- **Regiões da OCI:** com o campo **Regiões** da conexão vazio, ele busca em todas as regiões assinadas da tenancy.
+- **Backup:** traz sempre só o do mês do book, na seção **Backup** de cada cloud (Item, Situação, Ferramenta,
+  Frequência, Retenção, Teste Restore, Criado em). A origem em cada cloud:
+  - **OCI:** backups de boot volume e block volume;
+  - **AWS:** snapshots EBS, incluindo os do AWS Backup e do DLM;
+  - **Azure:** jobs dos cofres do Azure Backup;
+  - **GCP:** snapshots de disco.
+
+**Importação padrão (por usuário):** em ⚙️ Configurações › Usuário › **📥 Importação padrão** você define o que já vem
+marcado em todos os books. Dá para mudar em cada importação.
+- **Zabbix:** severidades (ex.: só Desastre e Alta) e se entram servidores sem alerta.
+- **Segurança:** riscos das recomendações e alertas (ex.: só Crítica e Alta).
+- **Servidores, storage e redes:** todos os recursos ou só os criados no mês.
+
+Com login, os padrões ficam no seu usuário e valem em qualquer computador. Sem login, ficam no navegador.
 
 **Várias contas no mesmo provedor (ex.: AWS PRD e HML):** em cada aba de **🔑 Conexões**, use **＋ Adicionar conta**,
 dê um nome a ela em **Nome da conta** (ex.: `PRD`, `HML`) e preencha as credenciais. **🗑 Remover conta** apaga a conta
@@ -245,7 +267,7 @@ as **recomendações** e os **alertas**, com as colunas no formato de cada cloud
 
 | Cloud | Pontuação | Recomendações | Alertas | Permissão extra |
 |---|---|---|---|---|
-| OCI | Cloud Guard (0–100) | recomendações do Cloud Guard (risco, problemas, compartimento) | problemas abertos do Cloud Guard | `read cloud-guard-family` |
+| OCI | Cloud Guard (0–100), com o histórico dos últimos meses e o risk score | recomendações do Cloud Guard (risco, problemas, compartimento) | problemas abertos do Cloud Guard | `read cloud-guard-family` |
 | AWS | Security Hub: % de controles aprovados por região | controles reprovados (controle, título, severidade, recursos reprovados) | findings críticos e altos de outros serviços (GuardDuty, Inspector…) | `securityhub:GetFindings`, `iam:ListAccountAliases` |
 | Azure | Defender for Cloud Secure Score por assinatura | recomendações não íntegras (severidade, recursos afetados) | alertas de segurança ativos | Reader ou Security Reader |
 | GCP | sem score nativo: à mão ou pelo ZIP | à mão ou pelo ZIP | à mão ou pelo ZIP | — |
@@ -257,8 +279,17 @@ Sincronizar de novo atualiza o bloco, sem duplicar.
 
 **Escolher os riscos ao importar:** na tela de revisão da sincronização (e do ZIP), a opção **🛡️ Segurança — riscos a
 importar** mostra quantas recomendações e alertas há de cada risco (Crítica, Alta, Média, Baixa, Informativa). Só os
-riscos marcados entram no book. A tela mostra o total, por exemplo "Entram 6 de 12 recomendações/alertas", e a escolha
-fica lembrada para as próximas importações neste navegador. Itens sem risco informado sempre entram.
+riscos marcados entram no book. A tela mostra o total, por exemplo "Entram 6 de 12 recomendações/alertas". Ela começa
+com o seu padrão (Importação padrão). Itens sem risco informado sempre entram.
+
+**Mostrar no book** (no editor do bloco):
+- **💡 Recomendações** e **🚨 Problemas / alertas:** ligue ou desligue cada parte. Quando desligada, a parte some do
+  book, mas os dados continuam no bloco.
+- **📊 Gráficos de risco:** rosca com as recomendações por risco e colunas com os problemas/alertas por risco.
+- **📈 Comparativo mensal:** cada pontuação mostra a variação em relação ao mês anterior (ex.: "▲ +6 pts vs out/26"),
+  e um gráfico de linha mostra a evolução dos últimos meses. Os meses anteriores vêm do histórico do **Cloud Guard** e da
+  pontuação salva nos **books dos meses anteriores** do mesmo cliente e área. Para AWS e Azure, o comparativo se forma
+  sincronizando todo mês.
 
 Se a sincronização trouxer as recomendações mas não a pontuação, a tela avisa o motivo (ex.: o Cloud Guard ainda não
 calculou a pontuação da tenancy). O resto entra normalmente.

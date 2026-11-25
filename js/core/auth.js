@@ -15,6 +15,22 @@
     get isAdmin() { return !A.info.enabled || !!(A.info.user && A.info.user.role === 'admin'); },
     get lockEnabled() { return !!(A.info.lock && A.info.lock.enabled && A.info.user); },
 
+    /** Padrões de importação do usuário (Configurações › Usuário › Importação padrão).
+     *  Com login: ficam no usuário (qualquer computador). Sem login: neste navegador. */
+    importDefaults() {
+      const DEF = { zabbixSeverities: [0, 1, 2, 3, 4, 5], risks: ['critica', 'alta', 'media', 'baixa', 'info'], newOnly: false, zabbixAllHosts: true };
+      let d = A.info.user && A.info.user.prefs && A.info.user.prefs.importDefaults;
+      if (!d) { try { d = JSON.parse(localStorage.getItem('bt-import-defaults') || 'null'); } catch (e) { d = null; } }
+      return Object.assign({}, DEF, d || {});
+    },
+    async saveImportDefaults(d) {
+      try { localStorage.setItem('bt-import-defaults', JSON.stringify(d)); } catch (e) { /* sem armazenamento */ }
+      if (A.info.user) {
+        const r = await BT.api.savePrefs({ importDefaults: d });
+        A.info.user.prefs = Object.assign({}, A.info.user.prefs, { importDefaults: (r && r.prefs && r.prefs.importDefaults) || d });
+      }
+    },
+
     /** Carrega o estado do login. Devolve false se a tela de login ficou aberta (o app espera). */
     async init() {
       if (BT.api.mode !== 'server') return true;

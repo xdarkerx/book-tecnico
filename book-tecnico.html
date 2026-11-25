@@ -178,7 +178,7 @@
 <!-- Área usada só na impressão (PDF) -->
 <div id="print-root"></div>
 <!-- ═══ html/settings.html — ⚙️ Configurações em dois menus:
-     Usuário (todos): Preferências (tema) e Opções de book (menus padrão, comparativo)
+     Usuário (todos): Preferências (tema), Opções de book (menus padrão, comparativo) e Importação padrão
      Administrador: Banco de dados, Login e acesso, Edição simultânea, Backup, Lixeira, Logs e auditoria
      Lógica: js/editor/settings.js (+ access-settings.js, admin-backup.js, admin-trash.js, admin-logs.js) ═══ -->
 <section class="settings" id="settings" hidden>
@@ -204,6 +204,8 @@
             <div class="theme-cards" id="set-theme" role="radiogroup" aria-label="Tema"><!-- render: settings.js --></div>
           </div>
         </div>
+
+        <div class="set-panel" data-panel="import" hidden><div id="set-import"><!-- render: import-defaults.js --></div></div>
 
         <div class="set-panel" data-panel="book" hidden>
           <div class="card set-card">
@@ -383,6 +385,7 @@
 <script src="js/editor/admin-backup.js"></script>
 <script src="js/editor/admin-trash.js"></script>
 <script src="js/editor/admin-logs.js"></script>
+<script src="js/editor/import-defaults.js"></script>
 
 <!-- ═══ Bootstrap ═══ -->
 <script src="js/app.js"></script>

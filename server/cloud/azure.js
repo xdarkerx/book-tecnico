@@ -43,10 +43,14 @@ async function test(cfg) {
   return { message: `Conectado — ${subs.length} assinatura(s): ${subs.join(', ')}` };
 }
 
-async function pull(cfg, kind) {
+const period = (opts = {}) => ({ from: opts.from ? new Date(opts.from + 'T00:00:00Z') : new Date(Date.now() - 31 * 86400000), to: opts.to ? new Date(opts.to + 'T23:59:59Z') : new Date() });
+const inPeriod = (d, p) => { const t = new Date(d); return t >= p.from && t <= p.to; };
+async function pull(cfg, kind, opts = {}) {
   const rows = [];
+  const p = period(opts);
   for (const sub of await subscriptions(cfg)) {
     const S = `/subscriptions/${sub}`;
+    if (kind === 'backup') rows.push(...(await backupJobs(cfg, S, p)));
     if (kind === 'servers') {
       const vms = await arm(cfg, `${S}/providers/Microsoft.Compute/virtualMachines?api-version=2024-03-01`);
       const status = await arm(cfg, `${S}/providers/Microsoft.Compute/virtualMachines?api-version=2024-03-01&statusOnly=true`).catch(() => []);
@@ -58,14 +62,14 @@ async function pull(cfg, kind) {
       for (const v of vms) {
         const p = v.properties || {}; const img = p.storageProfile?.imageReference || {};
         rows.push({ 'Name': v.name, 'Private IP Address': ipByVm[v.id.toLowerCase()] || '', 'OS Name': [p.storageProfile?.osDisk?.osType, img.offer, img.sku].filter(Boolean).join(' '),
-          'Power State': powerById[v.id.toLowerCase()] || '', 'Location': v.location, 'Resource Group': rg(v.id), 'VM Size': p.hardwareProfile?.vmSize || '', 'Environment': v.tags?.Environment || v.tags?.environment || v.tags?.env || '' });
+          'Power State': powerById[v.id.toLowerCase()] || '', 'Location': v.location, 'Resource Group': rg(v.id), 'VM Size': p.hardwareProfile?.vmSize || '', 'Environment': v.tags?.Environment || v.tags?.environment || v.tags?.env || '', 'Criado em': String(p.timeCreated || '').slice(0, 10) });
       }
     }
     if (kind === 'storage') {
       for (const s of await arm(cfg, `${S}/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01`))
-        rows.push({ 'Name': s.name, 'Kind': `${s.kind} · ${s.sku?.name || ''}`, 'Capacity': '', 'Location': s.location, 'Resource Group': rg(s.id), 'Status': s.properties?.statusOfPrimary || '' });
+        rows.push({ 'Name': s.name, 'Kind': `${s.kind} · ${s.sku?.name || ''}`, 'Capacity': '', 'Location': s.location, 'Resource Group': rg(s.id), 'Status': s.properties?.statusOfPrimary || '', 'Criado em': String(s.properties?.creationTime || '').slice(0, 10) });
       for (const d of await arm(cfg, `${S}/providers/Microsoft.Compute/disks?api-version=2023-04-02`))
-        rows.push({ 'Name': d.name, 'Kind': 'Disco ' + (d.sku?.name || ''), 'Capacity': (d.properties?.diskSizeGB ?? '') + ' GiB', 'Location': d.location, 'Resource Group': rg(d.id), 'Status': d.properties?.diskState || '' });
+        rows.push({ 'Name': d.name, 'Kind': 'Disco ' + (d.sku?.name || ''), 'Capacity': (d.properties?.diskSizeGB ?? '') + ' GiB', 'Location': d.location, 'Resource Group': rg(d.id), 'Status': d.properties?.diskState || '', 'Criado em': String(d.properties?.timeCreated || '').slice(0, 10) });
     }
     if (kind === 'network') {
       for (const n of await arm(cfg, `${S}/providers/Microsoft.Network/virtualNetworks?api-version=2023-09-01`))
@@ -77,8 +81,27 @@ async function pull(cfg, kind) {
         rows.push({ 'TYPE': String(r.type).toLowerCase(), 'NAME': r.name, 'RESOURCE GROUP': rg(r.id), 'LOCATION': r.location });
     }
   }
-  const names = { servers: 'VMs Azure (API)', storage: 'Storage Azure (API)', network: 'VNets Azure (API)', baseline: 'Recursos Azure (API)' };
+  const names = { servers: 'VMs Azure (API)', storage: 'Storage Azure (API)', network: 'VNets Azure (API)', baseline: 'Recursos Azure (API)', backup: 'Jobs do Azure Backup no período (API)' };
   return [U.sheet(kind, names[kind], rows)];
+}
+
+/** Backup do período: jobs dos cofres do Recovery Services (Azure Backup). */
+async function backupJobs(cfg, S, p) {
+  const rows = [];
+  const ST = { Completed: 'OK', CompletedWithWarnings: 'OK com avisos', Failed: 'Falha', InProgress: 'Em andamento', Cancelled: 'Cancelado' };
+  const fmt = (d) => d.toISOString().slice(0, 19).replace('T', ' '); // filtro do Azure Backup: "yyyy-mm-dd hh:mm:ss"
+  for (const v of await arm(cfg, `${S}/providers/Microsoft.RecoveryServices/vaults?api-version=2023-04-01`).catch(() => [])) {
+    const filter = encodeURIComponent(`startTime eq '${fmt(p.from)}' and endTime eq '${fmt(p.to)}'`);
+    let jobs = await arm(cfg, `${v.id}/backupJobs?api-version=2023-04-01&$filter=${filter}`).catch(() => null);
+    if (!jobs) jobs = await arm(cfg, `${v.id}/backupJobs?api-version=2023-04-01`).catch(() => []);
+    for (const j of jobs) {
+      const q = j.properties || {};
+      if (q.startTime && !inPeriod(q.startTime, p)) continue;
+      rows.push({ 'Item': q.entityFriendlyName || j.name, 'Situação': ST[q.status] || q.status || '', 'Ferramenta': `Azure Backup (${v.name})`, 'Frequência': q.operation || '',
+        'Retenção': '—', 'Teste Restore': /restore/i.test(q.operation || '') ? 'Sim' : '—', 'Criado em': String(q.startTime || '').slice(0, 10) });
+    }
+  }
+  return rows;
 }
 
 const SEV_PT = { CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Média', LOW: 'Baixa', MINOR: 'Baixa', INFORMATIONAL: 'Informativa', INFO: 'Informativa' };

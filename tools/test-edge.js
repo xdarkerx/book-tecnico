@@ -186,6 +186,12 @@ async function main() {
   global.fetch = realFetch;
   assert.ok((await call('GET', '/api/users', undefined, { cookie: adm })).data.find((u) => u.username === 'admin' && !u.disabled)); ok('admin local nunca é desativado pela sincronização');
 
+  // ── padrões de importação do usuário ───────────────────
+  await call('PUT', '/api/auth/prefs', { importDefaults: { zabbixSeverities: [5, 4, 9, 'x'], risks: ['critica', 'alta', 'xpto'], newOnly: true, zabbixAllHosts: false } }, { cookie: bia });
+  const pr = (await call('GET', '/api/auth/me', undefined, { cookie: bia })).data.user.prefs.importDefaults;
+  assert.deepStrictEqual(pr, { zabbixSeverities: [5, 4], risks: ['critica', 'alta'], newOnly: true, zabbixAllHosts: false }); ok('importação padrão: salva no usuário só valores válidos (severidade 9 e risco "xpto" descartados)');
+  assert.ok(!(await call('GET', '/api/auth/me', undefined, { cookie: adm })).data.user.prefs.importDefaults); ok('importação padrão: é de cada usuário (o admin não herda a da Bia)');
+
   // ── logs ────────────────────────────────────────────────
   await require('../server/logs').flush();
   const lg = (await call('GET', '/api/logs?kind=audit&limit=99999', undefined, { cookie: adm })).data;

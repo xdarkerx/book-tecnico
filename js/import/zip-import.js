@@ -252,10 +252,10 @@
       if (mf.governanca) meta.governanca = mf.governanca;
     }
     const opts = { kpi: true, charts: true, note: true, applyManifest: true };
-    // Segurança: riscos das recomendações/alertas que entram no book (lembra a última escolha neste navegador)
+    // Segurança: riscos das recomendações/alertas que entram no book
     const LV = BT.blocks.RISK_LEVELS || [];
-    let riskSel = new Set(LV.map((x) => x[0]));
-    try { const saved = JSON.parse(localStorage.getItem('bt-import-riscos') || 'null'); if (Array.isArray(saved)) riskSel = new Set(saved); } catch (e) { /* sem preferência salva */ }
+    // começa no padrão do usuário (Configurações › Usuário › Importação padrão)
+    const riskSel = new Set((BT.auth && BT.auth.importDefaults ? BT.auth.importDefaults().risks : LV.map((x) => x[0])));
     const scoreBlocks = () => items.filter((i) => i.kind === 'blocks' && i.include).flatMap((i) => i.blocks.filter((b) => b.type === 'score'));
     const riskTotals = () => { const t = {}; scoreBlocks().forEach((b) => Object.entries(BT.blocks.riskCounts(b.data)).forEach(([k, n]) => (t[k] = (t[k] || 0) + n))); return t; };
 
@@ -337,8 +337,7 @@
         const upd = () => {
           const all = Object.values(tot).reduce((a, b) => a + b, 0);
           const keep = Object.entries(tot).filter(([k]) => riskSel.has(k)).reduce((a, [, n]) => a + n, 0);
-          sum.textContent = `Entram ${keep} de ${all} recomendações/alertas.`;
-          try { localStorage.setItem('bt-import-riscos', JSON.stringify([...riskSel])); } catch (e) { /* sem armazenamento */ }
+          sum.textContent = `Entram ${keep} de ${all} recomendações/alertas. O padrão fica em Configurações › Usuário › Importação padrão.`;
         };
         body.appendChild(h('div', { class: 'wz-risks' }, [
           h('span', { class: 'lbl' }, '🛡️ Segurança — riscos a importar'),

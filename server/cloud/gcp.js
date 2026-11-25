@@ -47,32 +47,40 @@ async function test(cfg) {
   return { message: `Conectado como ${account(cfg).client_email} — projeto(s): ${ps.join(', ')}` };
 }
 
-async function pull(cfg, kind) {
+const period = (opts = {}) => ({ from: opts.from ? new Date(opts.from + 'T00:00:00Z') : new Date(Date.now() - 31 * 86400000), to: opts.to ? new Date(opts.to + 'T23:59:59Z') : new Date() });
+const inPeriod = (d, p) => { const t = new Date(d); return t >= p.from && t <= p.to; };
+async function pull(cfg, kind, opts = {}) {
   const rows = [];
+  const per = period(opts);
   for (const p of projects(cfg)) {
+    if (kind === 'backup') {
+      // backup do período: snapshots de disco
+      for (const s of (await get(cfg, `${C}${p}/global/snapshots`)).flatMap((x) => x.items || []))
+        if (inPeriod(s.creationTimestamp, per)) rows.push({ 'Item': s.name, 'Situação': s.status === 'READY' ? 'OK' : s.status, 'Ferramenta': 'Snapshot de disco', 'Frequência': s.autoCreated ? 'Agendado (política)' : 'Manual', 'Retenção': '—', 'Teste Restore': '—', 'Criado em': String(s.creationTimestamp).slice(0, 10), 'Projeto': p });
+    }
     if (kind === 'servers' || kind === 'baseline') {
       for (const i of aggregated(await get(cfg, `${C}${p}/aggregated/instances`), 'instances')) {
         if (kind === 'baseline') { rows.push({ resource_type: 'Compute Instance', project: p }); continue; }
         const lic = (i.disks || []).flatMap((d) => d.licenses || []).map(U.last)[0] || '';
-        rows.push({ 'Name': i.name, 'Internal IP': i.networkInterfaces?.[0]?.networkIP || '', 'Operating System': lic, 'Status': i.status, 'Zone': U.last(i.zone), 'Project': p, 'Machine Type': U.last(i.machineType), 'Labels': Object.entries(i.labels || {}).map(([k, v]) => `${k}=${v}`).join(' ') });
+        rows.push({ 'Name': i.name, 'Internal IP': i.networkInterfaces?.[0]?.networkIP || '', 'Operating System': lic, 'Status': i.status, 'Zone': U.last(i.zone), 'Project': p, 'Machine Type': U.last(i.machineType), 'Labels': Object.entries(i.labels || {}).map(([k, v]) => `${k}=${v}`).join(' '), 'Criado em': String(i.creationTimestamp || '').slice(0, 10) });
       }
     }
     if (kind === 'storage' || kind === 'baseline') {
       for (const d of aggregated(await get(cfg, `${C}${p}/aggregated/disks`), 'disks'))
-        rows.push(kind === 'baseline' ? { resource_type: 'Persistent Disk', project: p } : { 'Name': d.name, 'Type': 'Disco ' + U.last(d.type), 'Size': d.sizeGb + ' GB', 'Zone': U.last(d.zone), 'Project': p, 'Status': d.status });
+        rows.push(kind === 'baseline' ? { resource_type: 'Persistent Disk', project: p } : { 'Name': d.name, 'Type': 'Disco ' + U.last(d.type), 'Size': d.sizeGb + ' GB', 'Zone': U.last(d.zone), 'Project': p, 'Status': d.status, 'Criado em': String(d.creationTimestamp || '').slice(0, 10) });
       for (const b of (await get(cfg, `https://storage.googleapis.com/storage/v1/b?project=${p}`)).flatMap((x) => x.items || []))
-        rows.push(kind === 'baseline' ? { resource_type: 'Cloud Storage Bucket', project: p } : { 'Name': b.name, 'Type': 'Bucket · ' + (b.storageClass || ''), 'Size': '', 'Zone': b.location, 'Project': p, 'Status': 'available' });
+        rows.push(kind === 'baseline' ? { resource_type: 'Cloud Storage Bucket', project: p } : { 'Name': b.name, 'Type': 'Bucket · ' + (b.storageClass || ''), 'Size': '', 'Zone': b.location, 'Project': p, 'Status': 'available', 'Criado em': String(b.timeCreated || '').slice(0, 10) });
     }
     if (kind === 'network' || kind === 'baseline') {
       const subnets = aggregated(await get(cfg, `${C}${p}/aggregated/subnetworks`), 'subnetworks');
       for (const n of (await get(cfg, `${C}${p}/global/networks`)).flatMap((x) => x.items || [])) {
         if (kind === 'baseline') { rows.push({ resource_type: 'VPC Network', project: p }); continue; }
         const subs = subnets.filter((s) => s.network === n.selfLink);
-        rows.push({ 'Network Name': n.name, 'IP range': subs.map((s) => s.ipCidrRange).join(', ') || n.IPv4Range || '', 'Project': p, 'Subnets': subs.map((s) => `${s.name} (${U.last(s.region)} ${s.ipCidrRange})`).join('; ') });
+        rows.push({ 'Network Name': n.name, 'IP range': subs.map((s) => s.ipCidrRange).join(', ') || n.IPv4Range || '', 'Project': p, 'Subnets': subs.map((s) => `${s.name} (${U.last(s.region)} ${s.ipCidrRange})`).join('; '), 'Criado em': String(n.creationTimestamp || '').slice(0, 10) });
       }
     }
   }
-  const names = { servers: 'Instâncias GCP (API)', storage: 'Discos + Buckets GCP (API)', network: 'Redes VPC GCP (API)', baseline: 'Recursos GCP (API)' };
+  const names = { servers: 'Instâncias GCP (API)', storage: 'Discos + Buckets GCP (API)', network: 'Redes VPC GCP (API)', baseline: 'Recursos GCP (API)', backup: 'Snapshots GCP do período (API)' };
   return [U.sheet(kind, names[kind], rows)];
 }
 

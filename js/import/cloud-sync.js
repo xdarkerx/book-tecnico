@@ -11,7 +11,7 @@
 (function (BT) {
   const h = BT.h;
   const P = () => BT.data.providers;
-  const KINDS = [['servers', '🖥️ Servidores', 'servidores'], ['storage', '💾 Storage', 'storage'], ['network', '🌐 Redes', 'networking'], ['baseline', '📦 Baseline', 'baseline'], ['tenant', '🏷️ Geral (tenant)', 'geral'], ['score', '🛡️ Security Score', 'score']];
+  const KINDS = [['servers', '🖥️ Servidores', 'servidores'], ['storage', '💾 Storage', 'storage'], ['network', '🌐 Redes', 'networking'], ['backup', '🗄️ Backup (só do mês)', 'backup'], ['baseline', '📦 Baseline', 'baseline'], ['tenant', '🏷️ Geral (tenant)', 'geral'], ['score', '🛡️ Security Score', 'score']];
   const ORDER = ['oci', 'aws', 'azure', 'gcp', 'zabbix', 'glpi'];
 
   const FORMS = {
@@ -227,6 +227,27 @@
     return items;
   }
 
+  /** Comparativo mensal do Cloud Security Score: junta a pontuação dos books dos 5 meses anteriores (mesmo cliente e área)
+   *  ao histórico que a API já trouxe (ex.: Cloud Guard). Fica em data.history = [{ label, mes: 'AAAA-MM', value }]. */
+  async function scoreHistory(data, key) {
+    const hist = (data.history || []).slice();
+    const has = (label, mes) => hist.some((x) => x.label === label && x.mes === mes);
+    const labels = data.items.map((i) => i.label);
+    for (let back = 1; back <= 5; back++) {
+      const d = new Date(Number(key.ano), Number(key.mes) - 1 - back, 1);
+      const mes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      let st = null;
+      try { st = await BT.api.getBook({ cliente: key.cliente, ano: String(d.getFullYear()), mes: String(d.getMonth() + 1).padStart(2, '0'), area: key.area }); } catch (e) { /* sem book naquele mês */ }
+      if (!st) continue;
+      for (const g of st.groups || []) for (const s of g.sections || []) for (const b of s.blocks || []) {
+        if (b.type !== 'score') continue;
+        for (const it of (b.data && b.data.items) || []) if (labels.includes(it.label) && String(it.value).trim() && !has(it.label, mes)) hist.push({ label: it.label, mes, value: String(it.value) });
+      }
+    }
+    data.history = hist.sort((a, b) => a.mes.localeCompare(b.mes));
+    data.month = `${key.ano}-${String(key.mes).padStart(2, '0')}`; // mês do book (o comparativo usa só os anteriores)
+  }
+
   /** Puxa dados das conexões configuradas e abre a revisão (mesma do ZIP). */
   async function sync(opts = {}) {
     if (BT.api.mode !== 'server') return BT.ui.toast('Sincronizar exige o servidor: rode "npm run dev".', { type: 'err', ms: 6000 });
@@ -242,8 +263,9 @@
       return connections(key.cliente, BT.store.state.meta.cliente);
     }
     const selP = new Set(opts.providers && opts.providers.length ? configured.filter((k) => opts.providers.includes(k) || opts.providers.includes(typeOf(k))) : configured);
-    const byTpl = { network: ['network'], backup: ['storage'] };
-    const selK = new Set(opts.kinds || byTpl[BT.store.state.template] || ['servers', 'storage', 'network', 'baseline', 'tenant', 'score']);
+    const byTpl = { network: ['network'], backup: ['storage', 'backup'] };
+    const selK = new Set(opts.kinds || byTpl[BT.store.state.template] || ['servers', 'storage', 'network', 'backup', 'baseline', 'tenant', 'score']);
+    const defs = BT.auth.importDefaults(); // Configurações › Usuário › Importação padrão
     // período padrão = mês do book
     const y = Number(key.ano), mo = Number(key.mes);
     const pad = (n) => String(n).padStart(2, '0');
@@ -253,8 +275,12 @@
     const kindsBox = h('div'); const periodBox = h('div'); const zbxBox = h('div');
     // Zabbix: severidades a importar e se entram os servidores sem nenhum alerta no período
     const ZSEV = [['5', '🟥 Desastre'], ['4', '🟧 Alta'], ['3', '🟨 Média'], ['2', '🟦 Atenção'], ['1', 'ℹ️ Informação'], ['0', '⬜ Não classificado']];
-    const zbxSev = new Set(ZSEV.map((x) => x[0]));
-    const zbxAll = h('input', { type: 'checkbox', checked: true });
+    const zbxSev = new Set(defs.zabbixSeverities.map(String));
+    const zbxAll = h('input', { type: 'checkbox', checked: defs.zabbixAllHosts !== false });
+    // servidores, storage e redes: todos ou só os criados no mês do book
+    let newOnly = !!defs.newOnly;
+    const scope = h('div', { class: 'cprow', role: 'radiogroup', 'aria-label': 'Quais recursos' }, [[false, 'Todos os recursos'], [true, 'Só os criados no mês']].map(([v, l]) =>
+      h('label', { class: 'cp' }, [h('input', { type: 'radio', name: 'sync-scope', checked: newOnly === v, onchange: () => (newOnly = v) }), l])));
     zbxBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'Zabbix — severidades dos alertas'), h('div', { class: 'cprow' }, ZSEV.map(([v, l]) => chk(zbxSev, v, l))),
       h('label', { class: 'switch', style: { marginTop: '10px' } }, [zbxAll, 'Incluir servidores sem nenhum alerta no período (Monitoramento)']));
     const refresh = () => {
@@ -272,7 +298,7 @@
         const primary = k === p; // a 1ª conta assume o menu da cloud que já existe no book
         status.textContent = `Consultando ${P()[p].display}${account ? ' · ' + account : ''}…`;
         try {
-          const extra = p === 'zabbix' ? Object.assign({}, per, { severities: [...zbxSev].map(Number), onlyWithAlerts: !zbxAll.checked }) : per;
+          const extra = p === 'zabbix' ? Object.assign({}, per, { severities: [...zbxSev].map(Number), onlyWithAlerts: !zbxAll.checked }) : Object.assign({}, per, { newOnly });
           const r = await BT.api.cloudPull(key.cliente, k, [...selK], extra);
           r.errors.forEach((e) => errors.push(`${label}${e.kind !== p ? '/' + e.kind : ''}: ${e.message}`));
           if (P()[p].tool) r.results.forEach((res) => items.push(...toolItems(p, res).map((it) => (account ? Object.assign(it, { path: it.path.replace(P()[p].label, label) }) : it))));
@@ -281,6 +307,7 @@
             const scoreSheets = r.results.filter((sh) => /^score/.test(sh.kind));
             if (scoreSheets.length) {
               const data = BT.blocks.scoreFromSheets(p, scoreSheets, label);
+              await scoreHistory(data, key); // comparativo mensal: pontuação dos books dos meses anteriores
               items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, primary, path: `${label} · Cloud Security Score`, destTitle: 'Segurança', origin: 'score-' + k, replaceEmptyType: 'score', entry: { name: 'Security Score' },
                 blocks: [{ type: 'score', data }], dest: '', newTitle: '', how: 'new', note: '' });
             }
@@ -290,6 +317,13 @@
               // Geral › Tenant da própria cloud/conta (primeira seção do menu)
               items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, 'geral'], entry: { name: 'Geral', path: '' },
                 destTitle: 'Geral', newTitleHint: 'Geral', forceMapper: 'raw', first: true,
+                parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
+              return;
+            }
+            if (sh.kind === 'backup') {
+              // Backup do mês na seção Backup da própria cloud/conta
+              items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, 'backup'], entry: { name: 'Backup', path: '' },
+                destTitle: 'Backup', newTitleHint: 'Backup', forceMapper: 'raw',
                 parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
               return;
             }
@@ -305,7 +339,9 @@
       BT.importer.zip.review(items, null, null, '🔄 Sincronizar — revisar e escolher itens');
     };
     const btn = h('button', { class: 'btn btn-primary btn-sm', onclick: go }, '🔄 Buscar dados');
-    kindsBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'O que buscar nas clouds'), h('div', { class: 'cprow' }, KINDS.map(([k, l]) => chk(selK, k, l))));
+    kindsBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'O que buscar nas clouds'), h('div', { class: 'cprow' }, KINDS.map(([k, l]) => chk(selK, k, l))),
+      h('div', { class: 'lbl', style: { margin: '14px 0 8px' } }, 'Servidores, storage e redes'), scope,
+      h('div', { class: 'cx-help', style: { marginTop: '6px' } }, 'Busca em todos os compartimentos/grupos/projetos. Backup traz sempre só o do mês do book.'));
     periodBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'Período (Zabbix / GLPI)'), h('div', { class: 'fg fg2', style: { maxWidth: '360px' } }, [
       h('div', { class: 'fd' }, [h('label', {}, 'De'), h('input', { type: 'date', value: per.from, onchange: (e) => (per.from = e.target.value) })]),
       h('div', { class: 'fd' }, [h('label', {}, 'Até'), h('input', { type: 'date', value: per.to, onchange: (e) => (per.to = e.target.value) })])]));

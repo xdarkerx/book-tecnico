@@ -13,10 +13,12 @@ const ok = (msg) => { passed++; console.log('  ✓ ' + msg); };
 const defs = {};
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const BT = { h: () => ({}), esc };
-const load = (f) => vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'blocks', f), 'utf8'), { window: { BT } });
+const load = (f, dir = 'blocks') => vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'js', dir, f), 'utf8'), { window: { BT }, btoa, unescape, encodeURIComponent });
 load('registry.js'); // registro real (titleHtml, wordText…)
 const B = BT.blocks;
 const register = B.register; B.register = (t, d) => { defs[t] = d; register(t, d); };
+load('charts.js', 'core'); BT.core = { utils: { debounce: (f) => f } }; BT.on = () => () => {};
+load('chart.js'); // gráficos do comparativo e dos riscos
 load('score.js');
 
 // pontuação: aceita %, vírgula e coluna Máximo
@@ -63,5 +65,27 @@ assert.strictEqual(sd.recs.rows.length, 4); ok('riscos: o filtro não altera os 
 assert.deepStrictEqual([B.riskLevelOf('HIGH'), B.riskLevelOf('Média'), B.riskLevelOf('Informational'), B.riskLevelOf('Disaster')], ['alta', 'media', 'info', 'critica']); ok('riscos: reconhece português e inglês');
 const exp = defs.score.render({ data: sd }, { target: 'web', state: { meta: { riscosExport: ['critica'] } } });
 assert.ok(exp.includes('API key antiga') && exp.includes('SL_OPEN') && !/Riscos exibidos/.test(exp)); ok('exportação mostra tudo o que está no book (o filtro é só na importação)');
+
+// comparativo mensal, gráficos de risco e o que mostrar
+const cg = B.scoreFromSheets('oci', [
+  { kind: 'score', fields: ['Escopo', 'Pontuação'], rows: [{ Escopo: 'Tenancy', 'Pontuação': '72' }] },
+  { kind: 'score_trend', fields: ['Mês', 'Pontuação'], rows: [{ 'Mês': '2026-09', 'Pontuação': '60' }, { 'Mês': '2026-10', 'Pontuação': '65' }, { 'Mês': '2026-11', 'Pontuação': '72' }] },
+  { kind: 'score_recs', fields: ['Recomendação', 'Risco', 'Problemas', 'Compartimento'], rows: [{ 'Recomendação': 'MFA', Risco: 'Crítica', Problemas: '2', Compartimento: '(raiz)' }, { 'Recomendação': 'Keys', Risco: 'Baixa', Problemas: '9', Compartimento: '(raiz)' }] },
+  { kind: 'score_alerts', fields: ['Problema', 'Risco', 'Recurso', 'Tipo', 'Compartimento', 'Detectado em'], rows: [{ Problema: 'BUCKET_PUBLIC', Risco: 'Alta', Recurso: 'b', Tipo: 'Bucket', Compartimento: 'p', 'Detectado em': '2026-11-01' }] }], 'OCI');
+cg.month = '2026-11';
+assert.deepStrictEqual(JSON.parse(JSON.stringify(cg.history.map((x) => [x.label, x.mes, x.value]))), [['OCI · Tenancy', '2026-09', '60'], ['OCI · Tenancy', '2026-10', '65'], ['OCI · Tenancy', '2026-11', '72']]); ok('comparativo: histórico do Cloud Guard vira o histórico do item da tenancy');
+let cgHtml = defs.score.render({ data: cg }, { target: 'web', state: {} });
+assert.ok(/▲ \+7 pts vs out\/26/.test(cgHtml)); ok('comparativo: mostra a variação em relação ao mês anterior (▲ +7 pts vs out/26)');
+assert.ok(/Comparativo mensal da pontuação/.test(cgHtml) && /<svg/.test(cgHtml)); ok('comparativo: gráfico de linha com os meses');
+assert.ok(!/por risco/.test(cgHtml)); ok('gráficos de risco: desligados por padrão');
+cg.show = { charts: true };
+cgHtml = defs.score.render({ data: cg }, { target: 'web', state: {} });
+assert.ok(/Recomendações \(Cloud Guard\) por risco/.test(cgHtml) && /Problemas abertos \(Cloud Guard\) por risco/.test(cgHtml)); ok('gráficos de risco: recomendações e problemas por risco quando ligados');
+cg.show = { recs: false, alerts: false, charts: false, history: false };
+cgHtml = defs.score.render({ data: cg }, { target: 'web', state: {} });
+assert.ok(!cgHtml.includes('MFA') && !cgHtml.includes('BUCKET_PUBLIC') && !/pts vs/.test(cgHtml) && cgHtml.includes('72')); ok('ocultar: recomendações, problemas e comparativo somem do book; a pontuação fica');
+assert.strictEqual(defs.score.isEmpty({ data: Object.assign({}, cg, { items: [] }) }), true); ok('ocultar tudo e sem pontuação: o bloco não aparece no book');
+cg.show = {};
+assert.ok(/pts vs out\/26/.test(defs.score.word({ data: cg }, { target: 'word', state: {} })) && /<img src="data:image\/svg\+xml/.test(defs.score.word({ data: cg }, { target: 'word', state: {} }))); ok('Word: variação e gráfico do comparativo (imagem)');
 
 console.log(`\n${passed} testes do front ok`);
