@@ -1,6 +1,6 @@
 <!-- ═══ html/settings.html — ⚙️ Configurações em dois menus:
-     Usuário (todos): Preferências (tema) e Opções de book (menus padrão, comparativo)
-     Administrador: Banco de dados, Login e acesso, Edição simultânea, Backup, Lixeira, Logs e auditoria
+     Usuário (todos): Preferências (tema), Opções de book (menus padrão, comparativo) e App desktop
+     Administrador: Site e app desktop (URL externa), Banco de dados, Login e acesso, Edição simultânea, Backup, Lixeira, Logs e auditoria
      Lógica: js/editor/settings.js (+ access-settings.js, admin-backup.js, admin-trash.js, admin-logs.js) ═══ -->
 <section class="settings" id="settings" hidden>
   <div class="st-wrap set-wrap">
@@ -25,6 +25,8 @@
             <div class="theme-cards" id="set-theme" role="radiogroup" aria-label="Tema"><!-- render: settings.js --></div>
           </div>
         </div>
+
+        <div class="set-panel" data-panel="desktop" hidden><div id="set-desktop"><!-- render: admin-site.js --></div></div>
 
         <div class="set-panel" data-panel="book" hidden>
           <div class="card set-card">
@@ -103,6 +105,7 @@
           </div>
         </div>
 
+        <div class="set-panel" data-panel="site" hidden><div id="set-site"><!-- render: admin-site.js --></div></div>
         <div class="set-panel" data-panel="access" hidden><div id="set-access-login"><!-- render: access-settings.js --></div></div>
         <div class="set-panel" data-panel="lock" hidden><div id="set-access-lock"><!-- render: access-settings.js --></div></div>
         <div class="set-panel" data-panel="backup" hidden><div id="set-backup"><!-- render: admin-backup.js --></div></div>

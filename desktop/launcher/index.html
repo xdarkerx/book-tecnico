@@ -1,0 +1,119 @@
+<!doctype html>
+<!-- Book Técnico (app desktop) — tela inicial.
+     1ª vez: pede o endereço do servidor e guarda (localStorage deste app).
+     Depois: confere se o servidor responde e abre o site. "?trocar=1" volta para esta tela.
+     O site sabe que está no app pelo user agent "BookTecnicoDesktop" (tauri.conf.json). -->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book Técnico</title>
+<style>
+  :root { --bg:#0e1020; --sf:#141829; --sf2:#1a2038; --bd:#252d4a; --bd2:#323b62; --tx:#e8eaf5; --tx2:#b9bdd6; --mt:#6b7394; --p:#5E3FE1; --p2:#4a2ec8; --sky:#86D2EF; --err:#ff7a9a; --ok:#00c49a; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f3f4fa; --sf:#fff; --sf2:#f6f7fc; --bd:#e0e3ef; --bd2:#cdd2e6; --tx:#171c37; --tx2:#3f4566; --mt:#5f6788; --err:#c0335a; --ok:#008a68; } }
+  * { box-sizing:border-box }
+  html, body { height:100%; margin:0 }
+  body { background:var(--bg); color:var(--tx); font:14px/1.5 "Segoe UI", system-ui, sans-serif; display:grid; place-items:center; padding:16px }
+  .card { width:100%; max-width:460px; background:var(--sf); border:1px solid var(--bd); border-radius:14px; padding:28px; box-shadow:0 18px 50px rgba(0,0,0,.25) }
+  .brand { display:flex; align-items:center; gap:12px; margin-bottom:18px }
+  .brand svg { width:40px; height:40px }
+  h1 { font-size:20px; margin:0 }
+  .sub { color:var(--mt); font-size:12.5px; margin:2px 0 0 }
+  label { display:block; font-size:12px; font-weight:600; color:var(--tx2); margin:14px 0 6px }
+  input { width:100%; padding:10px 12px; border-radius:9px; border:1px solid var(--bd2); background:var(--sf2); color:var(--tx); font-size:14px }
+  input:focus { outline:none; border-color:var(--p); box-shadow:0 0 0 3px rgba(94,63,225,.3) }
+  .hint { color:var(--mt); font-size:12px; margin-top:6px }
+  .row { display:flex; gap:8px; margin-top:18px; flex-wrap:wrap }
+  button { border:0; border-radius:9px; padding:10px 16px; font-size:13.5px; font-weight:600; cursor:pointer }
+  .pri { background:var(--p); color:#fff } .pri:hover { background:var(--p2) }
+  .gho { background:transparent; color:var(--tx2); border:1px solid var(--bd2) }
+  .msg { margin-top:14px; font-size:13px; min-height:20px }
+  .msg.err { color:var(--err) } .msg.ok { color:var(--ok) }
+  .addr { font-family:Consolas, monospace; font-size:12.5px; background:var(--sf2); border:1px solid var(--bd); border-radius:8px; padding:6px 10px; word-break:break-all; margin-top:8px }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--bd2); border-top-color:var(--sky); border-radius:50%; animation:r .8s linear infinite; vertical-align:-2px; margin-right:6px }
+  @keyframes r { to { transform:rotate(360deg) } }
+  [hidden] { display:none !important }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5E3FE1"/><stop offset="1" stop-color="#86D2EF"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="#171C37"/><path d="M9 8h10a4 4 0 0 1 0 8H9zM9 16h12a4 4 0 0 1 0 8H9z" fill="none" stroke="url(#g)" stroke-width="2.6"/></svg>
+    <div><h1>Book Técnico</h1><p class="sub">App desktop</p></div>
+  </div>
+
+  <!-- abrindo o servidor salvo -->
+  <section id="opening" hidden>
+    <div><span class="spin"></span><span id="opening-text">Conectando ao servidor…</span></div>
+    <div class="addr" id="opening-addr"></div>
+    <div class="row"><button class="gho" id="btn-change">Trocar de servidor</button><button class="pri" id="btn-retry" hidden>Tentar de novo</button></div>
+    <div class="msg" id="opening-msg" role="alert"></div>
+  </section>
+
+  <!-- configurar o endereço -->
+  <form id="setup" hidden novalidate>
+    <label for="server">Endereço do servidor</label>
+    <input id="server" type="url" placeholder="https://book.suaempresa.com.br" autocomplete="url" spellcheck="false" required>
+    <div class="hint">O mesmo endereço que você abre no navegador. Ele aparece em Configurações › Usuário › 💻 App desktop.</div>
+    <div class="row"><button class="pri" type="submit">Conectar</button><button class="gho" type="button" id="btn-cancel" hidden>Cancelar</button></div>
+    <div class="msg" id="setup-msg" role="alert"></div>
+  </form>
+</main>
+<script>
+(function () {
+  var KEY = 'bt-server';
+  var $ = function (id) { return document.getElementById(id); };
+  var get = function () { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } };
+  var set = function (v) { try { localStorage.setItem(KEY, v); } catch (e) { /* sem armazenamento: pergunta de novo na próxima vez */ } };
+
+  /** "book.empresa.com" → "https://book.empresa.com"; só http(s), sem caminho/consulta. */
+  function normalize(v) {
+    v = String(v || '').trim();
+    if (!v) return '';
+    if (!/^https?:\/\//i.test(v)) v = (/^(localhost|127\.|10\.|192\.168\.|\[)/i.test(v) ? 'http://' : 'https://') + v;
+    try { var u = new URL(v); if (!/^https?:$/.test(u.protocol) || !u.hostname) return ''; return u.origin; } catch (e) { return ''; }
+  }
+  /** O servidor responde? (no-cors: só confere se há algo no endereço) */
+  function reachable(url) {
+    var ctrl = new AbortController(); var t = setTimeout(function () { ctrl.abort(); }, 8000);
+    return fetch(url + '/api/health', { mode: 'no-cors', cache: 'no-store', signal: ctrl.signal })
+      .then(function () { clearTimeout(t); return true; }, function () { clearTimeout(t); return false; });
+  }
+  function showSetup(prefill, cancelable) {
+    $('opening').hidden = true; $('setup').hidden = false;
+    $('server').value = prefill || ''; $('btn-cancel').hidden = !cancelable; $('setup-msg').textContent = '';
+    $('server').focus();
+  }
+  function open(url) {
+    $('setup').hidden = true; $('opening').hidden = false;
+    $('opening-addr').textContent = url; $('opening-msg').textContent = ''; $('opening-msg').className = 'msg';
+    $('btn-retry').hidden = true; $('opening-text').textContent = 'Conectando ao servidor…';
+    reachable(url).then(function (ok) {
+      if (ok) { $('opening-text').textContent = 'Abrindo…'; location.replace(url + '/'); return; }
+      $('opening-text').textContent = 'Servidor fora do ar ou inacessível.';
+      $('opening-msg').className = 'msg err';
+      $('opening-msg').textContent = 'Confira a conexão (VPN, rede da empresa) e se o endereço está certo.';
+      $('btn-retry').hidden = false;
+    });
+  }
+
+  $('setup').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var url = normalize($('server').value);
+    if (!url) { $('setup-msg').className = 'msg err'; $('setup-msg').textContent = 'Endereço inválido. Exemplo: https://book.suaempresa.com.br'; return; }
+    $('setup-msg').className = 'msg'; $('setup-msg').innerHTML = '<span class="spin"></span>Conectando…';
+    reachable(url).then(function (ok) {
+      if (!ok) { $('setup-msg').className = 'msg err'; $('setup-msg').textContent = 'Não foi possível acessar ' + url + '. Confira o endereço e a rede.'; return; }
+      set(url); open(url);
+    });
+  });
+  $('btn-change').addEventListener('click', function () { showSetup(get(), !!get()); });
+  $('btn-cancel').addEventListener('click', function () { open(get()); });
+  $('btn-retry').addEventListener('click', function () { open(get()); });
+
+  var saved = get();
+  if (saved && !/[?&]trocar=1/.test(location.search)) open(saved); else showSetup(saved, !!saved);
+})();
+</script>
+</body>
+</html>

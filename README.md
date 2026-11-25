@@ -318,13 +318,37 @@ Pelo botão **⚙️** no topo do editor, **⚙️ Configurações** na tela de 
 **Usuário** (todos):
 - **Preferências:** tema claro, escuro ou igual ao sistema. Com login, a escolha fica no seu usuário (vale em qualquer computador).
 - **Opções de book:** template padrão, menus/seções de cada template, menus extras e comparativo mensal (valem para os novos books de todos).
+- **💻 App desktop:** botão para baixar o app do Windows e o endereço do servidor para configurar nele (abaixo).
 
 **Administrador** (só aparece para admins; com o login desligado, todos são admin):
+- **🌐 Site e app desktop:** **URL externa** (endereço pelo qual as pessoas acessam o app, ex.: atrás de proxy/HTTPS; usada no
+  login Microsoft e como endereço sugerido no app desktop) e de onde baixar o instalador do app desktop.
 - **Banco de dados:** SQLite ou MongoDB (status, contagens, conexão do Mongo com teste, troca com migração) e **excluir um banco**
   — qualquer um, inclusive o em uso, digitando o nome para confirmar; um backup dele é salvo antes na pasta local.
 - **Login e acesso:** usuários, login normal e Microsoft (SAML) e **grupos do Entra ID** (abaixo).
 - **Edição simultânea:** bloqueio do book (abaixo).
 - **Backup**, **Lixeira** e **Logs e auditoria** (abaixo).
+
+### 💻 App desktop (Windows, Tauri)
+Uma janela própria para o Book Técnico, com ícone no menu Iniciar e na barra de tarefas e sem as abas do navegador.
+Os dados continuam no servidor: o app só abre o site.
+
+- **Baixar:** ⚙️ Configurações › Usuário › 💻 App desktop › **⬇ Baixar para Windows**. Na primeira abertura, o app pede o
+  endereço do servidor, que aparece na mesma tela com o botão Copiar. Depois ele abre direto. Para trocar, use
+  **🔁 Trocar de servidor** na mesma tela, dentro do app.
+- **De onde vem o instalador**, em ordem:
+  1. um `.exe` ou `.msi` colocado na pasta `data/desktop` do servidor (funciona sem internet);
+  2. o link definido em Administrador › 🌐 Site e app desktop;
+  3. o release `desktop-teste` do GitHub.
+- **Código:** `desktop/`. Em `launcher/index.html` fica a tela que pede o endereço, e em `src-tauri/` o projeto Tauri 2 (sem
+  comandos nativos expostos ao site). O site sabe que está no app pelo user agent `BookTecnicoDesktop`.
+- **Compilar:** o GitHub Actions (`.github/workflows/desktop.yml`) gera o instalador no Windows a cada push em
+  `desktop/` na branch de teste e publica `BookTecnico-Setup.exe` no release `desktop-teste`. Na sua máquina é preciso
+  Rust e o Visual Studio Build Tools (C++):
+  ```powershell
+  Set-Location desktop && npm ci && npx tauri build
+  ```
+- O instalador de teste **não é assinado**: no aviso do Windows, use "Mais informações" › "Executar assim mesmo".
 
 ### 🗑️ Lixeira (com GUID)
 Cada **cliente, ano e book tem um GUID**. Excluir não apaga: vai para a lixeira com **quem excluiu e quando**.

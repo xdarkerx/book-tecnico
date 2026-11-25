@@ -186,6 +186,28 @@ async function main() {
   global.fetch = realFetch;
   assert.ok((await call('GET', '/api/users', undefined, { cookie: adm })).data.find((u) => u.username === 'admin' && !u.disabled)); ok('admin local nunca é desativado pela sincronização');
 
+  // ── site: URL externa e app desktop ─────────────────────
+  assert.strictEqual((await call('PUT', '/api/site/config', { publicUrl: 'https://hack.example' }, { cookie: bia })).status, 403); ok('URL externa: só administrador altera');
+  assert.strictEqual((await call('PUT', '/api/site/config', { publicUrl: 'javascript:alert(1)' }, { cookie: adm })).status, 400);
+  assert.strictEqual((await call('PUT', '/api/site/config', { publicUrl: 'https://book.exemplo.com/?x=1' }, { cookie: adm })).status, 400); ok('URL externa inválida (esquema estranho, consulta) → 400');
+  const sc = (await call('PUT', '/api/site/config', { publicUrl: 'https://book.exemplo.com.br/' }, { cookie: adm })).data;
+  assert.strictEqual(sc.publicUrl, 'https://book.exemplo.com.br'); ok('URL externa salva sem a barra final');
+  assert.strictEqual((await call('PUT', '/api/site/config', { publicUrl: 'book.exemplo.com.br' }, { cookie: adm })).data.publicUrl, 'https://book.exemplo.com.br'); ok('URL externa sem https:// é completada');
+  assert.strictEqual((await call('GET', '/api/site', undefined, { cookie: bia })).data.publicUrl, 'https://book.exemplo.com.br'); ok('usuário comum vê a URL externa (para configurar o app desktop)');
+  const ac = (await call('GET', '/api/auth/config', undefined, { cookie: adm })).data;
+  assert.strictEqual(ac.acsUrl, 'https://book.exemplo.com.br/api/auth/saml/acs'); ok('SAML usa a URL externa na URL de resposta (ACS)');
+  let dl = await call('GET', '/api/desktop/download', undefined, { cookie: bia });
+  assert.deepStrictEqual([dl.status, /github\.com\/xdarkerx\/book-tecnico\/releases/.test(dl.headers.get('location'))], [302, true]); ok('download do app: padrão aponta para o release do GitHub');
+  assert.strictEqual((await call('GET', '/api/desktop/download')).status, 401); ok('download do app exige login (com login ligado)');
+  await call('PUT', '/api/site/config', { desktopUrl: 'https://arquivos.exemplo.com/BookTecnico.exe' }, { cookie: adm });
+  dl = await call('GET', '/api/desktop/download', undefined, { cookie: bia });
+  assert.strictEqual(dl.headers.get('location'), 'https://arquivos.exemplo.com/BookTecnico.exe'); ok('download do app: link definido pelo admin');
+  fs.mkdirSync(path.join(DATA, 'desktop'), { recursive: true }); fs.writeFileSync(path.join(DATA, 'desktop', 'BookTecnico-Setup.exe'), 'MZ-instalador-de-teste');
+  dl = await call('GET', '/api/desktop/download', undefined, { cookie: bia });
+  assert.deepStrictEqual([dl.status, dl.data, /BookTecnico-Setup\.exe/.test(dl.headers.get('content-disposition'))], [200, 'MZ-instalador-de-teste', true]); ok('download do app: instalador em data/desktop tem prioridade (sem internet)');
+  await call('PUT', '/api/site/config', { publicUrl: '', desktopUrl: '' }, { cookie: adm });
+  assert.ok(/^http:\/\/127\.0\.0\.1:\d+\/api\/auth\/saml\/acs$/.test((await call('GET', '/api/auth/config', undefined, { cookie: adm })).data.acsUrl)); ok('sem URL externa: SAML volta a usar o endereço do acesso');
+
   // ── logs ────────────────────────────────────────────────
   await require('../server/logs').flush();
   const lg = (await call('GET', '/api/logs?kind=audit&limit=99999', undefined, { cookie: adm })).data;

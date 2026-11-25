@@ -1,0 +1,15 @@
+{
+  "name": "book-tecnico-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "App desktop (Tauri) do Book Técnico: janela própria que abre o servidor do Book Técnico",
+  "scripts": {
+    "tauri": "tauri",
+    "icons": "tauri icon ../assets/img/favicon.svg",
+    "build": "tauri build",
+    "dev": "tauri dev"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

@@ -249,11 +249,8 @@ async function saveConfig(body = {}) {
 }
 
 // ── SAML (Microsoft Entra ID) ────────────────────────────
-function baseUrl(req) {
-  const c = config();
-  if (c.saml.publicUrl) return c.saml.publicUrl.replace(/\/+$/, '');
-  return `${isHttps(req) ? 'https' : 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`;
-}
+/** Endereço do app: URL externa (Configurações › Administrador › Site) ou o host da requisição. */
+function baseUrl(req) { return require('../site').baseUrl(req, isHttps(req)); }
 function samlClient(req) {
   const c = config().saml;
   let SAML;

@@ -168,7 +168,7 @@
       h('div', { class: 'fd', style: { marginTop: '10px' } }, [h('label', { for: 'saml-cert' }, 'Certificado (Base64)'), h('textarea', { class: 'inp inp-sm mono', id: 'saml-cert', rows: 4, placeholder: '-----BEGIN CERTIFICATE-----\nMIIC8DCC…', oninput: (e) => (s.idpCert = e.target.value) }, s.idpCert || '')]),
       h('div', { class: 'fg fg2', style: { marginTop: '10px' } }, [
         field('Domínios permitidos', inp('saml-domains', 'allowedDomains', { placeholder: 'suaempresa.com.br, outra.com' }), 'Vazio = qualquer conta que o Entra ID aceitar.'),
-        field('Endereço público do app (opcional)', inp('saml-public', 'publicUrl', { placeholder: 'https://book.suaempresa.com.br' }), 'Use se o app fica atrás de proxy/HTTPS.')
+        h('div', { class: 'fd' }, [h('label', {}, 'Endereço do app'), h('small', { class: 'auth-hint' }, ['Usa a ', h('b', {}, 'URL externa'), ' de Administrador › 🌐 Site e app desktop (atrás de proxy/HTTPS, defina lá).'])])
       ]),
       h('div', { class: 'fg fg2', style: { marginTop: '10px' } }, [
         field('Texto do botão', inp('saml-label', 'label')),

@@ -67,6 +67,10 @@
     trashRestore: (tid, mode) => http('POST', '/api/trash/restore', { tid, mode }),
     trashPurge: (tid) => http('DELETE', '/api/trash?tid=' + encodeURIComponent(tid)),
     trashSettings: (days) => http('PUT', '/api/trash/settings', { days }),
+    // site: URL externa e app desktop
+    siteInfo: () => http('GET', '/api/site'),
+    siteConfig: () => http('GET', '/api/site/config'),
+    saveSiteConfig: (c) => http('PUT', '/api/site/config', c),
     logs: (kind, f = {}) => http('GET', '/api/logs?' + new URLSearchParams(Object.assign({ kind }, f))),
     backupConfig: () => http('GET', '/api/backup/config'),
     saveBackupConfig: (c) => http('PUT', '/api/backup/config', c),

@@ -1,0 +1,69 @@
+# Compila o app desktop (Tauri) no Windows e publica o instalador.
+# - Push na branch de teste (ou "Run workflow" manual) → release de pré-visualização "desktop-teste"
+#   com o arquivo BookTecnico-Setup.exe (é o link padrão do botão "Baixar para Windows").
+name: App desktop (Tauri)
+
+on:
+  push:
+    branches: [teste/app-desktop]
+    paths: ['desktop/**', '.github/workflows/desktop.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - name: Dependências
+        working-directory: desktop
+        run: npm ci
+
+      - name: Compilar (NSIS)
+        working-directory: desktop
+        run: npx tauri build
+
+      - name: Renomear instalador
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem desktop/src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          if (-not $exe) { throw 'Instalador NSIS não encontrado' }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item $exe.FullName dist/BookTecnico-Setup.exe
+          "Tamanho: $([math]::Round((Get-Item dist/BookTecnico-Setup.exe).Length / 1MB, 1)) MB"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BookTecnico-Setup
+          path: dist/BookTecnico-Setup.exe
+
+      - name: Publicar (pré-visualização)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-teste
+          target_commitish: ${{ github.sha }}
+          name: App desktop — teste
+          prerelease: true
+          body: |
+            Versão de teste do app desktop do Book Técnico (Windows 10/11, 64 bits).
+            Gerada da branch `${{ github.ref_name }}` no commit ${{ github.sha }}.
+            Instalador não assinado: no aviso do Windows, use "Mais informações" › "Executar assim mesmo".
+          files: dist/BookTecnico-Setup.exe
+          fail_on_unmatched_files: true

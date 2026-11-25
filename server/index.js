@@ -24,6 +24,7 @@ const locks = require('./auth/locks');
 const logs = require('./logs');
 const trash = require('./trash');
 const backup = require('./backup');
+const site = require('./site');
 
 const PORT = Number(process.env.PORT) || 5173;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -125,13 +126,13 @@ function mergeConnections(old, incoming) {
 
 // ── login e permissões ────────────────────────────────────
 const PUBLIC_API = new Set(['GET /api/health', 'GET /api/auth/me', 'POST /api/auth/login', 'POST /api/auth/logout', 'POST /api/auth/setup',
-  'GET /api/auth/saml/login', 'POST /api/auth/saml/acs', 'GET /api/auth/saml/metadata']);
+  'GET /api/auth/saml/login', 'POST /api/auth/saml/acs', 'GET /api/auth/saml/metadata', 'GET /api/site']);
 /** Rotas que mudam a configuração do sistema: só administradores (com login ligado). */
 const ADMIN_API = new Set(['POST /api/settings/storage', 'PUT /api/settings/mongo', 'POST /api/settings/mongo/test', 'POST /api/settings/storage/delete',
   'GET /api/users', 'PUT /api/users', 'DELETE /api/users', 'DELETE /api/users/sessions', 'GET /api/auth/config', 'PUT /api/auth/config',
   'POST /api/auth/graph/sync', 'POST /api/auth/graph/test',
   'GET /api/trash', 'POST /api/trash/restore', 'DELETE /api/trash', 'PUT /api/trash/settings',
-  'GET /api/logs', 'GET /api/backup/config', 'PUT /api/backup/config', 'POST /api/backup/run', 'POST /api/backup/test', 'GET /api/backup/download', 'POST /api/backup/restore']);
+  'GET /api/logs', 'GET /api/site/config', 'PUT /api/site/config', 'GET /api/backup/config', 'PUT /api/backup/config', 'POST /api/backup/run', 'POST /api/backup/test', 'GET /api/backup/download', 'POST /api/backup/restore']);
 async function guard(req, route) {
   const a = await auth.current(req);
   if (!auth.enabled()) return a; // login desligado: tudo liberado (como antes) — inclusive cadastrar os usuários antes de ligar
@@ -160,6 +161,16 @@ async function api(req, res, url) {
     // logs (admin)
     case 'GET /api/logs': return send(res, 200, await logs.query(q.kind, q));
     // backup (admin)
+    // site: URL externa e app desktop
+    case 'GET /api/site': return send(res, 200, site.publicInfo());
+    case 'GET /api/site/config': return send(res, 200, site.adminConfig());
+    case 'PUT /api/site/config': return send(res, 200, site.saveConfig(await readBody(req)));
+    case 'GET /api/desktop/download': {
+      const d = site.desktopDownload();
+      logs.audit('desktop.download', 'App desktop baixado' + (d.file ? ` (arquivo do servidor: ${d.name})` : ` (${d.redirect})`));
+      if (d.redirect) { res.writeHead(302, Object.assign({ Location: d.redirect, 'Cache-Control': 'no-store' }, SECURITY)); return res.end(); }
+      return send(res, 200, fs.readFileSync(d.file), { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${d.name.replace(/"/g, '')}"` });
+    }
     case 'GET /api/backup/config': return send(res, 200, backup.publicConfig());
     case 'PUT /api/backup/config': return send(res, 200, backup.saveConfig(await readBody(req)));
     case 'POST /api/backup/run': return send(res, 200, await backup.run('manual'));

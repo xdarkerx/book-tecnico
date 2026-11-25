@@ -15,10 +15,10 @@
 
   // ── Menus: Usuário (todos) e Administrador ─────────────
   const PANELS = [
-    { group: 'Usuário', items: [['prefs', '🎨', 'Preferências'], ['book', '🧭', 'Opções de book']] },
-    { group: 'Administrador', admin: true, items: [['db', '💾', 'Banco de dados'], ['access', '🔐', 'Login e acesso'], ['lock', '🔒', 'Edição simultânea'], ['backup', '🗄️', 'Backup'], ['trash', '🗑️', 'Lixeira'], ['logs', '📜', 'Logs e auditoria']] }
+    { group: 'Usuário', items: [['prefs', '🎨', 'Preferências'], ['book', '🧭', 'Opções de book'], ['desktop', '💻', 'App desktop']] },
+    { group: 'Administrador', admin: true, items: [['site', '🌐', 'Site e app desktop'], ['db', '💾', 'Banco de dados'], ['access', '🔐', 'Login e acesso'], ['lock', '🔒', 'Edição simultânea'], ['backup', '🗄️', 'Backup'], ['trash', '🗑️', 'Lixeira'], ['logs', '📜', 'Logs e auditoria']] }
   ];
-  const ADMIN_RENDER = { access: () => BT.editor.access.render(), lock: () => BT.editor.access.render(), backup: () => BT.editor.backup.render(), trash: () => BT.editor.trash.render(), logs: () => BT.editor.logs.render(), db: () => { drawStorage(); BT.editor.backup.renderDbDelete(); } };
+  const ADMIN_RENDER = { site: () => BT.editor.site.renderAdmin(), desktop: () => BT.editor.site.renderUser(), access: () => BT.editor.access.render(), lock: () => BT.editor.access.render(), backup: () => BT.editor.backup.render(), trash: () => BT.editor.trash.render(), logs: () => BT.editor.logs.render(), db: () => { drawStorage(); BT.editor.backup.renderDbDelete(); } };
   let panel = null;
   const isAdmin = () => BT.auth.isAdmin && BT.api.mode === 'server';
 
