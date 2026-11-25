@@ -129,38 +129,57 @@ async function pull(cfg, kind) {
   return [];
 }
 
-/** Conta: ID, alias e regiões consultadas. */
+const SEV_PT = { CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Média', LOW: 'Baixa', MINOR: 'Baixa', INFORMATIONAL: 'Informativa', INFO: 'Informativa' };
+const sevPt = (s) => SEV_PT[String(s || '').toUpperCase()] || String(s || '');
+/** Geral › Tenant (formato AWS). */
 async function tenant(cfg) {
   const creds = credentials(cfg);
   const [xml] = await query(creds, 'sts', 'us-east-1', 'GetCallerIdentity', {}, '2011-06-15');
   let alias = '';
   try { const [ax] = await query(creds, 'iam', 'us-east-1', 'ListAccountAliases', {}, '2010-05-08'); alias = U.text(U.find(ax, 'member')[0] || { text: '' }); } catch (e) { /* sem iam:ListAccountAliases */ }
-  const regs = regions(cfg);
-  return [U.sheet('tenant', 'Conta AWS (API)', [{ 'Nome': alias || U.text(U.find(xml, 'Account')[0]), 'ID': U.text(U.find(xml, 'Account')[0]), 'Região principal': regs[0], 'Regiões': regs.join(', '), 'Detalhes': U.text(U.find(xml, 'Arn')[0]) }])];
+  const acc = U.text(U.find(xml, 'Account')[0]);
+  return [U.sheet('tenant', 'Conta AWS (API)', [{ 'Conta': alias || acc, 'Account ID': acc, 'Alias': alias, 'ARN': U.text(U.find(xml, 'Arn')[0]), 'Regiões': regions(cfg).join(', ') }])];
 }
-/** Security Hub: % de controles aprovados (mesma conta do console: aprovados ÷ aprovados + reprovados). */
+/** Security Hub: findings paginados com filtro. */
+async function findings(creds, r, filters, maxPages = 100) {
+  const all = []; let token; let n = 0;
+  do {
+    const body = JSON.stringify(Object.assign({ MaxResults: 100, Filters: filters }, token ? { NextToken: token } : {}));
+    const host = `securityhub.${r}.amazonaws.com`;
+    const { headers } = sign({ method: 'POST', host, region: r, service: 'securityhub', path: '/findings', body, headers: { 'content-type': 'application/json' }, creds });
+    const j = await (await U.request(`https://${host}/findings`, { method: 'POST', headers, body })).json();
+    all.push(...(j.Findings || [])); token = j.NextToken;
+  } while (token && ++n < maxPages);
+  return all;
+}
+const EQ = (v) => [{ Value: v, Comparison: 'EQUALS' }];
+/** Security Hub: % de controles aprovados, controles reprovados (recomendações) e findings críticos/altos de outros serviços (alertas). */
 async function score(cfg) {
   const creds = credentials(cfg);
-  const out = [];
+  const scores = []; const recs = {}; const alerts = [];
   for (const r of regions(cfg)) {
-    const status = {}; let token; let n = 0;
-    do {
-      const body = JSON.stringify(Object.assign({ MaxResults: 100, Filters: { ProductName: [{ Value: 'Security Hub', Comparison: 'EQUALS' }], RecordState: [{ Value: 'ACTIVE', Comparison: 'EQUALS' }], WorkflowStatus: [{ Value: 'SUPPRESSED', Comparison: 'NOT_EQUALS' }] } }, token ? { NextToken: token } : {}));
-      const host = `securityhub.${r}.amazonaws.com`;
-      const { headers } = sign({ method: 'POST', host, region: r, service: 'securityhub', path: '/findings', body, headers: { 'content-type': 'application/json' }, creds });
-      const j = await (await U.request(`https://${host}/findings`, { method: 'POST', headers, body })).json();
-      for (const f of j.Findings || []) {
-        const id = (f.Compliance && f.Compliance.SecurityControlId) || f.GeneratorId; const st = f.Compliance && f.Compliance.Status;
-        if (!id || !st) continue;
-        if (st === 'FAILED') status[id] = 'FAILED'; else if (st === 'PASSED' && !status[id]) status[id] = 'PASSED';
-      }
-      token = j.NextToken;
-    } while (token && ++n < 100);
+    const status = {};
+    for (const f of await findings(creds, r, { ProductName: EQ('Security Hub'), RecordState: EQ('ACTIVE'), WorkflowStatus: [{ Value: 'SUPPRESSED', Comparison: 'NOT_EQUALS' }] })) {
+      const id = (f.Compliance && f.Compliance.SecurityControlId) || f.GeneratorId; const st = f.Compliance && f.Compliance.Status;
+      if (!id || !st) continue;
+      if (st === 'FAILED') {
+        status[id] = 'FAILED';
+        const k = r + '|' + id;
+        recs[k] = recs[k] || { 'Controle': id, 'Título': f.Title || '', 'Severidade': sevPt(f.Severity && f.Severity.Label), 'Recursos reprovados': 0, 'Região': r };
+        recs[k]['Recursos reprovados']++;
+      } else if (st === 'PASSED' && !status[id]) status[id] = 'PASSED';
+    }
     const v = Object.values(status); const ok = v.filter((x) => x === 'PASSED').length;
-    if (v.length) out.push({ 'Fonte': 'AWS Security Hub', 'Escopo': r, 'Pontuação': Math.round((ok / v.length) * 100), 'Máximo': 100, 'Classificação': `${ok} de ${v.length} controles aprovados` });
+    if (v.length) scores.push({ 'Fonte': 'AWS Security Hub', 'Escopo': r, 'Pontuação': Math.round((ok / v.length) * 100), 'Máximo': 100, 'Classificação': `${ok} de ${v.length} controles aprovados` });
+    try {
+      for (const f of await findings(creds, r, { ProductName: [{ Value: 'Security Hub', Comparison: 'NOT_EQUALS' }], RecordState: EQ('ACTIVE'), SeverityLabel: [...EQ('CRITICAL'), ...EQ('HIGH')], WorkflowStatus: [...EQ('NEW'), ...EQ('NOTIFIED')] }, 5))
+        alerts.push({ 'Título': f.Title || '', 'Produto': f.ProductName || '', 'Severidade': sevPt(f.Severity && f.Severity.Label), 'Recurso': ((f.Resources || [])[0] || {}).Id || '', 'Última ocorrência': String(f.LastObservedAt || f.UpdatedAt || '').slice(0, 10) });
+    } catch (e) { /* alertas são opcionais */ }
   }
-  if (!out.length) throw new Error('Security Hub sem controles avaliados nas regiões informadas (habilite o Security Hub e um padrão, ex.: AWS Foundational Security Best Practices).');
-  return [U.sheet('score', 'Security Hub (API)', out)];
+  if (!scores.length) throw new Error('Security Hub sem controles avaliados nas regiões informadas (habilite o Security Hub e um padrão, ex.: AWS Foundational Security Best Practices).');
+  const ord = { 'Crítica': 0, 'Alta': 1, 'Média': 2, 'Baixa': 3 };
+  const recList = Object.values(recs).sort((a, b) => (ord[a.Severidade] ?? 9) - (ord[b.Severidade] ?? 9) || b['Recursos reprovados'] - a['Recursos reprovados']);
+  return [U.sheet('score', 'Security Hub (API)', scores), U.sheet('score_recs', 'Controles reprovados (Security Hub)', recList), U.sheet('score_alerts', 'Findings críticos/altos', alerts)];
 }
 
 module.exports = { label: 'Amazon Web Services', test, pull, tenant, score, sign };

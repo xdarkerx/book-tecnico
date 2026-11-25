@@ -243,9 +243,9 @@ async function api(req, res, url) {
       return send(res, 200, await cloud.test(provType(provider), cfg));
     }
     case 'POST /api/cloud/pull': {
-      const { provider, kinds, from, to } = await readBody(req);
+      const { provider, kinds, from, to, severities, onlyWithAlerts } = await readBody(req);
       const cfg = (await storage.api.getConnections(q.cliente)).providers?.[provider];
-      return send(res, 200, await cloud.pull(provType(provider), cfg, kinds, { from, to }));
+      return send(res, 200, await cloud.pull(provType(provider), cfg, kinds, { from, to, severities, onlyWithAlerts: !!onlyWithAlerts }));
     }
   }
   throw httpError(404, 'Rota não encontrada: ' + route);

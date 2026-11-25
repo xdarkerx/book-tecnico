@@ -81,27 +81,45 @@ async function pull(cfg, kind) {
   return [U.sheet(kind, names[kind], rows)];
 }
 
-/** Tenant e assinaturas: nome, IDs, estado. */
+const SEV_PT = { CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Média', LOW: 'Baixa', MINOR: 'Baixa', INFORMATIONAL: 'Informativa', INFO: 'Informativa' };
+const sevPt = (s) => SEV_PT[String(s || '').toUpperCase()] || String(s || '');
+/** Geral › Tenant (formato Azure): tenant e assinaturas. */
 async function tenant(cfg) {
   const tenants = await arm(cfg, '/tenants?api-version=2022-12-01').catch(() => []);
   const t = tenants.find((x) => x.tenantId === cfg.tenantId) || tenants[0] || {};
   const tName = t.displayName || t.defaultDomain || cfg.tenantId;
   const want = new Set(U.list(cfg.subscriptionIds || cfg.subscriptionId));
   const subs = (await arm(cfg, '/subscriptions?api-version=2022-12-01')).filter((s) => !want.size || want.has(s.subscriptionId));
-  return [U.sheet('tenant', 'Tenant Azure (API)', subs.map((s) => ({ 'Nome': s.displayName, 'ID': s.subscriptionId, 'Região principal': '', 'Regiões': '', 'Detalhes': `Tenant ${tName} (${cfg.tenantId}) · ${s.state || ''}` })))];
+  return [U.sheet('tenant', 'Tenant Azure (API)', subs.map((s) => ({ 'Tenant': tName, 'Tenant ID': cfg.tenantId, 'Assinatura': s.displayName, 'Subscription ID': s.subscriptionId, 'Estado': s.state || '' })))];
 }
-/** Microsoft Defender for Cloud: Secure Score de cada assinatura. */
+/** Defender for Cloud: Secure Score, recomendações não íntegras e alertas de segurança. */
 async function score(cfg) {
-  const rows = [];
+  const rows = []; const recs = {}; const alerts = [];
   for (const sub of await subscriptions(cfg)) {
     const list = await arm(cfg, `/subscriptions/${sub}/providers/Microsoft.Security/secureScores?api-version=2020-01-01`).catch(() => []);
     const s = list.find((x) => x.name === 'ascScore') || list[0];
-    if (!s || !s.properties || !s.properties.score) continue;
-    const sc = s.properties.score;
-    rows.push({ 'Fonte': 'Microsoft Defender for Cloud', 'Escopo': s.properties.displayName && s.properties.displayName !== 'ASC score' ? s.properties.displayName : sub, 'Pontuação': Math.round((sc.percentage != null ? sc.percentage : sc.current / (sc.max || 1)) * 100), 'Máximo': 100, 'Classificação': `${sc.current} de ${sc.max} pontos` });
+    if (s && s.properties && s.properties.score) {
+      const sc = s.properties.score;
+      rows.push({ 'Fonte': 'Microsoft Defender for Cloud', 'Escopo': s.properties.displayName && s.properties.displayName !== 'ASC score' ? s.properties.displayName : sub, 'Pontuação': Math.round((sc.percentage != null ? sc.percentage : sc.current / (sc.max || 1)) * 100), 'Máximo': 100, 'Classificação': `${sc.current} de ${sc.max} pontos` });
+    }
+    for (const a of await arm(cfg, `/subscriptions/${sub}/providers/Microsoft.Security/assessments?api-version=2021-06-01&$expand=metadata`).catch(() => [])) {
+      const p = a.properties || {};
+      if (!p.status || p.status.code !== 'Unhealthy') continue;
+      const k = sub + '|' + p.displayName;
+      recs[k] = recs[k] || { 'Recomendação': p.displayName || a.name, 'Severidade': sevPt(p.metadata && p.metadata.severity), 'Recursos não íntegros': 0, 'Assinatura': sub };
+      recs[k]['Recursos não íntegros']++;
+    }
+    for (const a of await arm(cfg, `/subscriptions/${sub}/providers/Microsoft.Security/alerts?api-version=2022-01-01`).catch(() => [])) {
+      const p = a.properties || {};
+      if (p.status && /dismissed|resolved/i.test(p.status)) continue;
+      alerts.push({ 'Alerta': p.alertDisplayName || '', 'Severidade': sevPt(p.severity), 'Recurso': p.compromisedEntity || '', 'Data': String(p.timeGeneratedUtc || '').slice(0, 10), 'Status': p.status || '' });
+    }
   }
   if (!rows.length) throw new Error('Secure Score indisponível: confirme o Defender for Cloud nas assinaturas e a role Reader / Security Reader.');
-  return [U.sheet('score', 'Defender Secure Score (API)', rows)];
+  const ord = { 'Alta': 0, 'Média': 1, 'Baixa': 2 };
+  return [U.sheet('score', 'Defender Secure Score (API)', rows),
+    U.sheet('score_recs', 'Recomendações (Defender)', Object.values(recs).sort((a, b) => (ord[a.Severidade] ?? 9) - (ord[b.Severidade] ?? 9) || b['Recursos não íntegros'] - a['Recursos não íntegros'])),
+    U.sheet('score_alerts', 'Alertas de segurança (Defender)', alerts)];
 }
 
 module.exports = { label: 'Microsoft Azure', test, pull, tenant, score };

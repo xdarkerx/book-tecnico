@@ -81,7 +81,7 @@ async function tenant(cfg) {
   const rows = [];
   for (const p of projects(cfg)) {
     const [j] = await get(cfg, `https://cloudresourcemanager.googleapis.com/v1/projects/${p}`);
-    rows.push({ 'Nome': j.name || p, 'ID': j.projectId || p, 'Região principal': '', 'Regiões': '', 'Detalhes': `Projeto nº ${j.projectNumber || ''}${j.parent ? ` · ${j.parent.type} ${j.parent.id}` : ''}` });
+    rows.push({ 'Projeto': j.name || p, 'Project ID': j.projectId || p, 'Número': j.projectNumber || '', 'Organização / Pasta': j.parent ? `${j.parent.type} ${j.parent.id}` : '' });
   }
   return [U.sheet('tenant', 'Projetos GCP (API)', rows)];
 }

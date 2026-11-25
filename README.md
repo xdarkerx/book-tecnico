@@ -227,19 +227,32 @@ e o book ganha um menu por conta (ex.: "AWS · PRD" e "AWS · HML"), também lis
 | Azure | service principal (tenant, client id, secret) | role **Reader** nas assinaturas |
 | GCP | JSON de conta de serviço | `roles/viewer` |
 
-#### Informações do tenant e Cloud Security Score
-Na sincronização, marque **🏢 Tenant** e/ou **🛡️ Security Score**.
+#### Geral (tenant) e Cloud Security Score
+Na sincronização, marque **🏷️ Geral (tenant)** e/ou **🛡️ Security Score**.
 
-| Cloud | 🏢 Tenant (Visão Geral › Informações do Tenant) | 🛡️ Security Score (bloco na Segurança de cada cloud/conta) | Permissão extra |
-|---|---|---|---|
-| OCI | nome e OCID da tenancy, região principal e regiões assinadas | **Cloud Guard** (0–100) | `read cloud-guard-family` |
-| AWS | ID da conta, alias, regiões, ARN | **Security Hub**: % de controles aprovados por região | `securityhub:GetFindings`, `iam:ListAccountAliases` |
-| Azure | assinaturas (nome, ID, estado) e nome do tenant | **Defender for Cloud Secure Score** por assinatura | role Reader (ou Security Reader) |
-| GCP | projetos (nome, ID, número, organização/pasta) | não há score nativo: preencha à mão ou pelo ZIP | — |
+**Geral** é a primeira seção do menu de cada cloud (acima de Servidores, Networking, Segurança…). Ela traz a planilha
+**Tenant**, com as colunas no formato daquela cloud:
 
-As informações de todas as clouds e contas vão para **uma** planilha em **Visão Geral › Informações do Tenant**.
-O **Cloud Security Score** também é um bloco da paleta: dá para adicioná-lo em qualquer seção e preencher à mão.
-Cada pontuação mostra o percentual, uma barra colorida (≥ 80% bom, ≥ 60% atenção, abaixo disso crítico), a fonte e um detalhe.
+| Cloud | Colunas de Geral › Tenant |
+|---|---|
+| OCI | Tenancy, OCID, Região principal, Regiões assinadas, Descrição |
+| AWS | Conta, Account ID, Alias, ARN, Regiões |
+| Azure | Tenant, Tenant ID, Assinatura, Subscription ID, Estado (uma linha por assinatura) |
+| GCP | Projeto, Project ID, Número, Organização / Pasta |
+
+O bloco **Cloud Security Score** fica na **Segurança** de cada cloud ou conta. Ele tem três partes: a **pontuação**,
+as **recomendações** e os **alertas**, com as colunas no formato de cada cloud:
+
+| Cloud | Pontuação | Recomendações | Alertas | Permissão extra |
+|---|---|---|---|---|
+| OCI | Cloud Guard (0–100) | recomendações do Cloud Guard (risco, problemas, compartimento) | problemas abertos do Cloud Guard | `read cloud-guard-family` |
+| AWS | Security Hub: % de controles aprovados por região | controles reprovados (controle, título, severidade, recursos reprovados) | findings críticos e altos de outros serviços (GuardDuty, Inspector…) | `securityhub:GetFindings`, `iam:ListAccountAliases` |
+| Azure | Defender for Cloud Secure Score por assinatura | recomendações não íntegras (severidade, recursos afetados) | alertas de segurança ativos | Reader ou Security Reader |
+| GCP | sem score nativo: à mão ou pelo ZIP | à mão ou pelo ZIP | à mão ou pelo ZIP | — |
+
+O bloco também está na paleta. No editor, o seletor **Formato de recomendações e alertas** define as colunas
+(OCI, AWS, Azure, GCP ou Genérico), e as linhas podem ser editadas à mão. Cada pontuação mostra o percentual e uma
+barra colorida (≥ 80% bom, ≥ 60% atenção, abaixo disso crítico). No book, a severidade aparece como etiqueta colorida.
 Sincronizar de novo atualiza o bloco, sem duplicar.
 
 #### Zabbix e GLPI (monitoramento e chamados)
@@ -250,6 +263,9 @@ Configure-os nas mesmas **Conexões** do cliente. A sincronização usa o **per�
 |---|---|
 | **Zabbix** (URL, API token ou usuário/senha, host groups) | **Capacidade:** relatório igual ao book original, com indicadores, resumo executivo, top 5 hosts com mais alertas (CPU/MEM/DISCO), top CPU, top memória, filesystems em alerta, gráfico de alertas por dia e de severidade. **Monitoramento:** hosts com CPU/memória médias, maior disco e alertas. **Servidores — Recomendações:** onde aumentar **CPU, RAM ou disco**, com prioridade. |
 | **GLPI** (URL, App-Token, token de usuário) | **Incidentes:** indicadores (chamados, incidentes, requisições, resolvidos, em aberto, backlog, tempo médio), gráficos por status, categoria e dia, e a planilha de chamados |
+
+Na sincronização do Zabbix dá para escolher as **severidades** que entram (Desastre, Alta, Média, Atenção,
+Informação, Não classificado). Também dá para **incluir ou não os servidores sem nenhum alerta** no período (planilha de Monitoramento).
 
 Os limites que geram recomendações (padrão CPU 80%, memória 80%, disco 85%) são configuráveis. A classificação
 dos triggers é a mesma do book original: falha de coleta, swap, latência de I/O, serviços parados e jobs de
@@ -275,8 +291,9 @@ Use **Criar a partir de ZIP** em "Novo book" (cria um book novo) ou **☁️ Dad
 | `logo.png` (na raiz) | logo do cliente na capa |
 | `oci/servidores.csv`, `aws/storage.xlsx`, `azure/redes.csv`, `vmware/rvtools.xlsx`, `oci/baseline.csv` | a pasta indica o provedor e o nome indica a seção; exports nativos são reconhecidos |
 | `operacoes/incidentes.csv`, `book/equipe.csv` … | seções que casam pelo nome |
-| `tenant.csv` (ou `visao-geral/informacoes-do-tenant.csv`) | **Visão Geral › Informações do Tenant** (colunas Cloud, Conta, Nome, ID, Região principal, Regiões, Detalhes) |
-| `aws/security-score.csv` (qualquer arquivo com `score` no nome) | bloco **Cloud Security Score** na Segurança daquela cloud. Colunas: `Conta`, `Pontuação` (0–100, ou com `Máximo`), `Fonte`, `Detalhe` |
+| `aws/geral.csv` (ou `tenant.csv` dentro da pasta da cloud) | **Geral › Tenant** daquela cloud (colunas no formato da cloud, como na tabela acima) |
+| `aws/security-score.csv` | pontuação do **Cloud Security Score** na Segurança daquela cloud. Colunas: `Conta`, `Pontuação` (0–100, ou com `Máximo`), `Fonte`, `Detalhe` |
+| `aws/security-recomendacoes.csv`, `aws/security-alertas.csv` | recomendações e alertas do mesmo bloco (as colunas do arquivo viram as colunas da planilha). Os três arquivos de uma cloud se juntam num bloco só |
 | `oci/networking/topologia.png` | imagens na seção indicada pelas pastas |
 | `book/objetivo.txt` / `.md` | texto da seção |
 | `*.book.json` | projeto completo usado como base |

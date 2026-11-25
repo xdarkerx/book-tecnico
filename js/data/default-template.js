@@ -9,6 +9,15 @@
   const text = (html = '', title = '') => ({ type: 'text', data: { title, html } });
   const images = (title = '') => ({ type: 'image', data: { title, images: [], layout: 'grid2' } });
 
+  // Geral › Tenant: colunas no formato de cada cloud (as mesmas que a sincronização devolve)
+  const TENANT = {
+    oci: ['Tenancy', 'OCID', 'Região principal', 'Regiões assinadas', 'Descrição'],
+    aws: ['Conta', 'Account ID', 'Alias', 'ARN', 'Regiões'],
+    azure: ['Tenant', 'Tenant ID', 'Assinatura', 'Subscription ID', 'Estado'],
+    gcp: ['Projeto', 'Project ID', 'Número', 'Organização / Pasta']
+  };
+  BT.data.TENANT_COLUMNS = TENANT;
+
   function providerGroup(key) {
     const p = BT.data.providers[key];
     const net = key === 'oci' ? 'VCN' : key === 'aws' ? 'VPC' : key === 'azure' ? 'VNet' : key === 'gcp' ? 'VPC Network' : 'Rede / Port Group';
@@ -16,9 +25,10 @@
       title: p.label === 'VMware' ? 'VMware / On-Prem' : p.label,
       icon: p.icon, separator: true, provider: key, subtitle: '', collapsed: key !== 'oci',
       sections: [
+        ...(TENANT[key] ? [{ title: 'Geral', icon: '🏷️', blocks: [table(TENANT[key], [], [], 'Tenant')] }] : []),
         { title: 'Servidores', icon: '🖥️', blocks: [table(['Hostname', 'IP', 'SO', 'Localização', 'Função', 'Status'], [5])] },
         { title: 'Networking', icon: '🌐', blocks: [table([net, 'CIDR', p.group]), images('Topologia de rede')] },
-        { title: 'Segurança', icon: '🔒', blocks: [...(key === 'vmware' ? [] : [{ type: 'score', data: { title: 'Cloud Security Score', items: [{ label: p.label, value: '', source: { oci: 'OCI Cloud Guard', aws: 'AWS Security Hub', azure: 'Microsoft Defender for Cloud', gcp: 'Security Command Center' }[key] || '', detail: '' }], note: '' } }]), text('', 'Postura de segurança'), table(['Controle', 'Descrição', 'Status'], [2])] },
+        { title: 'Segurança', icon: '🔒', blocks: [...(key === 'vmware' ? [] : [{ type: 'score', data: { title: 'Cloud Security Score', items: [{ label: p.label, value: '', source: { oci: 'OCI Cloud Guard', aws: 'AWS Security Hub', azure: 'Microsoft Defender for Cloud', gcp: 'Security Command Center' }[key] || '', detail: '' }], note: '', ...BT.blocks.scoreTables(key) } }]), text('', 'Postura de segurança'), table(['Controle', 'Descrição', 'Status'], [2])] },
         { title: 'Storage', icon: '💾', blocks: [table(['Nome', 'Tipo', 'Capacidade', 'Utilizado', 'Status'], [4])] },
         { title: 'Backup', icon: '📦', blocks: [table(['Item', 'Situação', 'Ferramenta', 'Frequência', 'Retenção', 'Teste Restore'], [1, 5])] }
       ]
@@ -51,8 +61,7 @@
                 { type: 'kpi', data: { title: 'Servidores por ambiente', items: [{ label: 'OCI', value: '' }, { label: 'AWS', value: '' }, { label: 'Azure', value: '' }, { label: 'GCP', value: '' }, { label: 'On-Prem', value: '' }] } },
                 table(['Ambiente', 'Categoria', 'Quantidade'], [], [], 'Baseline de recursos')
               ]
-            },
-            { title: 'Informações do Tenant', icon: '🏢', blocks: [table(['Cloud', 'Conta', 'Nome', 'ID', 'Região principal', 'Regiões', 'Detalhes'], [], [], 'Tenants, contas e assinaturas')] }
+            }
           ]
         },
         providerGroup('oci'), providerGroup('aws'), providerGroup('azure'), providerGroup('gcp'), providerGroup('vmware'),

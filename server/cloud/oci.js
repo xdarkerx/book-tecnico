@@ -134,22 +134,39 @@ async function pull(cfg, kind) {
   return [U.sheet(kind, names[kind], rows)];
 }
 
-/** Tenancy: nome, OCID, região principal e regiões assinadas. */
+const SEV_PT = { CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Média', LOW: 'Baixa', MINOR: 'Baixa', INFORMATIONAL: 'Informativa', INFO: 'Informativa' };
+const sevPt = (s) => SEV_PT[String(s || '').toUpperCase()] || String(s || '');
+/** Geral › Tenant (formato OCI). */
 async function tenant(cfg) {
   const c = config(cfg);
   const id = `https://identity.${c.region}.oraclecloud.com/20160918`;
   const t = (await call(c, 'GET', `${id}/tenancies/${c.tenancy}`)).data || {};
   const subs = (await call(c, 'GET', `${id}/tenancies/${c.tenancy}/regionSubscriptions`)).data || [];
   const home = (subs.find((s) => s.isHomeRegion) || {}).regionName || c.region;
-  return [U.sheet('tenant', 'Tenancy OCI (API)', [{ 'Nome': t.name || '', 'ID': c.tenancy, 'Região principal': home, 'Regiões': subs.map((s) => s.regionName).join(', '), 'Detalhes': t.description || '' }])];
+  return [U.sheet('tenant', 'Tenancy OCI (API)', [{ 'Tenancy': t.name || '', 'OCID': c.tenancy, 'Região principal': home, 'Regiões assinadas': subs.map((s) => s.regionName).join(', '), 'Descrição': t.description || '' }])];
 }
-/** Cloud Guard: pontuação de segurança da tenancy (0–100). */
+/** Cloud Guard: pontuação, recomendações e problemas (alertas) ativos. */
 async function score(cfg) {
   const c = config(cfg);
-  const r = await call(c, 'GET', `https://cloudguard-cp-api.${c.region}.oci.oraclecloud.com/20200131/securityScoreAggregations?compartmentId=${c.tenancy}`);
-  const it = (r.data?.items || [])[0];
-  if (!it) throw new Error('Cloud Guard sem pontuação: confirme que o Cloud Guard está habilitado e a política permite "read cloud-guard-family".');
-  return [U.sheet('score', 'Cloud Guard (API)', [{ 'Fonte': 'OCI Cloud Guard', 'Escopo': 'Tenancy', 'Pontuação': it.securityScore, 'Máximo': 100, 'Classificação': it.securityRating || '' }])];
+  const CG = `https://cloudguard-cp-api.${c.region}.oci.oraclecloud.com/20200131`;
+  const sub = `compartmentId=${c.tenancy}&compartmentIdInSubtree=true&accessLevel=ACCESSIBLE`;
+  const out = []; const errs = [];
+  try {
+    const it = ((await call(c, 'GET', `${CG}/securityScoreAggregations?compartmentId=${c.tenancy}`)).data?.items || [])[0];
+    if (it) out.push(U.sheet('score', 'Cloud Guard (API)', [{ 'Fonte': 'OCI Cloud Guard', 'Escopo': 'Tenancy', 'Pontuação': it.securityScore, 'Máximo': 100, 'Classificação': it.securityRating || '' }]));
+  } catch (e) { errs.push(e.message); }
+  let comp = {};
+  try { comp = Object.fromEntries((await compartments(c)).map((x) => [x.id, x.path])); } catch (e) { /* nomes opcionais */ }
+  try {
+    const recs = await listAll(c, `${CG}/recommendations?${sub}&lifecycleState=ACTIVE&limit=500`, 10);
+    out.push(U.sheet('score_recs', 'Recomendações Cloud Guard', recs.map((r) => ({ 'Recomendação': r.name || r.details || '', 'Risco': sevPt(r.riskLevel), 'Problemas': r.problemCount ?? '', 'Compartimento': comp[r.compartmentId] || r.compartmentId || '' }))));
+  } catch (e) { errs.push(e.message); }
+  try {
+    const probs = await listAll(c, `${CG}/problems?${sub}&lifecycleState=ACTIVE&lifecycleDetail=OPEN&limit=500`, 10);
+    out.push(U.sheet('score_alerts', 'Problemas Cloud Guard', probs.map((p) => ({ 'Problema': p.detectorRuleId || '', 'Risco': sevPt(p.riskLevel), 'Recurso': p.resourceName || '', 'Tipo': p.resourceType || '', 'Compartimento': comp[p.compartmentId] || '', 'Detectado em': String(p.timeLastDetected || '').slice(0, 10) }))));
+  } catch (e) { errs.push(e.message); }
+  if (!out.length) throw new Error('Cloud Guard indisponível: confirme que está habilitado e a política permite "read cloud-guard-family". ' + errs.join(' | '));
+  return out;
 }
 
 module.exports = { label: 'Oracle Cloud Infrastructure', test, pull, tenant, score, config, _call: call };

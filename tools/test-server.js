@@ -445,6 +445,11 @@ async function main() {
   const recs = zr.sheets.recommendations.rows;
   assert.ok(recs.some((r) => r.Recurso === 'Memória' && r.Prioridade === 'Média') && recs.some((r) => r.Recurso === 'Disco' && r.Prioridade === 'Alta')); ok('Zabbix: recomendações de RAM e disco geradas');
   assert.ok(/Memória: 1 host\(s\) com média acima de 80%/.test(zs.summary)); ok('Zabbix: resumo executivo');
+  // severidades escolhidas (só Alta = 4) e só servidores com alertas
+  const [zr2] = await zbx.pull({ url: 'https://zbx.local/zabbix', apiToken: 'TOK', hostGroups: 'britech' }, 'zabbix', { from: '2026-09-01', to: '2026-09-30', severities: [4], onlyWithAlerts: true });
+  assert.deepStrictEqual([zr2.summary.totalAlerts, zr2.summary.bySeverity[3], zr2.summary.bySeverity[4]], [1, 0, 1]); ok('Zabbix: filtra alertas pelas severidades escolhidas');
+  assert.deepStrictEqual(zr2.sheets.hosts.rows.map((r) => r.Host), ['BRITECH.SRV-DB01']); ok('Zabbix: opção de deixar de fora servidores sem alerta no período');
+  assert.strictEqual(zr.sheets.hosts.rows.length, 2); ok('Zabbix: por padrão inclui servidores sem alerta');
   assert.strictEqual(zbx.classify('Alto uso de espaço de swap'), 'other'); assert.strictEqual(zbx.classify('C:: Utilização de espaço em disco'), 'disk'); ok('Zabbix: classificação de triggers igual ao book original');
 
   // GLPI (REST)
@@ -477,22 +482,26 @@ async function main() {
     return '<x/>';
   });
   const [ten] = await aws.tenant({ accessKeyId: 'AK', secretAccessKey: 'S', regions: 'sa-east-1' });
-  assert.deepStrictEqual([ten.kind, ten.rows[0].Nome, ten.rows[0].ID], ['tenant', 'cliente-prd', '111122223333']); ok('AWS tenant: ID da conta e alias');
-  const [sc] = await aws.score({ accessKeyId: 'AK', secretAccessKey: 'S', regions: 'sa-east-1' });
+  assert.deepStrictEqual([ten.kind, ten.rows[0].Conta, ten.rows[0]['Account ID'], ten.rows[0].Alias], ['tenant', 'cliente-prd', '111122223333', 'cliente-prd']); ok('AWS Geral › tenant no formato AWS (conta, ID, alias)');
+  const [sc, scRecs, scAlerts] = await aws.score({ accessKeyId: 'AK', secretAccessKey: 'S', regions: 'sa-east-1' });
   assert.deepStrictEqual([sc.kind, sc.rows[0]['Pontuação'], sc.rows[0]['Classificação']], ['score', '75', '3 de 4 controles aprovados']); ok('AWS Security Hub: controle com qualquer falha conta como reprovado (3/4 = 75%)');
+  assert.deepStrictEqual([scRecs.kind, scRecs.rows.length, scRecs.rows[0].Controle, scRecs.rows[0]['Recursos reprovados'], scAlerts.kind], ['score_recs', 1, 'EC2.1', '1', 'score_alerts']); ok('AWS: controles reprovados viram recomendações; findings viram alertas');
   mock((url) => {
     if (url.includes('oauth2')) return { access_token: 'T', expires_in: 3600 };
     if (url.includes('/tenants?')) return { value: [{ tenantId: 'ten-1', displayName: 'Cliente SA' }] };
     if (url.includes('/subscriptions?')) return { value: [{ subscriptionId: 'sub-1', displayName: 'Produção', state: 'Enabled' }] };
+    if (url.includes('/assessments')) return { value: [{ name: 'a1', properties: { displayName: 'MFA para contas', status: { code: 'Unhealthy' }, metadata: { severity: 'High' } } }, { name: 'a2', properties: { displayName: 'MFA para contas', status: { code: 'Unhealthy' }, metadata: { severity: 'High' } } }, { name: 'a3', properties: { displayName: 'Ok', status: { code: 'Healthy' } } }] };
+    if (url.includes('/alerts')) return { value: [{ properties: { alertDisplayName: 'Login suspeito', severity: 'High', compromisedEntity: 'vm-01', timeGeneratedUtc: '2026-11-10T10:00:00Z', status: 'Active' } }, { properties: { alertDisplayName: 'Antigo', severity: 'Low', status: 'Dismissed' } }] };
     if (url.includes('secureScores')) return { value: [{ name: 'ascScore', properties: { displayName: 'ASC score', score: { current: 31.5, max: 45, percentage: 0.7 } } }] };
     return { value: [] };
   });
   const azure2 = require('../server/cloud/azure');
   const azCfg = { tenantId: 'ten-1', clientId: 'c', clientSecret: 's' };
   const [azt] = await azure2.tenant(azCfg);
-  assert.deepStrictEqual([azt.rows[0].Nome, azt.rows[0].ID, /Cliente SA/.test(azt.rows[0].Detalhes)], ['Produção', 'sub-1', true]); ok('Azure tenant: assinaturas com nome do tenant');
-  const [azs] = await azure2.score(azCfg);
+  assert.deepStrictEqual([azt.rows[0].Tenant, azt.rows[0]['Tenant ID'], azt.rows[0].Assinatura, azt.rows[0]['Subscription ID']], ['Cliente SA', 'ten-1', 'Produção', 'sub-1']); ok('Azure Geral › tenant no formato Azure (tenant e assinaturas)');
+  const [azs, azRecs, azAlerts] = await azure2.score(azCfg);
   assert.deepStrictEqual([azs.rows[0]['Pontuação'], azs.rows[0].Escopo], ['70', 'sub-1']); ok('Azure Defender Secure Score em %');
+  assert.deepStrictEqual([azRecs.rows.length, azRecs.rows[0]['Recursos não íntegros'], azRecs.rows[0].Severidade, azAlerts.rows.length, azAlerts.rows[0].Severidade], [1, '2', 'Alta', 1, 'Alta']); ok('Azure: recomendações não íntegras agrupadas e alertas ativos (descartados ficam de fora)');
   const cloudIdx = require('../server/cloud');
   const g = await cloudIdx.pull('gcp', { projectIds: 'p1', serviceAccountJson: '{}' }, ['score']);
   assert.ok(g.errors[0] && /Security Score nativo/.test(g.errors[0].message)); ok('GCP sem score nativo: erro explicativo, sem quebrar a sincronização');

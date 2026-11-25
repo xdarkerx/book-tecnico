@@ -11,7 +11,7 @@
 (function (BT) {
   const h = BT.h;
   const P = () => BT.data.providers;
-  const KINDS = [['servers', '🖥️ Servidores', 'servidores'], ['storage', '💾 Storage', 'storage'], ['network', '🌐 Redes', 'networking'], ['baseline', '📦 Baseline', 'baseline'], ['tenant', '🏢 Tenant', 'tenant'], ['score', '🛡️ Security Score', 'score']];
+  const KINDS = [['servers', '🖥️ Servidores', 'servidores'], ['storage', '💾 Storage', 'storage'], ['network', '🌐 Redes', 'networking'], ['baseline', '📦 Baseline', 'baseline'], ['tenant', '🏷️ Geral (tenant)', 'geral'], ['score', '🛡️ Security Score', 'score']];
   const ORDER = ['oci', 'aws', 'azure', 'gcp', 'zabbix', 'glpi'];
 
   const FORMS = {
@@ -250,28 +250,46 @@
     const per = { from: `${y}-${pad(mo)}-01`, to: `${y}-${pad(mo)}-${pad(new Date(y, mo, 0).getDate())}` };
     const status = h('div', { class: 'cx-help' });
     const chk = (set, v, label, cb) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: set.has(v), onchange: (e) => { e.target.checked ? set.add(v) : set.delete(v); cb && cb(); } }), label]);
-    const kindsBox = h('div'); const periodBox = h('div');
+    const kindsBox = h('div'); const periodBox = h('div'); const zbxBox = h('div');
+    // Zabbix: severidades a importar e se entram os servidores sem nenhum alerta no período
+    const ZSEV = [['5', '🟥 Desastre'], ['4', '🟧 Alta'], ['3', '🟨 Média'], ['2', '🟦 Atenção'], ['1', 'ℹ️ Informação'], ['0', '⬜ Não classificado']];
+    const zbxSev = new Set(ZSEV.map((x) => x[0]));
+    const zbxAll = h('input', { type: 'checkbox', checked: true });
+    zbxBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'Zabbix — severidades dos alertas'), h('div', { class: 'cprow' }, ZSEV.map(([v, l]) => chk(zbxSev, v, l))),
+      h('label', { class: 'switch', style: { marginTop: '10px' } }, [zbxAll, 'Incluir servidores sem nenhum alerta no período (Monitoramento)']));
     const refresh = () => {
       kindsBox.hidden = ![...selP].some((k) => !P()[typeOf(k)].tool);
       periodBox.hidden = ![...selP].some((k) => P()[typeOf(k)].tool);
+      zbxBox.hidden = ![...selP].some((k) => typeOf(k) === 'zabbix');
     };
     const go = async () => {
+      if (!zbxBox.hidden && !zbxSev.size) return BT.ui.toast('Escolha ao menos uma severidade do Zabbix.', { type: 'err' });
       btn.disabled = true;
-      const items = []; const errors = []; const tenantRows = [];
+      const items = []; const errors = [];
       for (const k of configured.filter((x) => selP.has(x))) {
         const p = typeOf(k); const label = labelOf(k);
         const account = multiOf(p) ? accName(provs, k) : '';
         status.textContent = `Consultando ${P()[p].display}${account ? ' · ' + account : ''}…`;
         try {
-          const r = await BT.api.cloudPull(key.cliente, k, [...selK], per);
+          const extra = p === 'zabbix' ? Object.assign({}, per, { severities: [...zbxSev].map(Number), onlyWithAlerts: !zbxAll.checked }) : per;
+          const r = await BT.api.cloudPull(key.cliente, k, [...selK], extra);
           r.errors.forEach((e) => errors.push(`${label}${e.kind !== p ? '/' + e.kind : ''}: ${e.message}`));
           if (P()[p].tool) r.results.forEach((res) => items.push(...toolItems(p, res).map((it) => (account ? Object.assign(it, { path: it.path.replace(P()[p].label, label) }) : it))));
-          else r.results.forEach((sh) => {
-            if (sh.kind === 'tenant') { sh.rows.forEach((row) => tenantRows.push(Object.assign({ 'Cloud': P()[p].label, 'Conta': account || accName(provs, k) }, row))); return; }
-            if (sh.kind === 'score') {
-              const sc = BT.blocks.scoreItemsFromSheet(sh, label);
-              if (sc.length) items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, path: `${label} · ${sh.name}`, destTitle: 'Segurança', origin: 'score-' + k, replaceEmptyType: 'score', entry: { name: 'Security Score' },
-                blocks: [{ type: 'score', data: { title: 'Cloud Security Score', items: sc, note: '' } }], dest: '', newTitle: '', how: 'new', note: '' });
+          else {
+            // score + recomendações + alertas da mesma conta viram UM bloco Cloud Security Score
+            const scoreSheets = r.results.filter((sh) => /^score/.test(sh.kind));
+            if (scoreSheets.length) {
+              const data = BT.blocks.scoreFromSheets(p, scoreSheets, label);
+              items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, path: `${label} · Cloud Security Score`, destTitle: 'Segurança', origin: 'score-' + k, replaceEmptyType: 'score', entry: { name: 'Security Score' },
+                blocks: [{ type: 'score', data }], dest: '', newTitle: '', how: 'new', note: '' });
+            }
+          }
+          if (!P()[p].tool) r.results.filter((sh) => !/^score/.test(sh.kind)).forEach((sh) => {
+            if (sh.kind === 'tenant') {
+              // Geral › Tenant da própria cloud/conta (primeira seção do menu)
+              items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, path: `${label} · ${sh.name}`, tokens: [p, 'geral'], entry: { name: 'Geral', path: '' },
+                destTitle: 'Geral', newTitleHint: 'Geral', forceMapper: 'raw', first: true,
+                parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
               return;
             }
             const kind = KINDS.find((x) => x[0] === sh.kind);
@@ -279,12 +297,6 @@
               parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
           });
         } catch (e) { errors.push(`${label}: ${e.message}`); }
-      }
-      if (tenantRows.length) {
-        const fields = [...new Set(tenantRows.flatMap((r) => Object.keys(r)))];
-        items.unshift({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: 'generic', global: true, path: 'Informações do Tenant (todas as contas)', tokens: ['tenant'], entry: { name: 'Informações do Tenant', path: '' },
-          destTitle: 'Informações do Tenant', newTitleHint: 'Informações do Tenant', forceMapper: 'raw', groupHint: 'visao geral',
-          parsed: { name: 'Tenant', sheets: [{ name: 'Tenant', fields, rows: tenantRows.map((r) => Object.fromEntries(fields.map((f) => [f, r[f] || '']))), aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
       }
       m.close();
       if (errors.length) BT.ui.toast('Alguns itens falharam: ' + errors.join(' | '), { type: 'err', ms: 14000 });
@@ -301,7 +313,7 @@
       title: '🔄 Sincronizar dados', size: 'md',
       body: [h('div', { class: 'lbl', style: { marginBottom: '8px' } }, 'Fontes configuradas'),
         h('div', { class: 'cprow' }, configured.map((k) => chk(selP, k, P()[typeOf(k)].icon + ' ' + labelOf(k), refresh))),
-        kindsBox, periodBox,
+        kindsBox, periodBox, zbxBox,
         h('div', { style: { marginTop: '14px' } }, status),
         h('div', { class: 'cx-help' }, 'Na próxima tela você confere o destino de cada item no book e escolhe as linhas antes de aplicar.')],
       footer: [h('button', { class: 'btn btn-ghost btn-sm', onclick: () => connections(key.cliente, BT.store.state.meta.cliente) }, '🔑 Conexões'), h('span', { class: 'spacer' }), h('button', { class: 'btn btn-ghost btn-sm', onclick: () => m.close() }, 'Cancelar'), btn]

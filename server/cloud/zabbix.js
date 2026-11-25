@@ -90,6 +90,9 @@ async function pull(cfg, kind, opts = {}) {
   const tf = Math.floor(from / 1000), tt = Math.floor(to / 1000);
   const periodLabel = `${fmtDate(tf)} – ${fmtDate(tt)}`;
 
+  // severidades escolhidas na sincronização (0 Não classificado … 5 Desastre); vazio = todas
+  const sevs = (Array.isArray(opts.severities) ? opts.severities : []).map(Number).filter((n) => n >= 0 && n <= 5);
+  const sevOk = (s) => !sevs.length || sevs.includes(Number(s));
   const z = client(cfg);
   await z.connect();
   const { groups, hosts } = await groupsAndHosts(z, cfg);
@@ -103,6 +106,7 @@ async function pull(cfg, kind, opts = {}) {
   for (let i = 0; i < 40; i++) {
     const p = { groupids, source: 0, object: 0, value: 1, time_from: tf, time_till: tt, output: ['eventid', 'objectid', 'name', 'severity', 'clock'], sortfield: 'eventid', sortorder: 'ASC', limit: 5000 };
     if (fromId) p.eventid_from = fromId;
+    if (sevs.length) p.severities = sevs;
     const page = await z.rpc('event.get', p);
     if (!page.length) break;
     events = events.concat(page);
@@ -116,7 +120,8 @@ async function pull(cfg, kind, opts = {}) {
   const tids = [...new Set([...events, ...active].map((e) => e.objectid))];
   for (const t of await batched(tids, 500, (b) => z.rpc('trigger.get', { triggerids: b, output: ['triggerid', 'description', 'status'], selectHosts: ['hostid', 'name'], expandDescription: true })))
     if (t.hosts && t.hosts.length) trig[t.triggerid] = { hostid: t.hosts[0].hostid, host: t.hosts[0].name, name: t.description, cls: classify(t.description), enabled: String(t.status) !== '1' };
-  events = events.filter((e) => !trig[e.objectid] || trig[e.objectid].enabled);
+  events = events.filter((e) => (!trig[e.objectid] || trig[e.objectid].enabled) && sevOk(e.severity));
+  for (let i = active.length - 1; i >= 0; i--) if (!sevOk(active[i].severity)) active.splice(i, 1);
 
   // 4. contagens
   const cnt = { all: {}, cpu: {}, mem: {}, disk: {} }; const diskFs = {};
@@ -227,7 +232,7 @@ async function pull(cfg, kind, opts = {}) {
 
   const z_ = {
     group: groups.map((g) => g.name).join(', '), periodLabel, from: opts.from, to: opts.to, days,
-    totalHosts: hosts.length, totalAlerts: events.length, bySeverity,
+    totalHosts: hosts.length, totalAlerts: events.length, bySeverity, severities: sevs,
     activeProblems: active.filter((p) => !p.r_eventid || p.r_eventid === '0').length,
     cpuHigh: hostRows.filter((r) => (r.cpu.cur ?? 0) >= cpuWarn).length,
     diskIssues: diskIssues.slice(0, 25), top5, topCpu, topMem, perDay, summary: summary.trim(),
@@ -239,7 +244,7 @@ async function pull(cfg, kind, opts = {}) {
     kind: 'capacity', name: 'Zabbix', summary: z_,
     sheets: {
       recommendations: U.sheet('raw', 'Recomendações (Zabbix)', recs),
-      hosts: U.sheet('raw', 'Hosts monitorados (Zabbix)', hostRows.sort((a, b) => b.total - a.total).map((r) => ({
+      hosts: U.sheet('raw', 'Hosts monitorados (Zabbix)', hostRows.filter((r) => !opts.onlyWithAlerts || r.total > 0).sort((a, b) => b.total - a.total).map((r) => ({
         'Host': r.host, 'IP': r.ip, 'CPU média': pctTxt(r.cpu.avg), 'Memória média': pctTxt(r.mem.avg), 'Maior disco': r.disk ? `${r.disk.fs} ${pctTxt(r.disk.val)}` : '—', 'Alertas': String(r.total), 'Status': status(r)
       })))
     }
