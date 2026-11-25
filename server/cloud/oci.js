@@ -116,7 +116,8 @@ async function pull(cfg, kind, opts = {}) {
           } catch (e) { /* sem permissão para VNIC: segue sem IP */ }
           if (i.imageId && images[i.imageId] === undefined) {
             images[i.imageId] = '';
-            try { images[i.imageId] = (await call(c, 'GET', `${iaas(r)}/images/${i.imageId}`)).data?.displayName || ''; } catch (e) {}
+            // SO pelos campos da imagem ("Oracle Linux 9.4", "Windows Server 2019"); o nome da imagem personalizada só se não houver
+            try { const im = (await call(c, 'GET', `${iaas(r)}/images/${i.imageId}`)).data || {}; images[i.imageId] = [im.operatingSystem, im.operatingSystemVersion].filter((x) => x && !/^custom$/i.test(x)).join(' ') || im.displayName || ''; } catch (e) {}
           }
           rows.push({ 'Display Name': i.displayName, 'Private IP': ip, 'Image': images[i.imageId] || '', 'Lifecycle State': i.lifecycleState, 'Region': i.region || r,
             'compartment_path': comp.path, 'Shape': i.shape, 'OCPUs': i.shapeConfig?.ocpus ?? '', 'Memory (GB)': i.shapeConfig?.memoryInGBs ?? '', 'Availability Domain': i.availabilityDomain, 'Criado em': day(i.timeCreated) });
@@ -147,14 +148,31 @@ async function pull(cfg, kind, opts = {}) {
   return [U.sheet(kind, names[kind], rows)];
 }
 
-/** Backups de volumes e boot volumes criados no período (o book mostra só os do mês). */
+// opts.backupMode: 'jobs' = só backups feitos no período · 'policies' = só políticas/agendamentos · 'both' (padrão)
+const wantJobs = (o) => (o.backupMode || 'both') !== 'policies';
+const wantPolicies = (o) => (o.backupMode || 'both') !== 'jobs';
+/** Backups de volumes e boot volumes criados no período (o book mostra só os do mês) e/ou as políticas de backup. */
 async function backups(c, comps, opts) {
   const from = opts.from ? new Date(opts.from + 'T00:00:00Z') : new Date(Date.now() - 31 * 86400000);
   const to = opts.to ? new Date(opts.to + 'T23:59:59Z') : new Date();
   const rows = [];
   const STATE = { AVAILABLE: 'OK', CREATING: 'Em andamento', REQUEST_RECEIVED: 'Em andamento', FAULTY: 'Falha', TERMINATED: 'Expirado', TERMINATING: 'Expirando' };
+  const PERIOD = { ONE_HOUR: 'De hora em hora', ONE_DAY: 'Diário', ONE_WEEK: 'Semanal', ONE_MONTH: 'Mensal', ONE_YEAR: 'Anual' };
   for (const r of c.regionList) {
     await U.pool(comps, 4, async (comp) => {
+      // políticas de backup criadas pelo cliente (as padrão da Oracle — bronze/prata/ouro — não entram)
+      if (wantPolicies(opts)) {
+        let pols = [];
+        try { pols = await listAll(c, `${iaas(r)}/volumeBackupPolicies?compartmentId=${comp.id}&limit=1000`); } catch (e) { /* sem permissão */ }
+        for (const p of pols) {
+          const sch = p.schedules || [];
+          rows.push({ 'Item': p.displayName, 'Situação': 'Política ativa', 'Ferramenta': 'Política de backup OCI',
+            'Frequência': sch.map((s) => `${PERIOD[s.period] || s.period}${s.hourOfDay != null && s.period !== 'ONE_HOUR' ? ' ' + String(s.hourOfDay).padStart(2, '0') + 'h' : ''} (${s.backupType === 'FULL' ? 'completo' : 'incremental'})`).join('; ') || '—',
+            'Retenção': [...new Set(sch.map((s) => (s.retentionSeconds ? Math.round(s.retentionSeconds / 86400) + ' dias' : '')).filter(Boolean))].join(' / ') || '—',
+            'Criado em': '', 'Região': r, 'Compartimento': comp.path });
+        }
+      }
+      if (!wantJobs(opts)) return;
       for (const [path, what] of [['bootVolumeBackups', 'Boot Volume'], ['volumeBackups', 'Block Volume']]) {
         let list = [];
         try { list = await listAll(c, `${iaas(r)}/${path}?compartmentId=${comp.id}&limit=1000`); } catch (e) { continue; }
@@ -163,12 +181,13 @@ async function backups(c, comps, opts) {
           if (!(created >= from && created <= to)) continue;
           const ret = b.expirationTime ? Math.round((new Date(b.expirationTime) - created) / 86400000) + ' dias' : 'Sem expiração';
           rows.push({ 'Item': b.displayName, 'Situação': STATE[b.lifecycleState] || b.lifecycleState, 'Ferramenta': `OCI ${what} Backup (${b.type === 'INCREMENTAL' ? 'incremental' : 'completo'})`,
-            'Frequência': b.sourceType === 'SCHEDULED' ? 'Agendado (política)' : 'Manual', 'Retenção': ret, 'Teste Restore': '—', 'Criado em': day(b.timeCreated), 'Região': r, 'compartment_path': comp.path });
+            'Frequência': b.sourceType === 'SCHEDULED' ? 'Agendado (política)' : 'Manual', 'Retenção': ret, 'Criado em': day(b.timeCreated), 'Região': r, 'Compartimento': comp.path });
         }
       }
     });
   }
-  return rows.sort((a, b) => String(b['Criado em']).localeCompare(a['Criado em']));
+  // políticas primeiro, depois os backups do mais novo para o mais antigo
+  return rows.sort((a, b) => (a['Situação'] === 'Política ativa' ? 0 : 1) - (b['Situação'] === 'Política ativa' ? 0 : 1) || String(b['Criado em']).localeCompare(a['Criado em']));
 }
 
 const SEV_PT = { CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Média', LOW: 'Baixa', MINOR: 'Baixa', INFORMATIONAL: 'Informativa', INFO: 'Informativa' };
@@ -201,20 +220,6 @@ async function score(cfg) {
     } else scoreMsg = 'o Cloud Guard ainda não calculou a pontuação desta tenancy (a lista veio vazia)';
   } catch (e) { scoreMsg = e.message; }
   if (scoreMsg) errs.push(scoreMsg);
-  // histórico da pontuação (comparativo mensal): último valor de cada mês nos últimos 6 meses
-  try {
-    const end = new Date(); const start = new Date(end.getFullYear(), end.getMonth() - 5, 1);
-    const q = `compartmentId=${c.tenancy}&timeScoreComputedGreaterThanOrEqualTo=${encodeURIComponent(start.toISOString())}&timeScoreComputedLessThanOrEqualTo=${encodeURIComponent(end.toISOString())}`;
-    const items = (await call(c, 'POST', `${CG}/securityScores/actions/summarizeTrend?${q}`, '')).data?.items || [];
-    const byMonth = {};
-    for (const t of items) {
-      if (t.securityScore == null || t.startTimestamp == null) continue;
-      const m = new Date(Number(t.startTimestamp) * 1000).toISOString().slice(0, 7);
-      if (!byMonth[m] || t.startTimestamp > byMonth[m].ts) byMonth[m] = { ts: t.startTimestamp, v: t.securityScore };
-    }
-    const hist = Object.keys(byMonth).sort().map((m) => ({ 'Mês': m, 'Pontuação': byMonth[m].v }));
-    if (hist.length) out.push(U.sheet('score_trend', 'Histórico Cloud Guard', hist));
-  } catch (e) { /* histórico é opcional */ }
   let comp = {};
   try { comp = Object.fromEntries((await compartments(c)).map((x) => [x.id, x.path])); } catch (e) { /* nomes opcionais */ }
   try {

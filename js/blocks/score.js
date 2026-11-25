@@ -56,33 +56,12 @@
   }
 
   // ── o que mostrar no book (data.show) ──
-  const SHOW_DEF = { recs: true, alerts: true, charts: false, history: true };
+  const SHOW_DEF = { recs: true, alerts: true, charts: false };
   const show = (d) => Object.assign({}, SHOW_DEF, d.show || {});
-  const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-  const mesLabel = (m) => { const [y, mo] = String(m).split('-'); return `${MES[Number(mo) - 1] || mo}/${String(y).slice(2)}`; };
-  /** Meses anteriores ao do book (data.month = 'AAAA-MM'), para um item. */
-  const pastOf = (d, label) => (d.history || []).filter((x) => x.label === label && (!d.month || x.mes < d.month) && num(x.value) != null).sort((a, b) => a.mes.localeCompare(b.mes));
-  /** "▲ +5 pts vs out/26" em relação ao mês anterior que tiver pontuação. */
-  function delta(d, i) {
-    if (!show(d).history) return null;
-    const prev = pastOf(d, i.label).pop(); const n = num(i.value);
-    if (!prev || n == null) return null;
-    const diff = Math.round((n - num(prev.value)) * 10) / 10;
-    const t = diff === 0 ? `= igual a ${mesLabel(prev.mes)}` : `${diff > 0 ? '▲ +' : '▼ '}${String(diff).replace('.', ',')} pts vs ${mesLabel(prev.mes)}`;
-    return { t, c: diff > 0 ? '#00a37a' : diff < 0 ? '#d64545' : '#9098b8' };
-  }
   const chart = (data, ctx) => BT.blocks.renderBook({ type: 'chart', include: true, data: Object.assign({ source: 'manual', table: {}, showValues: true, legend: true, height: 220, unit: '' }, data) }, ctx);
-  /** Comparativo mensal (linha) e gráficos de risco (rosca/colunas). */
+  /** Gráficos de risco (rosca/colunas). */
   function extras(b, ctx) {
     const d = b.data; const sh = show(d); let out = '';
-    if (sh.history) {
-      const items = filled(b).filter((i) => pastOf(d, i.label).length);
-      if (items.length) {
-        const months = [...new Set(items.flatMap((i) => pastOf(d, i.label).map((x) => x.mes)).concat(d.month ? [d.month] : []))].sort().slice(-6);
-        const series = items.map((i) => ({ name: i.label || 'Score', values: months.map((m) => { if (m === d.month) return num(i.value); const x = pastOf(d, i.label).find((h) => h.mes === m); return x ? num(x.value) : ''; }) }));
-        out += chart({ title: 'Comparativo mensal da pontuação', kind: 'line', labels: months.map(mesLabel), series, unit: '%', legend: series.length > 1 }, ctx);
-      }
-    }
     if (sh.charts) {
       const by = (t) => { const c = {}; const si = t ? t.columns.findIndex(isSevCol) : -1; if (si >= 0) rowsOf(t).forEach((r) => { const l = levelOf(r[si]); if (l) c[l] = (c[l] || 0) + 1; }); return LEVELS.filter(([k]) => c[k]).map(([k, l]) => [l, c[k]]); };
       const f = fmtOf(d.provider);
@@ -114,13 +93,14 @@
   function tableHtml(t, title, ctx) {
     const rows = rowsOf(t); if (!rows.length) return '';
     const sevIdx = t.columns.findIndex(isSevCol);
+    const cols = BT.blocks.filledColumns(rows, t.columns.length); // colunas sem nenhum dado não aparecem
     if (ctx && ctx.target === 'word') {
-      const th = t.columns.map((c) => `<td style="background:#171C37;color:#fff;padding:5pt;font-family:Arial;font-size:7.5pt;font-weight:bold">${BT.esc(c)}</td>`).join('');
-      const tr = rows.map((r) => '<tr>' + t.columns.map((_, i) => `<td style="border-bottom:1px solid #eee;padding:5pt;font-family:Arial;font-size:8.5pt;vertical-align:top">${BT.blocks.wordText(r[i] || '')}</td>`).join('') + '</tr>').join('');
+      const th = cols.map((i) => t.columns[i]).map((c) => `<td style="background:#171C37;color:#fff;padding:5pt;font-family:Arial;font-size:7.5pt;font-weight:bold">${BT.esc(c)}</td>`).join('');
+      const tr = rows.map((r, ri) => '<tr>' + cols.map((i) => `<td style="background:${ri % 2 ? BT.blocks.ZEBRA : '#ffffff'};border-bottom:1px solid #eee;padding:5pt;font-family:Arial;font-size:8.5pt;vertical-align:top">${BT.blocks.wordText(r[i] || '')}</td>`).join('') + '</tr>').join('');
       return `<p style="font-family:Arial;font-size:9pt;font-weight:bold;color:#5E3FE1;margin:10pt 0 4pt">${BT.esc(title)}</p><table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse"><tr>${th}</tr>${tr}</table>`;
     }
-    return `<div class="btbl-title">${BT.esc(title)}</div><table class="btbl compact"><thead><tr>${t.columns.map((c) => `<th>${BT.esc(c)}</th>`).join('')}</tr></thead><tbody>${
-      rows.map((r) => '<tr>' + t.columns.map((_, i) => { const v = r[i] || ''; return `<td>${i === sevIdx && v && SEVCLS(v) ? `<span class="bk ${SEVCLS(v)}">${BT.esc(v)}</span>` : BT.blocks.cellText(v)}</td>`; }).join('') + '</tr>').join('')}</tbody></table>`;
+    return `<div class="btbl-title">${BT.esc(title)}</div><table class="btbl compact"><thead><tr>${cols.map((i) => `<th>${BT.esc(t.columns[i])}</th>`).join('')}</tr></thead><tbody>${
+      rows.map((r) => '<tr>' + cols.map((i) => { const v = r[i] || ''; return `<td>${i === sevIdx && v && SEVCLS(v) ? `<span class="bk ${SEVCLS(v)}">${BT.esc(v)}</span>` : BT.blocks.cellText(v)}</td>`; }).join('') + '</tr>').join('')}</tbody></table>`;
   }
 
   BT.blocks.register('score', {
@@ -160,21 +140,18 @@
       const sh = show(d);
       const toggle = (k, label) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: sh[k], onchange: (e) => { d.show = Object.assign(show(d), { [k]: e.target.checked }); ctx.save(); } }), label]);
       const showRow = h('div', { class: 'score-show' }, [h('span', { class: 'lbl' }, 'Mostrar no book'), h('div', { class: 'cprow' }, [
-        toggle('recs', '💡 Recomendações'), toggle('alerts', '🚨 Problemas / alertas'), toggle('charts', '📊 Gráficos de risco'), toggle('history', '📈 Comparativo mensal')])]);
-      const hist = (d.history || []).filter((x) => !d.month || x.mes < d.month);
-      const histInfo = h('div', { class: 'set-help', style: { margin: '4px 0 0' } }, hist.length ? `Comparativo: ${[...new Set(hist.map((x) => x.mes))].sort().map(mesLabel).join(', ')} (dos books anteriores e do histórico da cloud).` : 'Comparativo mensal: aparece quando houver pontuação de meses anteriores (books anteriores ou histórico do Cloud Guard).');
-      return h('div', {}, [BT.blocks.titleInput(block, ctx), list, showRow, histInfo,
+        toggle('recs', '💡 Recomendações'), toggle('alerts', '🚨 Problemas / alertas'), toggle('charts', '📊 Gráficos de risco')])]);
+      return h('div', {}, [BT.blocks.titleInput(block, ctx), list, showRow,
         h('div', { class: 'score-fmt' }, [h('span', { class: 'lbl' }, 'Formato de recomendações e alertas'), format]), grids,
         h('input', { class: 'inp', style: { marginTop: '8px' }, value: d.note || '', placeholder: 'Observação (opcional)', oninput: (e) => { d.note = e.target.value; ctx.save(); } })]);
     },
     render(b, ctx) {
       const d = b.data; const f = fmtOf(d.provider); const sh = show(d);
       const cards = filled(b).map((i) => {
-        const n = num(i.value); const lv = level(n); const dl = delta(d, i);
+        const n = num(i.value); const lv = level(n);
         return `<div class="bsc_ bscore"><div class="bsv" style="color:${lv.c}">${fmt(n)}</div>
           <div class="bscore-bar"><span style="width:${n}%;background:${lv.c}"></span></div>
           <div class="bsl">${BT.esc(i.label || 'Score')}</div>
-          ${dl ? `<div class="bscore-delta" style="color:${dl.c}">${dl.t}</div>` : ''}
           ${i.source || i.detail ? `<div class="bscore-src">${BT.esc([i.source, i.detail].filter(Boolean).join(' · '))}</div>` : ''}</div>`;
       }).join('');
       return BT.blocks.titleHtml(b, ctx) + (cards ? `<div class="bsg">${cards}</div>` : '') + extras(b, ctx)
@@ -184,10 +161,10 @@
     word(b, ctx) {
       const d = b.data; const f = fmtOf(d.provider); const sh = show(d);
       const rows = filled(b).map((i) => {
-        const n = num(i.value); const lv = level(n); const dl = delta(d, i);
+        const n = num(i.value); const lv = level(n);
         return `<tr><td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:9pt">${BT.esc(i.label || 'Score')}</td>
           <td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:14pt;font-weight:bold;color:${lv.c};text-align:center">${fmt(n)}</td>
-          <td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:9pt;color:${lv.c}">${lv.t}${dl ? `<br><span style="color:${dl.c};font-size:8pt">${dl.t}</span>` : ''}</td>
+          <td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:9pt;color:${lv.c}">${lv.t}</td>
           <td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:8pt;color:#666">${BT.esc([i.source, i.detail].filter(Boolean).join(' · '))}</td></tr>`;
       }).join('');
       return BT.blocks.titleHtml(b, ctx) + (rows ? `<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:6pt 0">${rows}</table>` : '') + extras(b, ctx)
@@ -216,12 +193,9 @@
     const d = Object.assign({ title: 'Cloud Security Score', items: [], note: '' }, scoreTables(p));
     sheets.forEach((sh) => {
       if (sh.kind === 'score') d.items.push(...scoreItemsFromSheet(sh, label));
-      if (sh.kind === 'score_trend') d._trend = sh.rows; // vira histórico depois que os itens existem
       const t = sh.kind === 'score_recs' ? 'recs' : sh.kind === 'score_alerts' ? 'alerts' : null;
       if (t && sh.rows.length) d[t] = { columns: sh.fields.slice(), rows: sh.rows.map((r) => sh.fields.map((f) => String(r[f] ?? ''))) };
     });
-    // histórico da API (ex.: Cloud Guard): pontuação de cada mês para o primeiro item (a tenancy)
-    if (d._trend) { const lab = d.items[0] ? d.items[0].label : label; d.history = d._trend.map((r) => ({ label: lab, mes: String(r['Mês']), value: String(r['Pontuação']) })); delete d._trend; }
     return d;
   }
   Object.assign(BT.blocks, { scoreItemsFromSheet, scoreFromSheets, scoreTables, SCORE_FORMATS: FORMATS, RISK_LEVELS: LEVELS, riskLevelOf: levelOf, filterRisks, riskCounts });

@@ -76,7 +76,7 @@ const inPeriod = (d, p) => { const t = new Date(d); return t >= p.from && t <= p
 async function pull(cfg, kind, opts = {}) {
   const creds = credentials(cfg);
   const regs = regions(cfg);
-  if (kind === 'backup') return [U.sheet('backup', 'Snapshots EBS do período (API)', await snapshots(creds, regs, period(opts)))];
+  if (kind === 'backup') return [U.sheet('backup', 'Backup AWS (API)', [...(wantPolicies(opts) ? await backupPlans(creds, regs) : []), ...(wantJobs(opts) ? await snapshots(creds, regs, period(opts)) : [])])];
   if (kind === 'servers') {
     const rows = [];
     for (const r of regs) for (const page of await query(creds, 'ec2', r, 'DescribeInstances', { MaxResults: '1000' }))
@@ -185,6 +185,35 @@ async function score(cfg) {
   return [U.sheet('score', 'Security Hub (API)', scores), U.sheet('score_recs', 'Controles reprovados (Security Hub)', recList), U.sheet('score_alerts', 'Findings críticos/altos', alerts)];
 }
 
+// opts.backupMode: 'jobs' = só backups feitos no período · 'policies' = só políticas/agendamentos · 'both' (padrão)
+const wantJobs = (o) => (o.backupMode || 'both') !== 'policies';
+const wantPolicies = (o) => (o.backupMode || 'both') !== 'jobs';
+/** GET assinado de uma API REST JSON da AWS (AWS Backup, DLM). */
+async function restGet(creds, service, r, path) {
+  const host = `${service}.${r}.amazonaws.com`;
+  const { headers } = sign({ method: 'GET', host, region: r, service, path, creds });
+  return (await U.request(`https://${host}${path}`, { headers })).json();
+}
+const cronTxt = (e) => { const m = String(e || '').match(/cron\((\S+) (\S+) (\S+) (\S+) (\S+) (\S+)\)/); if (!m) return String(e || ''); const [, mi, hr, dom, , dow] = m; return `${dow !== '?' && dow !== '*' ? 'Semanal (' + dow + ')' : dom !== '*' && dom !== '?' ? 'Mensal (dia ' + dom + ')' : 'Diário'} ${hr.padStart(2, '0')}:${mi.padStart(2, '0')} UTC`; };
+/** Políticas: planos do AWS Backup (regras com agenda e retenção) e políticas do Data Lifecycle Manager. */
+async function backupPlans(creds, regs) {
+  const rows = [];
+  for (const r of regs) {
+    try {
+      for (const p of (await restGet(creds, 'backup', r, '/backup/plans/')).BackupPlansList || []) {
+        const plan = (await restGet(creds, 'backup', r, `/backup/plans/${p.BackupPlanId}/`)).BackupPlan || {};
+        const rules = plan.Rules || [];
+        rows.push({ 'Item': p.BackupPlanName, 'Situação': 'Política ativa', 'Ferramenta': 'Plano do AWS Backup', 'Frequência': rules.map((x) => `${x.RuleName}: ${cronTxt(x.ScheduleExpression)}`).join('; ') || '—',
+          'Retenção': [...new Set(rules.map((x) => (x.Lifecycle && x.Lifecycle.DeleteAfterDays ? x.Lifecycle.DeleteAfterDays + ' dias' : '')).filter(Boolean))].join(' / ') || '—', 'Criado em': '', 'Região': r });
+      }
+    } catch (e) { /* sem AWS Backup na região ou sem permissão backup:ListBackupPlans */ }
+    try {
+      for (const p of (await restGet(creds, 'dlm', r, '/policies')).Policies || [])
+        rows.push({ 'Item': p.Description || p.PolicyId, 'Situação': p.State === 'ENABLED' ? 'Política ativa' : 'Política ' + String(p.State || '').toLowerCase(), 'Ferramenta': 'Data Lifecycle Manager', 'Frequência': p.PolicyType || '—', 'Retenção': '—', 'Criado em': '', 'Região': r });
+    } catch (e) { /* sem DLM ou sem permissão dlm:GetLifecyclePolicies */ }
+  }
+  return rows;
+}
 /** Backup do período: snapshots EBS (manuais, AWS Backup e Data Lifecycle Manager). */
 async function snapshots(creds, regs, p) {
   const rows = [];
@@ -196,7 +225,7 @@ async function snapshots(creds, regs, p) {
       const desc = U.text(s, 'description');
       const how = /AWS Backup/i.test(desc) ? 'AWS Backup (plano)' : tag(s, 'dlm:managed') || /Data Lifecycle/i.test(desc) ? 'Agendado (DLM)' : 'Manual';
       rows.push({ 'Item': tag(s, 'Name') || `${U.text(s, 'volumeId')} (${U.text(s, 'volumeSize')} GiB)`, 'Situação': ST[U.text(s, 'status')] || U.text(s, 'status'), 'Ferramenta': 'Snapshot EBS',
-        'Frequência': how, 'Retenção': '—', 'Teste Restore': '—', 'Criado em': start.slice(0, 10), 'Região': r });
+        'Frequência': how, 'Retenção': '—', 'Criado em': start.slice(0, 10), 'Região': r });
     }
   return rows.sort((a, b) => String(b['Criado em']).localeCompare(a['Criado em']));
 }

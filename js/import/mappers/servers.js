@@ -119,19 +119,24 @@
   function inferRole(all) {
     const t = tokens(all);
     const txt = String(all || '').toLowerCase();
+    // ordem importa: o primeiro que casar vence. Sem pista no nome, fica em branco (melhor do que um palpite errado).
     const rules = [
-      [['ad', 'dc', 'ldap', 'adds', 'domain'], /active.?directory|domain.?controller/, 'Active Directory'],
-      [['db', 'sql', 'mysql', 'oracle', 'ora', 'postgres', 'pg', 'mongo', 'mongodb', 'mariadb', 'rds', 'database', 'banco', 'bd'], null, 'Banco de Dados'],
-      [['web', 'iis', 'apache', 'nginx', 'httpd', 'portal', 'front', 'www'], null, 'Web Server'],
-      [['app', 'api', 'jboss', 'tomcat', 'weblogic', 'wildfly', 'middleware', 'mw', 'srvapp'], null, 'Middleware / App'],
+      [['fw', 'firewall', 'fortigate', 'fortinet', 'paloalto', 'pfsense', 'opnsense', 'checkpoint', 'sophos', 'asa', 'waf'], /palo.?alto|check.?point/, 'Firewall'],
+      [['dc', 'adds', 'ldap', 'domain', 'activedirectory'], /active.?directory|domain.?controller/, 'Active Directory'],
+      [['jump', 'bastion', 'jumpbox', 'jumpserver'], null, 'Jump / Bastion'],
+      [['vpn', 'gateway', 'gw', 'proxy', 'nat', 'lb', 'loadbalancer', 'haproxy', 'f5'], /load.?balancer/, 'Rede / Gateway'],
+      [['oke', 'k8s', 'kube', 'kubernetes', 'aks', 'eks', 'gke', 'wk', 'worker', 'master', 'rancher', 'openshift'], null, 'Kubernetes'],
+      [['db', 'sql', 'mysql', 'oracle', 'ora', 'postgres', 'pg', 'mongo', 'mongodb', 'mariadb', 'rds', 'database', 'banco', 'bd', 'redis', 'exadata'], null, 'Banco de Dados'],
+      [['web', 'iis', 'apache', 'nginx', 'httpd', 'portal', 'front', 'frontend', 'www'], null, 'Web Server'],
+      [['app', 'api', 'jboss', 'tomcat', 'weblogic', 'wildfly', 'middleware', 'mw', 'srvapp', 'java', 'backend'], null, 'Aplicação'],
       [['backup', 'bkp', 'veeam', 'bacula', 'commvault'], null, 'Backup'],
-      [['zabbix', 'grafana', 'prometheus', 'monitor', 'nagios', 'mon'], null, 'Monitoramento'],
-      [['jump', 'bastion', 'vpn', 'gateway', 'gw', 'proxy', 'nat', 'fw', 'firewall'], null, 'Jump / Bastion'],
+      [['zabbix', 'grafana', 'prometheus', 'monitor', 'nagios', 'mon', 'elk', 'kibana', 'splunk'], null, 'Monitoramento'],
       [['file', 'fs', 'nfs', 'smb', 'nas', 'ftp', 'sftp', 'share', 'shares'], null, 'File Server'],
-      [['dns', 'dhcp', 'ntp', 'infra'], null, 'Infraestrutura']
+      [['dns', 'dhcp', 'ntp'], null, 'Infraestrutura'],
+      [['ad'], null, 'Active Directory'] // "ad" sozinho é ambíguo: só vale se nada acima casou (ex.: FW-AD1 é firewall)
     ];
     for (const [words, re, out] of rules) if (hasAny(t, words) || (re && re.test(txt))) return out;
-    return 'Genérico';
+    return '';
   }
   function inferEnv(all) {
     const t = tokens(all);

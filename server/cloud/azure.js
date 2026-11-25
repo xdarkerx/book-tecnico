@@ -50,7 +50,7 @@ async function pull(cfg, kind, opts = {}) {
   const p = period(opts);
   for (const sub of await subscriptions(cfg)) {
     const S = `/subscriptions/${sub}`;
-    if (kind === 'backup') rows.push(...(await backupJobs(cfg, S, p)));
+    if (kind === 'backup') rows.push(...(await backupJobs(cfg, S, p, opts)));
     if (kind === 'servers') {
       const vms = await arm(cfg, `${S}/providers/Microsoft.Compute/virtualMachines?api-version=2024-03-01`);
       const status = await arm(cfg, `${S}/providers/Microsoft.Compute/virtualMachines?api-version=2024-03-01&statusOnly=true`).catch(() => []);
@@ -85,12 +85,23 @@ async function pull(cfg, kind, opts = {}) {
   return [U.sheet(kind, names[kind], rows)];
 }
 
-/** Backup do período: jobs dos cofres do Recovery Services (Azure Backup). */
-async function backupJobs(cfg, S, p) {
+// opts.backupMode: 'jobs' = só backups feitos no período · 'policies' = só políticas/agendamentos · 'both' (padrão)
+const wantJobs = (o) => (o.backupMode || 'both') !== 'policies';
+const wantPolicies = (o) => (o.backupMode || 'both') !== 'jobs';
+/** Backup do período: jobs dos cofres do Recovery Services (Azure Backup) e/ou as políticas dos cofres. */
+async function backupJobs(cfg, S, p, opts = {}) {
   const rows = [];
+  const RET = (r) => (r && r.retentionDuration ? `${r.retentionDuration.count} ${({ Days: 'dias', Weeks: 'semanas', Months: 'meses', Years: 'anos' })[r.retentionDuration.durationType] || r.retentionDuration.durationType}` : '');
   const ST = { Completed: 'OK', CompletedWithWarnings: 'OK com avisos', Failed: 'Falha', InProgress: 'Em andamento', Cancelled: 'Cancelado' };
   const fmt = (d) => d.toISOString().slice(0, 19).replace('T', ' '); // filtro do Azure Backup: "yyyy-mm-dd hh:mm:ss"
   for (const v of await arm(cfg, `${S}/providers/Microsoft.RecoveryServices/vaults?api-version=2023-04-01`).catch(() => [])) {
+    if (wantPolicies(opts)) for (const pol of await arm(cfg, `${v.id}/backupPolicies?api-version=2023-04-01`).catch(() => [])) {
+      const q = pol.properties || {}; const sch = q.schedulePolicy || {}; const ret = q.retentionPolicy || {};
+      const when = sch.scheduleRunFrequency ? `${({ Daily: 'Diário', Weekly: 'Semanal', Hourly: 'De hora em hora' })[sch.scheduleRunFrequency] || sch.scheduleRunFrequency}${(sch.scheduleRunTimes || [])[0] ? ' ' + String(sch.scheduleRunTimes[0]).slice(11, 16) : ''}` : (q.backupManagementType || '—');
+      rows.push({ 'Item': pol.name, 'Situação': 'Política ativa', 'Ferramenta': `Política do Azure Backup (${v.name})`, 'Frequência': when,
+        'Retenção': [RET(ret.dailySchedule), RET(ret.weeklySchedule), RET(ret.monthlySchedule), RET(ret.yearlySchedule)].filter(Boolean).join(' / ') || '—', 'Criado em': '' });
+    }
+    if (!wantJobs(opts)) continue;
     const filter = encodeURIComponent(`startTime eq '${fmt(p.from)}' and endTime eq '${fmt(p.to)}'`);
     let jobs = await arm(cfg, `${v.id}/backupJobs?api-version=2023-04-01&$filter=${filter}`).catch(() => null);
     if (!jobs) jobs = await arm(cfg, `${v.id}/backupJobs?api-version=2023-04-01`).catch(() => []);
@@ -98,7 +109,7 @@ async function backupJobs(cfg, S, p) {
       const q = j.properties || {};
       if (q.startTime && !inPeriod(q.startTime, p)) continue;
       rows.push({ 'Item': q.entityFriendlyName || j.name, 'Situação': ST[q.status] || q.status || '', 'Ferramenta': `Azure Backup (${v.name})`, 'Frequência': q.operation || '',
-        'Retenção': '—', 'Teste Restore': /restore/i.test(q.operation || '') ? 'Sim' : '—', 'Criado em': String(q.startTime || '').slice(0, 10) });
+        'Retenção': '—', 'Teste Restore': /restore/i.test(q.operation || '') ? 'Sim' : '', 'Criado em': String(q.startTime || '').slice(0, 10) });
     }
   }
   return rows;

@@ -54,9 +54,16 @@ async function pull(cfg, kind, opts = {}) {
   const per = period(opts);
   for (const p of projects(cfg)) {
     if (kind === 'backup') {
+      // políticas: agendamentos de snapshot (resource policies)
+      if ((opts.backupMode || 'both') !== 'jobs') for (const rp of aggregated(await get(cfg, `${C}${p}/aggregated/resourcePolicies`), 'resourcePolicies')) {
+        const sp = rp.snapshotSchedulePolicy; if (!sp) continue;
+        const s = sp.schedule || {};
+        const when = s.dailySchedule ? `Diário ${s.dailySchedule.startTime || ''}` : s.hourlySchedule ? `A cada ${s.hourlySchedule.hoursInCycle}h` : s.weeklySchedule ? 'Semanal' : '—';
+        rows.push({ 'Item': rp.name, 'Situação': rp.status === 'READY' ? 'Política ativa' : rp.status, 'Ferramenta': 'Agendamento de snapshot', 'Frequência': when.trim(), 'Retenção': sp.retentionPolicy && sp.retentionPolicy.maxRetentionDays ? sp.retentionPolicy.maxRetentionDays + ' dias' : '—', 'Criado em': '' });
+      }
       // backup do período: snapshots de disco
-      for (const s of (await get(cfg, `${C}${p}/global/snapshots`)).flatMap((x) => x.items || []))
-        if (inPeriod(s.creationTimestamp, per)) rows.push({ 'Item': s.name, 'Situação': s.status === 'READY' ? 'OK' : s.status, 'Ferramenta': 'Snapshot de disco', 'Frequência': s.autoCreated ? 'Agendado (política)' : 'Manual', 'Retenção': '—', 'Teste Restore': '—', 'Criado em': String(s.creationTimestamp).slice(0, 10), 'Projeto': p });
+      if ((opts.backupMode || 'both') !== 'policies') for (const s of (await get(cfg, `${C}${p}/global/snapshots`)).flatMap((x) => x.items || []))
+        if (inPeriod(s.creationTimestamp, per)) rows.push({ 'Item': s.name, 'Situação': s.status === 'READY' ? 'OK' : s.status, 'Ferramenta': 'Snapshot de disco', 'Frequência': s.autoCreated ? 'Agendado (política)' : 'Manual', 'Retenção': '—', 'Criado em': String(s.creationTimestamp).slice(0, 10) });
     }
     if (kind === 'servers' || kind === 'baseline') {
       for (const i of aggregated(await get(cfg, `${C}${p}/aggregated/instances`), 'instances')) {

@@ -66,26 +66,40 @@ assert.deepStrictEqual([B.riskLevelOf('HIGH'), B.riskLevelOf('Média'), B.riskLe
 const exp = defs.score.render({ data: sd }, { target: 'web', state: { meta: { riscosExport: ['critica'] } } });
 assert.ok(exp.includes('API key antiga') && exp.includes('SL_OPEN') && !/Riscos exibidos/.test(exp)); ok('exportação mostra tudo o que está no book (o filtro é só na importação)');
 
-// comparativo mensal, gráficos de risco e o que mostrar
+// Cloud Guard: só a pontuação atual, gráficos de risco e o que mostrar
 const cg = B.scoreFromSheets('oci', [
   { kind: 'score', fields: ['Escopo', 'Pontuação'], rows: [{ Escopo: 'Tenancy', 'Pontuação': '72' }] },
-  { kind: 'score_trend', fields: ['Mês', 'Pontuação'], rows: [{ 'Mês': '2026-09', 'Pontuação': '60' }, { 'Mês': '2026-10', 'Pontuação': '65' }, { 'Mês': '2026-11', 'Pontuação': '72' }] },
+  { kind: 'score_trend', fields: ['Mês', 'Pontuação'], rows: [{ 'Mês': '2026-10', 'Pontuação': '65' }] },
   { kind: 'score_recs', fields: ['Recomendação', 'Risco', 'Problemas', 'Compartimento'], rows: [{ 'Recomendação': 'MFA', Risco: 'Crítica', Problemas: '2', Compartimento: '(raiz)' }, { 'Recomendação': 'Keys', Risco: 'Baixa', Problemas: '9', Compartimento: '(raiz)' }] },
   { kind: 'score_alerts', fields: ['Problema', 'Risco', 'Recurso', 'Tipo', 'Compartimento', 'Detectado em'], rows: [{ Problema: 'BUCKET_PUBLIC', Risco: 'Alta', Recurso: 'b', Tipo: 'Bucket', Compartimento: 'p', 'Detectado em': '2026-11-01' }] }], 'OCI');
-cg.month = '2026-11';
-assert.deepStrictEqual(JSON.parse(JSON.stringify(cg.history.map((x) => [x.label, x.mes, x.value]))), [['OCI · Tenancy', '2026-09', '60'], ['OCI · Tenancy', '2026-10', '65'], ['OCI · Tenancy', '2026-11', '72']]); ok('comparativo: histórico do Cloud Guard vira o histórico do item da tenancy');
-let cgHtml = defs.score.render({ data: cg }, { target: 'web', state: {} });
-assert.ok(/▲ \+7 pts vs out\/26/.test(cgHtml)); ok('comparativo: mostra a variação em relação ao mês anterior (▲ +7 pts vs out/26)');
-assert.ok(/Comparativo mensal da pontuação/.test(cgHtml) && /<svg/.test(cgHtml)); ok('comparativo: gráfico de linha com os meses');
+let cgHtml = defs.score.render({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-10', value: '65' }], month: '2026-11' }) }, { target: 'web', state: {} });
+assert.ok(!cg.history && !/pts vs|Comparativo mensal/.test(cgHtml) && cgHtml.includes('72%')); ok('Cloud Guard: só a pontuação atual (sem comparativo, mesmo com histórico antigo salvo no book)');
 assert.ok(!/por risco/.test(cgHtml)); ok('gráficos de risco: desligados por padrão');
 cg.show = { charts: true };
 cgHtml = defs.score.render({ data: cg }, { target: 'web', state: {} });
-assert.ok(/Recomendações \(Cloud Guard\) por risco/.test(cgHtml) && /Problemas abertos \(Cloud Guard\) por risco/.test(cgHtml)); ok('gráficos de risco: recomendações e problemas por risco quando ligados');
-cg.show = { recs: false, alerts: false, charts: false, history: false };
+assert.ok(/Recomendações \(Cloud Guard\) por risco/.test(cgHtml) && /Problemas abertos \(Cloud Guard\) por risco/.test(cgHtml) && /<svg/.test(cgHtml)); ok('gráficos de risco: recomendações e problemas por risco quando ligados');
+assert.ok(/<img src="data:image\/svg\+xml/.test(defs.score.word({ data: cg }, { target: 'word', state: {} }))); ok('Word: gráficos de risco como imagem');
+cg.show = { recs: false, alerts: false, charts: false };
 cgHtml = defs.score.render({ data: cg }, { target: 'web', state: {} });
-assert.ok(!cgHtml.includes('MFA') && !cgHtml.includes('BUCKET_PUBLIC') && !/pts vs/.test(cgHtml) && cgHtml.includes('72')); ok('ocultar: recomendações, problemas e comparativo somem do book; a pontuação fica');
+assert.ok(!cgHtml.includes('MFA') && !cgHtml.includes('BUCKET_PUBLIC') && cgHtml.includes('72')); ok('ocultar: recomendações e problemas somem do book; a pontuação fica');
 assert.strictEqual(defs.score.isEmpty({ data: Object.assign({}, cg, { items: [] }) }), true); ok('ocultar tudo e sem pontuação: o bloco não aparece no book');
-cg.show = {};
-assert.ok(/pts vs out\/26/.test(defs.score.word({ data: cg }, { target: 'word', state: {} })) && /<img src="data:image\/svg\+xml/.test(defs.score.word({ data: cg }, { target: 'word', state: {} }))); ok('Word: variação e gráfico do comparativo (imagem)');
+
+// mapeadores: CIDR da OCI ("CIDRs") e função dos servidores pelo nome
+BT.importer = { mappers: {} }; BT.data = BT.data || { providers: {} };
+for (const f of ['common', 'network', 'servers']) vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'import', 'mappers', f + '.js'), 'utf8'), { window: { BT } });
+const M = BT.importer.mappers;
+assert.strictEqual(M.network.map({ fields: ['VCN Name', 'CIDRs', 'compartment_path'], rows: [{ 'VCN Name': 'VCN_JUMP', CIDRs: '10.0.0.0/16', compartment_path: 'CAEDU_JUMP' }] }, 'oci')[0].cidr, '10.0.0.0/16'); ok('rede: CIDR da OCI (coluna "CIDRs") preenche a planilha');
+assert.deepStrictEqual(['CIDRs', 'IPAddress', 'privateIpAddress'].map(M._common.normKey), ['cidrs', 'ip address', 'private ip address']); ok('nomes de coluna: plural de sigla ("CIDRs") não é quebrado; camelCase continua');
+const roles = M.servers.map({ fields: ['Display Name'], rows: ['CAEDU-FW-AD1', 'SRV-DC-01', 'SRV-AD-01', 'CAEDU-WK-005', 'CAEDU-ACCESS-OKE', 'CAEDU-PROD-MYSQL', 'CAEDU-IPO-003'].map((n) => ({ 'Display Name': n })) }, 'oci').map((r) => r.role);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(roles)), ['Firewall', 'Active Directory', 'Active Directory', 'Kubernetes', 'Kubernetes', 'Banco de Dados', '']); ok('função: FW com "AD" no nome é Firewall; workers/OKE são Kubernetes; sem pista fica em branco (não "Genérico")');
+
+// planilhas: colunas sem nenhum dado saem do book; linhas com listra
+assert.deepStrictEqual(JSON.parse(JSON.stringify(B.filledColumns([['a', '', '—', 'x'], ['b', '-', ' ', '']], 4))), [0, 3]); ok('colunas só com "", "—" ou "-" saem do book (ex.: Utilizado, Teste Restore)');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(B.filledColumns([['', ''], ['—', '']], 2))), [0, 1]); ok('planilha toda vazia mantém as colunas (não some o cabeçalho)');
+const sec2 = { data: Object.assign({}, B.scoreTables('aws'), { items: [], show: {} }) };
+sec2.data.recs.rows = [['S3.1', 'Bloquear acesso', 'Alta', '', '—'], ['EC2.8', 'IMDSv2', 'Média', '', '—']];
+const h2 = defs.score.render(sec2, { target: 'web', state: {} });
+assert.ok(!/Recursos reprovados|>Região</.test(h2) && /Controle/.test(h2)); ok('Segurança: colunas vazias também saem das recomendações');
+assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state: {} }))); ok('Word: linhas alternadas com a cor da listra');
 
 console.log(`\n${passed} testes do front ok`);

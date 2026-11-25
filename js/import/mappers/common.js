@@ -7,7 +7,7 @@
   function normKey(s) {
     return String(s)
       .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z]{2,})/g, '$1 $2') // "IPAddress" → "IP Address", mas "CIDRs"/"IPs"/"VMs" (plural) ficam inteiros
       .toLowerCase()
       .replace(/[_\-.\/\\:]+/g, ' ')
       .replace(/[()[\]{}<>]/g, ' ')

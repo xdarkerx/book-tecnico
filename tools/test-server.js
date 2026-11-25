@@ -395,6 +395,7 @@ async function main() {
     if (u.pathname.endsWith('/summarizeTrend')) return { items: [{ startTimestamp: Date.UTC(2026, 9, 31) / 1000, durationInSeconds: 86400, securityScore: 70, securityRating: 'FAIR' }, { startTimestamp: Date.UTC(2026, 10, 24) / 1000, durationInSeconds: 86400, securityScore: score || 0, securityRating: 'GOOD' }, { startTimestamp: Date.UTC(2026, 9, 2) / 1000, durationInSeconds: 86400, securityScore: 65, securityRating: 'FAIR' }] };
     if (u.pathname.endsWith('/recommendations')) return { items: [{ name: 'Resolve "User does not have MFA enabled"', riskLevel: 'CRITICAL', problemCount: 2, compartmentId: 'ten' }] };
     if (u.pathname.endsWith('/problems')) return { items: [] };
+    if (u.pathname.endsWith('/volumeBackupPolicies')) return u.search.includes('c1') ? [{ displayName: 'politica-diaria', schedules: [{ period: 'ONE_DAY', hourOfDay: 2, backupType: 'INCREMENTAL', retentionSeconds: 604800 }, { period: 'ONE_WEEK', backupType: 'FULL', retentionSeconds: 2592000 }] }] : [];
     if (u.pathname.endsWith('/bootVolumeBackups')) return u.search.includes('c1') ? [{ displayName: 'srv-db01 boot', lifecycleState: 'AVAILABLE', type: 'INCREMENTAL', sourceType: 'SCHEDULED', timeCreated: '2026-11-10T03:00:00Z', expirationTime: '2026-12-10T03:00:00Z' }, { displayName: 'antigo', lifecycleState: 'AVAILABLE', type: 'FULL', sourceType: 'MANUAL', timeCreated: '2026-09-01T03:00:00Z' }] : [];
     if (u.pathname.endsWith('/volumeBackups')) return u.search.includes('c1') ? [{ displayName: 'vol-dados', lifecycleState: 'FAULTY', type: 'FULL', sourceType: 'MANUAL', timeCreated: '2026-11-20T03:00:00Z' }] : [];
     if (u.pathname.endsWith('/instances')) return u.search.includes('c1') ? [{ id: 'i1', displayName: 'nova', lifecycleState: 'RUNNING', timeCreated: '2026-11-05T10:00:00Z' }, { id: 'i2', displayName: 'antiga', lifecycleState: 'RUNNING', timeCreated: '2025-01-05T10:00:00Z' }] : [];
@@ -402,18 +403,22 @@ async function main() {
   });
   cgMock(0);
   const cg = await require('../server/cloud').pull('oci', ocfg, ['score']);
-  assert.deepStrictEqual([cg.results.map((r) => r.kind), cg.errors.length, /Pontuação do Cloud Guard não veio/.test(cg.errors[0].message)], [['score_trend', 'score_recs', 'score_alerts'], 1, true]); ok('OCI: sem pontuação do Cloud Guard → recomendações entram e a tela avisa o motivo');
+  assert.deepStrictEqual([cg.results.map((r) => r.kind), cg.errors.length, /Pontuação do Cloud Guard não veio/.test(cg.errors[0].message)], [['score_recs', 'score_alerts'], 1, true]); ok('OCI: sem pontuação do Cloud Guard → recomendações entram e a tela avisa o motivo');
   cgMock(87); cgCalls.length = 0;
   const cg2 = await require('../server/cloud').pull('oci', ocfg, ['score']);
   assert.deepStrictEqual([cg2.errors.length, cg2.results[0].rows[0]['Pontuação'], cg2.results[0].rows[0]['Classificação']], [0, '87', 'Boa · risk score 30']); ok('OCI: pontuação do Cloud Guard (POST /securityScores, API 20200131) com o risk score');
   assert.ok(cgCalls.includes('POST /20200131/securityScores') && !cgCalls.some((c) => /securityScoreAggregations/.test(c))); ok('OCI: usa o endereço certo da pontuação (não o antigo securityScoreAggregations)');
-  const trend = cg2.results.find((r) => r.kind === 'score_trend');
-  assert.deepStrictEqual(trend.rows.map((r) => [r['Mês'], r['Pontuação']]), [['2026-10', '70'], ['2026-11', '87']]); ok('OCI: histórico da pontuação vira o último valor de cada mês (comparativo mensal)');
+  assert.ok(!cgCalls.some((c) => /summarizeTrend/.test(c)) && !cg2.results.some((r) => r.kind === 'score_trend')); ok('Cloud Guard: só a pontuação atual (sem histórico/comparativo mensal)');
   // backup só do período, em todas as regiões assinadas (campo Regiões vazio)
   const ociBk = await require('../server/cloud').pull('oci', Object.assign({}, ocfg, { regions: '' }), ['backup'], { from: '2026-11-01', to: '2026-11-30' });
-  const bkRows = ociBk.results[0].rows;
+  const bkRows = ociBk.results[0].rows.filter((r) => r['Situação'] !== 'Política ativa');
   assert.deepStrictEqual([bkRows.length, bkRows.map((r) => r.Item).sort(), bkRows.find((r) => r.Item === 'vol-dados')['Situação'], bkRows.find((r) => r.Item === 'srv-db01 boot')['Retenção'], [...new Set(bkRows.map((r) => r['Região']))].sort()],
     [4, ['srv-db01 boot', 'srv-db01 boot', 'vol-dados', 'vol-dados'], 'Falha', '30 dias', ['sa-saopaulo-1', 'us-ashburn-1']]); ok('OCI: backup só do mês (boot + block volume), situação e retenção, em todas as regiões assinadas');
+  const pol = ociBk.results[0].rows.find((r) => r.Item === 'politica-diaria');
+  assert.deepStrictEqual([pol['Situação'], pol['Frequência'], pol['Retenção'], pol.Compartimento, 'compartment_path' in pol, 'Teste Restore' in pol], ['Política ativa', 'Diário 02h (incremental); Semanal (completo)', '7 dias / 30 dias', 'prod', false, false]); ok('OCI: políticas de backup com agenda e retenção; sem colunas técnicas nem "Teste Restore" vazio');
+  const onlyJobs = (await require('../server/cloud').pull('oci', ocfg, ['backup'], { from: '2026-11-01', to: '2026-11-30', backupMode: 'jobs' })).results[0].rows;
+  const onlyPol = (await require('../server/cloud').pull('oci', ocfg, ['backup'], { from: '2026-11-01', to: '2026-11-30', backupMode: 'policies' })).results[0].rows;
+  assert.deepStrictEqual([onlyJobs.some((r) => r['Situação'] === 'Política ativa'), onlyJobs.length > 0, onlyPol.every((r) => r['Situação'] === 'Política ativa'), onlyPol.length], [false, true, true, 2]); // 1 política × 2 regiões assinadas ok('backup: "só os feitos", "só as políticas" ou os dois');
   // servidores: só os criados no mês
   const ocfg1 = Object.assign({}, ocfg, { regions: 'sa-saopaulo-1' });
   const nw = await require('../server/cloud').pull('oci', ocfg1, ['servers'], { from: '2026-11-01', to: '2026-11-30', newOnly: true });

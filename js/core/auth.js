@@ -18,7 +18,7 @@
     /** Padrões de importação do usuário (Configurações › Usuário › Importação padrão).
      *  Com login: ficam no usuário (qualquer computador). Sem login: neste navegador. */
     importDefaults() {
-      const DEF = { zabbixSeverities: [0, 1, 2, 3, 4, 5], risks: ['critica', 'alta', 'media', 'baixa', 'info'], newOnly: false, zabbixAllHosts: true };
+      const DEF = { zabbixSeverities: [0, 1, 2, 3, 4, 5], risks: ['critica', 'alta', 'media', 'baixa', 'info'], newOnly: false, zabbixAllHosts: true, backupMode: 'both' };
       let d = A.info.user && A.info.user.prefs && A.info.user.prefs.importDefaults;
       if (!d) { try { d = JSON.parse(localStorage.getItem('bt-import-defaults') || 'null'); } catch (e) { d = null; } }
       return Object.assign({}, DEF, d || {});

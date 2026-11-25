@@ -369,6 +369,7 @@ async function savePrefs(req, body = {}) {
     if (Array.isArray(d.risks)) out.risks = [...new Set(d.risks.filter((r) => ['critica', 'alta', 'media', 'baixa', 'info'].includes(r)))];
     if (d.newOnly != null) out.newOnly = !!d.newOnly;
     if (d.zabbixAllHosts != null) out.zabbixAllHosts = !!d.zabbixAllHosts;
+    if (['jobs', 'policies', 'both'].includes(d.backupMode)) out.backupMode = d.backupMode;
     prefs.importDefaults = out;
   }
   await db().kvSet('users', a.user.id, Object.assign({}, a.user, { prefs }));

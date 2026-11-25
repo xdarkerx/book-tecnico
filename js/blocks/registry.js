@@ -50,6 +50,14 @@
     cellText(v) {
       return BT.esc(v).replace(/[^\s<>]{25,}/g, (w) => `<span class="blong">${w}</span>`);
     },
+    /** Índices das colunas com algum dado ('', '—' e '-' contam como vazio). Coluna toda vazia não vai para o book. */
+    filledColumns(rows, n) {
+      const empty = (v) => /^\s*(—|–|-)?\s*$/.test(String(v ?? ''));
+      const keep = [];
+      for (let i = 0; i < n; i++) if (rows.some((r) => !empty(r[i]))) keep.push(i);
+      return keep.length ? keep : [...Array(n).keys()];
+    },
+    ZEBRA: '#ecebf7',
     titleHtml(block, ctx, cls = 'bh2') {
       const t = (block.data.title || '').trim();
       if (!t) return '';
