@@ -99,3 +99,5 @@
 .dk-box{margin-top:12px;padding:12px 14px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)}
 .set-actions{display:flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
 .set-actions > div:first-child{flex:1}
+.dk-alt > summary{cursor:pointer;list-style:revert}
+.dk-alt[open] > summary{margin-bottom:8px}

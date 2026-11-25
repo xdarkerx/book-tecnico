@@ -29,11 +29,11 @@ const site = require('./site');
 const PORT = Number(process.env.PORT) || 5173;
 const HOST = process.env.HOST || '127.0.0.1';
 const ROOT = path.join(__dirname, '..');
-const PUBLIC = ['index.html', 'html', 'css', 'js', 'assets'];
+const PUBLIC = ['index.html', 'html', 'css', 'js', 'assets', 'manifest.webmanifest', 'sw.js'];
 const MAX_BODY = 150 * 1024 * 1024; // books com muitas imagens
 const VERSION = require('../package.json').version;
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 
 // ── helpers ───────────────────────────────────────────────
 /** Cabeçalhos de segurança em todas as respostas. */

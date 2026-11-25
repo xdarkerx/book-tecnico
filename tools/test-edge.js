@@ -205,6 +205,22 @@ async function main() {
   fs.mkdirSync(path.join(DATA, 'desktop'), { recursive: true }); fs.writeFileSync(path.join(DATA, 'desktop', 'BookTecnico-Setup.exe'), 'MZ-instalador-de-teste');
   dl = await call('GET', '/api/desktop/download', undefined, { cookie: bia });
   assert.deepStrictEqual([dl.status, dl.data, /BookTecnico-Setup\.exe/.test(dl.headers.get('content-disposition'))], [200, 'MZ-instalador-de-teste', true]); ok('download do app: instalador em data/desktop tem prioridade (sem internet)');
+  // PWA: manifesto, service worker e ícones públicos (o navegador busca sem a sessão) e com o tipo certo
+  const mf = await fetch(base + '/manifest.webmanifest');
+  const mj = await mf.json();
+  assert.deepStrictEqual([mf.status, /application\/manifest\+json/.test(mf.headers.get('content-type')), mj.display, mj.start_url], [200, true, 'standalone', '/']); ok('PWA: manifesto servido sem login, com o tipo application/manifest+json');
+  for (const i of mj.icons) assert.strictEqual((await fetch(base + '/' + i.src)).status, 200);
+  assert.ok(mj.icons.some((i) => i.sizes === '192x192') && mj.icons.some((i) => i.sizes === '512x512') && mj.icons.some((i) => i.purpose === 'maskable')); ok('PWA: ícones 192, 512 e maskable existem');
+  const swr = await fetch(base + '/sw.js');
+  assert.deepStrictEqual([swr.status, /javascript/.test(swr.headers.get('content-type')), /no-cache|no-store/.test(swr.headers.get('cache-control'))], [200, true, true]); ok('PWA: service worker na raiz, como JavaScript e sem cache (atualiza sozinho)');
+  assert.ok((await (await fetch(base + '/')).text()).includes('manifest.webmanifest')); ok('PWA: a página aponta para o manifesto');
+  const docker = fs.readFileSync(path.join(__dirname, '..', 'Dockerfile'), 'utf8');
+  const copied = docker.split('\n').filter((l) => /^COPY\s/.test(l)).flatMap((l) => l.replace(/^COPY\s+/, '').split(/\s+/).slice(0, -1));
+  const served = (fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8').match(/const PUBLIC = \[([^\]]+)\]/) || [, ''])[1].match(/'([^']+)'/g).map((x) => x.slice(1, -1));
+  assert.deepStrictEqual(served.filter((f) => !copied.includes(f)), []); ok('Dockerfile copia tudo o que o servidor entrega (inclusive manifesto e service worker)');
+  let inGit = null;
+  try { inGit = new Set(require('child_process').execSync('git ls-files', { cwd: path.join(__dirname, '..'), encoding: 'utf8' }).split('\n')); } catch (e) { /* sem git (zip baixado) */ }
+  if (inGit) { for (const f of ['manifest.webmanifest', 'sw.js', 'assets/img/pwa-192.png', 'assets/img/pwa-512.png', 'assets/img/pwa-maskable-512.png']) assert.ok(inGit.has(f), 'fora do Git: ' + f); ok('PWA: arquivos do app instalável estão no Git'); }
   await call('PUT', '/api/site/config', { publicUrl: '', desktopUrl: '' }, { cookie: adm });
   assert.ok(/^http:\/\/127\.0\.0\.1:\d+\/api\/auth\/saml\/acs$/.test((await call('GET', '/api/auth/config', undefined, { cookie: adm })).data.acsUrl)); ok('sem URL externa: SAML volta a usar o endereço do acesso');
 

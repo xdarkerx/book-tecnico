@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Book Técnico — inventCloud</title>
   <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#171C37">
+  <link rel="apple-touch-icon" href="assets/img/pwa-192.png">
   <!--
     Página dividida em partes (pasta html/). Cada marcador "@include" é trocado pelo arquivo:
       • npm run dev        → o servidor monta a página antes de enviar
@@ -13,11 +15,14 @@
   -->
   <!-- ═══ html/head.html — Fontes e folhas de estilo (ordem importa: base → layout → componentes → editor → book) ═══ -->
   <!-- Tema antes de pintar (evita piscar): escolha salva ou preferência do sistema. Lógica: js/ui/theme.js -->
+  <!-- App instalável (PWA): manifesto só no servidor (abrindo o arquivo direto não existe) e o pedido de instalação
+       guardado para o botão de Configurações › App desktop (js/editor/admin-site.js) -->
+  <script>if(/^https?:$/.test(location.protocol)){var m=document.createElement("link");m.rel="manifest";m.href="manifest.webmanifest";document.head.appendChild(m);addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__btInstall=e;dispatchEvent(new Event("bt-installable"))});addEventListener("appinstalled",function(){window.__btInstall=null;window.__btInstalled=true;dispatchEvent(new Event("bt-installable"))});if("serviceWorker"in navigator&&isSecureContext)addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
   <script>try{document.documentElement.dataset.theme=localStorage.getItem("bt-theme")||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark")}catch(e){}</script>
   <!-- Fontes -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Trispace:wght@300;400;600;700&display=swap" rel="stylesheet">
-  
+
   <!-- Base -->
   <link rel="stylesheet" href="css/base/variables.css">
   <link rel="stylesheet" href="css/base/reset.css">

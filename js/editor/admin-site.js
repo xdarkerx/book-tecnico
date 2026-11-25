@@ -1,6 +1,7 @@
 /* ═══ ⚙️ Site: URL externa (Administrador) e download do app desktop (Usuário) ═══
  * Servidor: server/site.js — GET /api/site, GET|PUT /api/site/config, GET /api/desktop/download.
- * App desktop: projeto Tauri em desktop/ (janela própria que abre o endereço do servidor).
+ * App desktop: 1) PWA (manifest.webmanifest + sw.js, instalado pelo Edge/Chrome) — recomendado;
+ *              2) instalador Tauri em desktop/ (janela própria que abre o endereço do servidor).
  */
 (function (BT) {
   const h = BT.h;
@@ -11,25 +12,62 @@
     try { await navigator.clipboard.writeText(text); BT.ui.toast('Copiado ✓', { type: 'ok', ms: 1500 }); } catch (e) { BT.ui.toast('Não foi possível copiar: selecione e copie à mão.', { type: 'err' }); }
   } }, '📋 Copiar');
 
+  /** O app está aberto como app instalado (PWA) e não numa aba do navegador? */
+  const inPwa = () => !!window.__btInstalled || (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches));
+  let listening = false;
+
   /** Usuário › 💻 App desktop */
   async function renderUser() {
     const box = $('set-desktop'); if (!box) return; box.innerHTML = '';
+    if (!listening) { listening = true; addEventListener('bt-installable', () => { if ($('set-desktop') && !$('set-desktop').closest('[hidden]')) renderUser(); }); }
     if (BT.api.mode !== 'server') { box.appendChild(h('div', { class: 'card set-card' }, [h('div', { class: 'subt', style: { marginTop: 0 } }, '💻 App desktop'), h('div', { class: 'set-help' }, 'Disponível quando o app roda no servidor (npm run dev ou container).')])); return; }
     let info = { publicUrl: '', desktop: {} };
     try { info = await BT.api.siteInfo(); } catch (e) { /* usa o endereço atual */ }
     const addr = info.publicUrl || location.origin;
-    const card = h('div', { class: 'card set-card' }, [
-      h('div', { class: 'subt', style: { marginTop: 0 } }, '💻 App desktop'),
-      h('div', { class: 'set-help' }, 'Instale o Book Técnico como aplicativo do Windows: janela própria, ícone no menu Iniciar e na barra de tarefas, sem as abas e a barra do navegador. Os dados continuam no servidor, o app só abre este site.')
+
+    // ── 1) App instalado pelo navegador (PWA) — recomendado ──
+    const pwa = h('div', { class: 'card set-card' }, [
+      h('div', { class: 'subt', style: { marginTop: 0 } }, '📲 Instalar como app (recomendado)'),
+      h('div', { class: 'set-help' }, 'O Edge ou o Chrome instalam o Book Técnico como aplicativo: janela própria, ícone no menu Iniciar e na barra de tarefas, sem abas. Usa o mesmo login do navegador (inclusive o da Microsoft) e se atualiza sozinho com o servidor.')
     ]);
+    if (inPwa()) {
+      pwa.append(h('div', { class: 'dk-box' }, [h('b', {}, '✓ Você está usando o app instalado.'),
+        h('div', { class: 'set-help', style: { margin: '6px 0 0' } }, 'Para desinstalar: no app, menu ⋯ (canto superior direito) › Desinstalar, ou em Configurações do Windows › Aplicativos.')]));
+    } else if (window.__btInstall) {
+      pwa.append(h('div', { class: 'dk-row' }, [
+        h('button', { class: 'btn btn-primary', onclick: async () => {
+          const ev = window.__btInstall; if (!ev) return renderUser();
+          ev.prompt();
+          const r = await ev.userChoice.catch(() => ({}));
+          window.__btInstall = null;
+          if (r.outcome === 'accepted') { window.__btInstalled = true; BT.ui.toast('App instalado ✓ Procure "Book Técnico" no menu Iniciar.', { type: 'ok', ms: 6000 }); }
+          renderUser();
+        } }, '📲 Instalar app'),
+        h('span', { class: 'set-help', style: { margin: 0 } }, 'Edge ou Chrome. Não precisa de instalador nem de administrador.')
+      ]));
+    } else if (!window.isSecureContext) {
+      pwa.append(h('div', { class: 'dk-box' }, [h('b', {}, '🔒 Para instalar como app, o site precisa estar em HTTPS.'),
+        h('div', { class: 'set-help', style: { margin: '6px 0 0' } }, ['Este acesso é por ', h('code', {}, location.origin), '. Peça ao administrador para publicar o Book Técnico com HTTPS (e definir a URL externa), ou use o instalador abaixo.'])]));
+    } else {
+      pwa.append(h('ol', { class: 'dk-steps' }, [
+        h('li', {}, ['No ', h('b', {}, 'Edge'), ': menu ⋯ › Aplicativos › ', h('b', {}, 'Instalar este site como aplicativo'), '.']),
+        h('li', {}, ['No ', h('b', {}, 'Chrome'), ': ícone de instalar na barra de endereço, ou menu ⋮ › Transmitir, salvar e compartilhar › ', h('b', {}, 'Instalar página como app'), '.']),
+        h('li', {}, 'Se a opção não aparecer, o app já pode estar instalado neste computador (procure "Book Técnico" no menu Iniciar).')
+      ]));
+    }
+    box.appendChild(pwa);
+
+    // ── 2) Instalador do Windows (Tauri) — alternativa ──
+    const exe = h('details', { class: 'card set-card dk-alt', open: inDesktop() }, [h('summary', { class: 'subt', style: { marginTop: 0 } }, '💻 Outra opção: instalador para Windows (.exe)')]);
     if (inDesktop()) {
-      card.append(h('div', { class: 'dk-box' }, [h('b', {}, '✓ Você já está usando o app desktop.'),
+      exe.append(h('div', { class: 'dk-box' }, [h('b', {}, '✓ Você está usando o app do instalador.'),
         h('div', { class: 'set-help', style: { margin: '6px 0 0' } }, ['Servidor: ', h('code', {}, location.origin)]),
         h('a', { class: 'btn btn-ghost btn-sm', style: { marginTop: '10px' }, href: 'http://tauri.localhost/index.html?trocar=1' }, '🔁 Trocar de servidor')]));
     } else {
-      card.append(
+      exe.append(
+        h('div', { class: 'set-help' }, 'Útil quando o site não está em HTTPS ou o navegador não permite instalar apps. O login é separado do navegador.'),
         h('div', { class: 'dk-row' }, [
-          h('a', { class: 'btn btn-primary', href: '/api/desktop/download', download: '' }, '⬇ Baixar para Windows'),
+          h('a', { class: 'btn btn-sec', href: '/api/desktop/download', download: '' }, '⬇ Baixar para Windows'),
           h('span', { class: 'set-help', style: { margin: 0 } }, info.desktop.source === 'local' ? `Instalador do servidor: ${info.desktop.file}` : 'Windows 10 ou 11 (64 bits).')
         ]),
         h('ol', { class: 'dk-steps' }, [
@@ -40,7 +78,7 @@
         ]),
         h('div', { class: 'set-help' }, 'Se o Windows mostrar "O Windows protegeu o computador", clique em "Mais informações" › "Executar assim mesmo" (o instalador de teste não é assinado digitalmente).'));
     }
-    box.appendChild(card);
+    box.appendChild(exe);
   }
 
   /** Administrador › 🌐 Site e app desktop */
@@ -77,5 +115,5 @@
   }
 
   BT.editor = BT.editor || {};
-  BT.editor.site = { renderUser, renderAdmin, inDesktop };
+  BT.editor.site = { renderUser, renderAdmin, inDesktop, inPwa };
 })(window.BT);

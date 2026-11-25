@@ -329,11 +329,23 @@ Pelo botão **⚙️** no topo do editor, **⚙️ Configurações** na tela de 
 - **Edição simultânea:** bloqueio do book (abaixo).
 - **Backup**, **Lixeira** e **Logs e auditoria** (abaixo).
 
-### 💻 App desktop (Windows, Tauri)
+### 💻 App desktop
 Uma janela própria para o Book Técnico, com ícone no menu Iniciar e na barra de tarefas e sem as abas do navegador.
-Os dados continuam no servidor: o app só abre o site.
+Os dados continuam no servidor: o app só abre o site. Há duas formas, em ⚙️ Configurações › Usuário › 💻 App desktop:
 
-- **Baixar:** ⚙️ Configurações › Usuário › 💻 App desktop › **⬇ Baixar para Windows**. Na primeira abertura, o app pede o
+**1. Instalar como app pelo navegador (PWA), a recomendada.** Clique em **📲 Instalar app**, ou no Edge: menu ⋯ ›
+Aplicativos › Instalar este site como aplicativo.
+- **Vantagens:** usa o login do navegador (inclusive o da Microsoft, com SSO), se atualiza sozinho com o servidor e
+  não tem instalador.
+- **Requisitos:** Edge ou Chrome, e o site em **HTTPS** (ou `localhost`). Pela rede em `http://` não aparece a opção.
+- **Sem conexão:** se o servidor não responde, o app mostra uma página "Sem conexão com o servidor" em vez do erro do
+  navegador. Nada fica em cache, então o conteúdo vem sempre do servidor.
+- **Arquivos:** `manifest.webmanifest`, `sw.js` e os ícones `assets/img/pwa-*.png`.
+
+**2. Instalador para Windows (Tauri), a alternativa.** Para quando o site não está em HTTPS ou o navegador não
+permite instalar apps.
+
+- **Baixar:** ⚙️ Configurações › Usuário › 💻 App desktop › Outra opção › **⬇ Baixar para Windows**. Na primeira abertura, o app pede o
   endereço do servidor, que aparece na mesma tela com o botão Copiar. Depois ele abre direto. Para trocar, use
   **🔁 Trocar de servidor** na mesma tela, dentro do app.
 - **De onde vem o instalador**, em ordem:

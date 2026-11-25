@@ -14,7 +14,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY server ./server
 COPY tools ./tools
-COPY index.html book-tecnico.html ./
+COPY index.html book-tecnico.html manifest.webmanifest sw.js ./
 COPY html ./html
 COPY css ./css
 COPY js ./js
