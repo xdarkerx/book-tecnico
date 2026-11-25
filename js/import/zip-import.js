@@ -50,7 +50,9 @@
   /** Encontra a seção de destino pelos tokens do caminho. */
   function matchSection(T, tokens, provider) {
     const pool = provider ? allSections(T).filter((x) => x.group.provider === provider) : [];
-    const everywhere = allSections(T);
+    // arquivo de uma cloud nunca cai no menu de OUTRA cloud (ex.: azure/geral.csv no Geral da AWS)
+    const cloud = provider && !BT.data.providers[provider]?.tool && provider !== 'generic';
+    const everywhere = allSections(T).filter((x) => !cloud || !x.group.provider || x.group.provider === provider);
     const alias = ALIASES.find((a) => tokens.some((t) => a.words.includes(t)));
     const words = (x) => norm(x.section.title).split(/[^a-z0-9]+/);
     const byTitle = (list, title) => list.find((x) => norm(x.section.title) === title) || list.find((x) => norm(x.section.title).includes(title))
@@ -410,8 +412,10 @@
           if (it.kind === 'blocks') {
             // substitui os blocos da mesma origem (ex.: sincronização anterior do Zabbix) na mesma posição
             const sec = sectionFor(it); touched.add(sec.id);
-            let at = sec.blocks.findIndex((b) => b.data && b.data.origin === it.origin);
-            sec.blocks = sec.blocks.filter((b) => !(b.data && b.data.origin === it.origin) && !(it.replaceEmptyType && b.type === it.replaceEmptyType && BT.blocks.isEmpty(b)));
+            // score: ZIP e API se substituem (origens "score-…"); um bloco feito à mão (sem origem) fica
+            const same = (b) => b.data && b.data.origin && (b.data.origin === it.origin || (/^score-/.test(it.origin) && b.type === 'score' && /^score-/.test(b.data.origin)));
+            let at = sec.blocks.findIndex(same);
+            sec.blocks = sec.blocks.filter((b) => !same(b) && !(it.replaceEmptyType && b.type === it.replaceEmptyType && BT.blocks.isEmpty(b)));
             if (at < 0 || at > sec.blocks.length) at = 0;
             const fresh = it.blocks.map((b) => Object.assign(BT.core.utils.clone(b), { id: BT.uid('blk'), include: true }));
             fresh.forEach((b) => (b.data.origin = it.origin));
