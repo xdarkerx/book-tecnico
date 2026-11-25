@@ -134,4 +134,22 @@ async function pull(cfg, kind) {
   return [U.sheet(kind, names[kind], rows)];
 }
 
-module.exports = { label: 'Oracle Cloud Infrastructure', test, pull, config, _call: call };
+/** Tenancy: nome, OCID, região principal e regiões assinadas. */
+async function tenant(cfg) {
+  const c = config(cfg);
+  const id = `https://identity.${c.region}.oraclecloud.com/20160918`;
+  const t = (await call(c, 'GET', `${id}/tenancies/${c.tenancy}`)).data || {};
+  const subs = (await call(c, 'GET', `${id}/tenancies/${c.tenancy}/regionSubscriptions`)).data || [];
+  const home = (subs.find((s) => s.isHomeRegion) || {}).regionName || c.region;
+  return [U.sheet('tenant', 'Tenancy OCI (API)', [{ 'Nome': t.name || '', 'ID': c.tenancy, 'Região principal': home, 'Regiões': subs.map((s) => s.regionName).join(', '), 'Detalhes': t.description || '' }])];
+}
+/** Cloud Guard: pontuação de segurança da tenancy (0–100). */
+async function score(cfg) {
+  const c = config(cfg);
+  const r = await call(c, 'GET', `https://cloudguard-cp-api.${c.region}.oci.oraclecloud.com/20200131/securityScoreAggregations?compartmentId=${c.tenancy}`);
+  const it = (r.data?.items || [])[0];
+  if (!it) throw new Error('Cloud Guard sem pontuação: confirme que o Cloud Guard está habilitado e a política permite "read cloud-guard-family".');
+  return [U.sheet('score', 'Cloud Guard (API)', [{ 'Fonte': 'OCI Cloud Guard', 'Escopo': 'Tenancy', 'Pontuação': it.securityScore, 'Máximo': 100, 'Classificação': it.securityRating || '' }])];
+}
+
+module.exports = { label: 'Oracle Cloud Infrastructure', test, pull, tenant, score, config, _call: call };

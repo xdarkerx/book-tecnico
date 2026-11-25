@@ -227,6 +227,21 @@ e o book ganha um menu por conta (ex.: "AWS · PRD" e "AWS · HML"), também lis
 | Azure | service principal (tenant, client id, secret) | role **Reader** nas assinaturas |
 | GCP | JSON de conta de serviço | `roles/viewer` |
 
+#### Informações do tenant e Cloud Security Score
+Na sincronização, marque **🏢 Tenant** e/ou **🛡️ Security Score**.
+
+| Cloud | 🏢 Tenant (Visão Geral › Informações do Tenant) | 🛡️ Security Score (bloco na Segurança de cada cloud/conta) | Permissão extra |
+|---|---|---|---|
+| OCI | nome e OCID da tenancy, região principal e regiões assinadas | **Cloud Guard** (0–100) | `read cloud-guard-family` |
+| AWS | ID da conta, alias, regiões, ARN | **Security Hub**: % de controles aprovados por região | `securityhub:GetFindings`, `iam:ListAccountAliases` |
+| Azure | assinaturas (nome, ID, estado) e nome do tenant | **Defender for Cloud Secure Score** por assinatura | role Reader (ou Security Reader) |
+| GCP | projetos (nome, ID, número, organização/pasta) | não há score nativo: preencha à mão ou pelo ZIP | — |
+
+As informações de todas as clouds e contas vão para **uma** planilha em **Visão Geral › Informações do Tenant**.
+O **Cloud Security Score** também é um bloco da paleta: dá para adicioná-lo em qualquer seção e preencher à mão.
+Cada pontuação mostra o percentual, uma barra colorida (≥ 80% bom, ≥ 60% atenção, abaixo disso crítico), a fonte e um detalhe.
+Sincronizar de novo atualiza o bloco, sem duplicar.
+
 #### Zabbix e GLPI (monitoramento e chamados)
 Configure-os nas mesmas **Conexões** do cliente. A sincronização usa o **período do book** (do primeiro ao
 último dia do mês), que pode ser ajustado.
@@ -260,6 +275,8 @@ Use **Criar a partir de ZIP** em "Novo book" (cria um book novo) ou **☁️ Dad
 | `logo.png` (na raiz) | logo do cliente na capa |
 | `oci/servidores.csv`, `aws/storage.xlsx`, `azure/redes.csv`, `vmware/rvtools.xlsx`, `oci/baseline.csv` | a pasta indica o provedor e o nome indica a seção; exports nativos são reconhecidos |
 | `operacoes/incidentes.csv`, `book/equipe.csv` … | seções que casam pelo nome |
+| `tenant.csv` (ou `visao-geral/informacoes-do-tenant.csv`) | **Visão Geral › Informações do Tenant** (colunas Cloud, Conta, Nome, ID, Região principal, Regiões, Detalhes) |
+| `aws/security-score.csv` (qualquer arquivo com `score` no nome) | bloco **Cloud Security Score** na Segurança daquela cloud. Colunas: `Conta`, `Pontuação` (0–100, ou com `Máximo`), `Fonte`, `Detalhe` |
 | `oci/networking/topologia.png` | imagens na seção indicada pelas pastas |
 | `book/objetivo.txt` / `.md` | texto da seção |
 | `*.book.json` | projeto completo usado como base |

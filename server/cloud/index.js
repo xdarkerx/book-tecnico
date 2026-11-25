@@ -6,7 +6,9 @@
  */
 const connectors = { oci: require('./oci'), aws: require('./aws'), azure: require('./azure'), gcp: require('./gcp'), zabbix: require('./zabbix'), glpi: require('./glpi') };
 const TOOLS = ['zabbix', 'glpi']; // monitoramento / chamados: um único "tipo" de dado, com período
-const ALL = ['servers', 'storage', 'network', 'baseline'];
+const ALL = ['servers', 'storage', 'network', 'baseline', 'tenant', 'score'];
+// tenant = dados da conta/tenancy/assinatura; score = Cloud Security Score (Cloud Guard, Security Hub, Defender)
+const EXTRA = { tenant: 'tenant', score: 'score' };
 
 module.exports = {
   list: () => Object.keys(connectors),
@@ -28,7 +30,12 @@ module.exports = {
     const want = (kinds && kinds.length ? kinds : ALL).filter((k) => ALL.includes(k));
     const results = []; const errors = [];
     for (const kind of want) {
-      try { results.push(...(await c.pull(cfg, kind))); }
+      try {
+        if (EXTRA[kind]) {
+          if (!c[EXTRA[kind]]) throw new Error(kind === 'score' ? 'Este provedor não tem um Security Score nativo pela API: preencha no bloco ou importe pelo ZIP (arquivo com "score" no nome).' : 'Informações de tenant indisponíveis para este provedor.');
+          results.push(...(await c[EXTRA[kind]](cfg)));
+        } else results.push(...(await c.pull(cfg, kind)));
+      }
       catch (e) { console.error(`[${provider}/${kind}]`, e.message); errors.push({ kind, message: e.message }); }
     }
     return { provider, pulledAt: Date.now(), results, errors };

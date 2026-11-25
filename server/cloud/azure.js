@@ -81,4 +81,27 @@ async function pull(cfg, kind) {
   return [U.sheet(kind, names[kind], rows)];
 }
 
-module.exports = { label: 'Microsoft Azure', test, pull };
+/** Tenant e assinaturas: nome, IDs, estado. */
+async function tenant(cfg) {
+  const tenants = await arm(cfg, '/tenants?api-version=2022-12-01').catch(() => []);
+  const t = tenants.find((x) => x.tenantId === cfg.tenantId) || tenants[0] || {};
+  const tName = t.displayName || t.defaultDomain || cfg.tenantId;
+  const want = new Set(U.list(cfg.subscriptionIds || cfg.subscriptionId));
+  const subs = (await arm(cfg, '/subscriptions?api-version=2022-12-01')).filter((s) => !want.size || want.has(s.subscriptionId));
+  return [U.sheet('tenant', 'Tenant Azure (API)', subs.map((s) => ({ 'Nome': s.displayName, 'ID': s.subscriptionId, 'Região principal': '', 'Regiões': '', 'Detalhes': `Tenant ${tName} (${cfg.tenantId}) · ${s.state || ''}` })))];
+}
+/** Microsoft Defender for Cloud: Secure Score de cada assinatura. */
+async function score(cfg) {
+  const rows = [];
+  for (const sub of await subscriptions(cfg)) {
+    const list = await arm(cfg, `/subscriptions/${sub}/providers/Microsoft.Security/secureScores?api-version=2020-01-01`).catch(() => []);
+    const s = list.find((x) => x.name === 'ascScore') || list[0];
+    if (!s || !s.properties || !s.properties.score) continue;
+    const sc = s.properties.score;
+    rows.push({ 'Fonte': 'Microsoft Defender for Cloud', 'Escopo': s.properties.displayName && s.properties.displayName !== 'ASC score' ? s.properties.displayName : sub, 'Pontuação': Math.round((sc.percentage != null ? sc.percentage : sc.current / (sc.max || 1)) * 100), 'Máximo': 100, 'Classificação': `${sc.current} de ${sc.max} pontos` });
+  }
+  if (!rows.length) throw new Error('Secure Score indisponível: confirme o Defender for Cloud nas assinaturas e a role Reader / Security Reader.');
+  return [U.sheet('score', 'Defender Secure Score (API)', rows)];
+}
+
+module.exports = { label: 'Microsoft Azure', test, pull, tenant, score };

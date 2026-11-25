@@ -33,6 +33,7 @@
     { title: 'storage', words: ['storage', 'buckets', 'bucket', 'volumes', 'discos', 'disks', 'datastores', 's3'], mapper: 'storage' },
     { title: 'baseline geral', words: ['baseline', 'recursos', 'resources', 'allresources', 'inventario'], mapper: 'baseline' },
     { title: 'backup', words: ['backup', 'backups'], mapper: 'raw' },
+    { title: 'informacoes do tenant', words: ['tenant', 'tenants', 'tenancy', 'tenancies', 'assinaturas', 'subscriptions'], mapper: 'raw', global: true },
     { title: 'seguranca', words: ['seguranca', 'security', 'nsg', 'firewall'], mapper: 'raw' },
     { title: 'objetivo', words: ['objetivo', 'introducao', 'escopo'], mapper: 'raw' }
   ];
@@ -55,7 +56,7 @@
     const byTitle = (list, title) => list.find((x) => norm(x.section.title) === title) || list.find((x) => norm(x.section.title).includes(title))
       || (alias ? list.find((x) => words(x).some((w) => alias.words.includes(w))) : null);
     if (alias) {
-      const hit = byTitle(pool, alias.title) || (!provider || alias.title === 'baseline geral' ? byTitle(everywhere, alias.title) : null);
+      const hit = byTitle(pool, alias.title) || (!provider || alias.global || alias.title === 'baseline geral' ? byTitle(everywhere, alias.title) : null);
       if (hit) return { hit, alias };
     }
     const sig = (x) => norm(x.section.title).split(/[^a-z0-9]+/).filter((w) => w.length > 2);
@@ -91,6 +92,12 @@
           it.kind = 'data';
           it.parsed = await BT.importer.readFile(await e.file());
         }
+        if (it.kind === 'data' && tokens.some((t) => /score/.test(t))) {
+          const sh = it.parsed.sheets[0];
+          const sc = BT.blocks.scoreItemsFromSheet(sh, BT.data.providers[it.provider]?.label || '');
+          if (!sc.length) throw new Error('Planilha de score sem coluna de pontuação (use "Pontuação" ou "Score").');
+          Object.assign(it, { kind: 'blocks', destTitle: 'Segurança', origin: 'score-zip-' + (it.provider || 'geral'), replaceEmptyType: 'score', blocks: [{ type: 'score', data: { title: 'Cloud Security Score', items: sc, note: '' } }] });
+        }
       } catch (err) { it.kind = 'error'; it.include = false; it.note = err.message; }
       if (it.kind !== 'ignore') items.push(it);
     }
@@ -107,7 +114,9 @@
 
   function plan(it, T, keepDest) {
     if (it.destTitle && !keepDest) {
-      const hit = byDestTitle(T, it.destTitle);
+      const cloudP = it.provider && !it.global && !BT.data.providers[it.provider]?.tool && it.provider !== 'generic';
+      const scoped = cloudP ? { groups: T.groups.filter((g) => g.provider === it.provider && (g.account || '') === (it.account || '')) } : null;
+      const hit = scoped ? byDestTitle(scoped, it.destTitle) : byDestTitle(T, it.destTitle);
       it.dest = hit ? hit.section.id : '__new__';
       it.newTitle = hit ? '' : (it.newTitleHint || it.destTitle);
       if (it.kind === 'data') {
@@ -127,6 +136,8 @@
         const { hit, alias } = matchSection(scope, it.tokens, it.provider);
         it.dest = hit ? hit.section.id : '__new__';
         it.newTitle = hit ? '' : prettify(it.entry.name);
+        // tenant: seção própria na Visão Geral (vale para todas as clouds)
+        if (alias && alias.global) { it.global = true; it.groupHint = 'visao geral'; if (!hit) it.newTitle = 'Informações do Tenant'; }
         it.mapper = alias && alias.mapper !== 'raw' ? alias.mapper : BT.importer.detect.kind(p.sheets[0].fields, p.sheets.map((s) => s.name));
         // cabeçalhos iguais aos da planilha de destino → mantém colunas como estão
         const table = hit && hit.section.blocks.find((b) => b.type === 'table');
@@ -303,7 +314,7 @@
         if (it.dest !== '__new__') return findSec(T, it.dest).section;
         const key = (it.provider || '') + '|' + (it.account || '') + '|' + it.newTitle;
         if (newSections[key]) return newSections[key];
-        const cloudP = it.provider && !BT.data.providers[it.provider]?.tool;
+        const cloudP = it.provider && !it.global && it.provider !== 'generic' && !BT.data.providers[it.provider]?.tool;
         let g = cloudP ? T.groups.find((x) => x.provider === it.provider && (x.account || '') === (it.account || '')) : null;
         if (!g && it.groupHint) g = T.groups.find((x) => norm(x.title).includes(norm(it.groupHint)));
         if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: p.label + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true }); T.groups.push(g); }
@@ -470,7 +481,8 @@
         if (t && !(g.provider && /servidores|storage|networking/i.test(s.title))) files.push({ path: `${folder}/${slug(s.title)}.csv`, content: csv(t.data.columns) });
         if (s.blocks.some((b) => b.type === 'image')) files.push({ path: `${folder}/${slug(s.title)}/COLOQUE-IMAGENS-AQUI.txt`, content: `Imagens (PNG/JPG) colocadas nesta pasta vão para a seção "${s.title}" do menu "${g.title}".` });
       });
-      if (g.provider) files.push({ path: `${folder}/COLOQUE-EXPORTS-AQUI.txt`, content: `Coloque aqui os exports de ${BT.data.providers[g.provider].display} com estes nomes:\n  servidores.csv/.xlsx  → inventário de VMs/instâncias\n  storage.csv           → buckets, volumes, discos\n  redes.csv             → ${g.provider === 'oci' ? 'VCNs' : g.provider === 'azure' ? 'VNets' : 'VPCs/redes'}\n  baseline.csv          → todos os recursos (contagem por tipo)\n  backup.csv, seguranca.csv → planilhas no formato das colunas do book\nO conteúdo é detectado automaticamente; os nomes só indicam o destino.` });
+      if (g.provider && g.provider !== 'vmware') files.push({ path: `${folder}/security-score.csv`, content: csv(['Conta', 'Pontuação', 'Fonte', 'Detalhe']) });
+      if (g.provider) files.push({ path: `${folder}/COLOQUE-EXPORTS-AQUI.txt`, content: `Coloque aqui os exports de ${BT.data.providers[g.provider].display} com estes nomes:\n  servidores.csv/.xlsx  → inventário de VMs/instâncias\n  storage.csv           → buckets, volumes, discos\n  redes.csv             → ${g.provider === 'oci' ? 'VCNs' : g.provider === 'azure' ? 'VNets' : 'VPCs/redes'}\n  baseline.csv          → todos os recursos (contagem por tipo)\n  backup.csv, seguranca.csv → planilhas no formato das colunas do book\n  security-score.csv    → Cloud Security Score (Conta; Pontuação 0–100; Fonte; Detalhe)\nO conteúdo é detectado automaticamente; os nomes só indicam o destino.` });
     });
     files.push({ path: 'book/objetivo.txt', content: 'Apresentar a visão técnica e operacional do ambiente do cliente, consolidando inventário, topologia, segurança, incidentes e recomendações técnicas.' });
     files.push({ path: 'LEIA-ME.txt', content: [

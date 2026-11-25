@@ -48,8 +48,9 @@ const regions = (cfg) => { const r = U.list(cfg.regions); return r.length ? r : 
 
 /** Chamada da Query API (EC2/STS): POST form-urlencoded, resposta XML. Pagina por NextToken. */
 async function query(creds, service, region, action, params = {}, version = '2016-11-15') {
-  const host = service === 'sts' ? 'sts.amazonaws.com' : `${service}.${region}.amazonaws.com`;
-  const signRegion = service === 'sts' ? 'us-east-1' : region;
+  const global = service === 'sts' || service === 'iam';
+  const host = global ? `${service}.amazonaws.com` : `${service}.${region}.amazonaws.com`;
+  const signRegion = global ? 'us-east-1' : region;
   const pages = []; let token = null;
   do {
     const p = Object.assign({ Action: action, Version: version }, params, token ? { NextToken: token } : {});
@@ -128,4 +129,38 @@ async function pull(cfg, kind) {
   return [];
 }
 
-module.exports = { label: 'Amazon Web Services', test, pull, sign };
+/** Conta: ID, alias e regiões consultadas. */
+async function tenant(cfg) {
+  const creds = credentials(cfg);
+  const [xml] = await query(creds, 'sts', 'us-east-1', 'GetCallerIdentity', {}, '2011-06-15');
+  let alias = '';
+  try { const [ax] = await query(creds, 'iam', 'us-east-1', 'ListAccountAliases', {}, '2010-05-08'); alias = U.text(U.find(ax, 'member')[0] || { text: '' }); } catch (e) { /* sem iam:ListAccountAliases */ }
+  const regs = regions(cfg);
+  return [U.sheet('tenant', 'Conta AWS (API)', [{ 'Nome': alias || U.text(U.find(xml, 'Account')[0]), 'ID': U.text(U.find(xml, 'Account')[0]), 'Região principal': regs[0], 'Regiões': regs.join(', '), 'Detalhes': U.text(U.find(xml, 'Arn')[0]) }])];
+}
+/** Security Hub: % de controles aprovados (mesma conta do console: aprovados ÷ aprovados + reprovados). */
+async function score(cfg) {
+  const creds = credentials(cfg);
+  const out = [];
+  for (const r of regions(cfg)) {
+    const status = {}; let token; let n = 0;
+    do {
+      const body = JSON.stringify(Object.assign({ MaxResults: 100, Filters: { ProductName: [{ Value: 'Security Hub', Comparison: 'EQUALS' }], RecordState: [{ Value: 'ACTIVE', Comparison: 'EQUALS' }], WorkflowStatus: [{ Value: 'SUPPRESSED', Comparison: 'NOT_EQUALS' }] } }, token ? { NextToken: token } : {}));
+      const host = `securityhub.${r}.amazonaws.com`;
+      const { headers } = sign({ method: 'POST', host, region: r, service: 'securityhub', path: '/findings', body, headers: { 'content-type': 'application/json' }, creds });
+      const j = await (await U.request(`https://${host}/findings`, { method: 'POST', headers, body })).json();
+      for (const f of j.Findings || []) {
+        const id = (f.Compliance && f.Compliance.SecurityControlId) || f.GeneratorId; const st = f.Compliance && f.Compliance.Status;
+        if (!id || !st) continue;
+        if (st === 'FAILED') status[id] = 'FAILED'; else if (st === 'PASSED' && !status[id]) status[id] = 'PASSED';
+      }
+      token = j.NextToken;
+    } while (token && ++n < 100);
+    const v = Object.values(status); const ok = v.filter((x) => x === 'PASSED').length;
+    if (v.length) out.push({ 'Fonte': 'AWS Security Hub', 'Escopo': r, 'Pontuação': Math.round((ok / v.length) * 100), 'Máximo': 100, 'Classificação': `${ok} de ${v.length} controles aprovados` });
+  }
+  if (!out.length) throw new Error('Security Hub sem controles avaliados nas regiões informadas (habilite o Security Hub e um padrão, ex.: AWS Foundational Security Best Practices).');
+  return [U.sheet('score', 'Security Hub (API)', out)];
+}
+
+module.exports = { label: 'Amazon Web Services', test, pull, tenant, score, sign };

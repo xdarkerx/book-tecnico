@@ -466,6 +466,37 @@ async function main() {
   const v = aws.sign({ method: 'GET', host: 'example.amazonaws.com', region: 'us-east-1', service: 'service', creds: { accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY' }, date: new Date('2015-08-30T12:36:00Z') });
   assert.strictEqual(v.signature, '5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31'); ok('SigV4 confere com o vetor oficial da AWS');
 
+  // Tenant e Security Score
+  mock((url, o) => {
+    const body = String(o.body || '');
+    if (body.includes('GetCallerIdentity')) return '<GetCallerIdentityResponse><GetCallerIdentityResult><Account>111122223333</Account><Arn>arn:aws:iam::111122223333:user/book</Arn></GetCallerIdentityResult></GetCallerIdentityResponse>';
+    if (body.includes('ListAccountAliases')) return '<ListAccountAliasesResponse><ListAccountAliasesResult><AccountAliases><member>cliente-prd</member></AccountAliases></ListAccountAliasesResult></ListAccountAliasesResponse>';
+    if (url.endsWith('/findings')) return { Findings: [
+      { Compliance: { SecurityControlId: 'EC2.1', Status: 'PASSED' } }, { Compliance: { SecurityControlId: 'EC2.1', Status: 'FAILED' } },
+      { Compliance: { SecurityControlId: 'S3.1', Status: 'PASSED' } }, { Compliance: { SecurityControlId: 'IAM.1', Status: 'PASSED' } }, { Compliance: { SecurityControlId: 'IAM.2', Status: 'PASSED' } }] };
+    return '<x/>';
+  });
+  const [ten] = await aws.tenant({ accessKeyId: 'AK', secretAccessKey: 'S', regions: 'sa-east-1' });
+  assert.deepStrictEqual([ten.kind, ten.rows[0].Nome, ten.rows[0].ID], ['tenant', 'cliente-prd', '111122223333']); ok('AWS tenant: ID da conta e alias');
+  const [sc] = await aws.score({ accessKeyId: 'AK', secretAccessKey: 'S', regions: 'sa-east-1' });
+  assert.deepStrictEqual([sc.kind, sc.rows[0]['Pontuação'], sc.rows[0]['Classificação']], ['score', '75', '3 de 4 controles aprovados']); ok('AWS Security Hub: controle com qualquer falha conta como reprovado (3/4 = 75%)');
+  mock((url) => {
+    if (url.includes('oauth2')) return { access_token: 'T', expires_in: 3600 };
+    if (url.includes('/tenants?')) return { value: [{ tenantId: 'ten-1', displayName: 'Cliente SA' }] };
+    if (url.includes('/subscriptions?')) return { value: [{ subscriptionId: 'sub-1', displayName: 'Produção', state: 'Enabled' }] };
+    if (url.includes('secureScores')) return { value: [{ name: 'ascScore', properties: { displayName: 'ASC score', score: { current: 31.5, max: 45, percentage: 0.7 } } }] };
+    return { value: [] };
+  });
+  const azure2 = require('../server/cloud/azure');
+  const azCfg = { tenantId: 'ten-1', clientId: 'c', clientSecret: 's' };
+  const [azt] = await azure2.tenant(azCfg);
+  assert.deepStrictEqual([azt.rows[0].Nome, azt.rows[0].ID, /Cliente SA/.test(azt.rows[0].Detalhes)], ['Produção', 'sub-1', true]); ok('Azure tenant: assinaturas com nome do tenant');
+  const [azs] = await azure2.score(azCfg);
+  assert.deepStrictEqual([azs.rows[0]['Pontuação'], azs.rows[0].Escopo], ['70', 'sub-1']); ok('Azure Defender Secure Score em %');
+  const cloudIdx = require('../server/cloud');
+  const g = await cloudIdx.pull('gcp', { projectIds: 'p1', serviceAccountJson: '{}' }, ['score']);
+  assert.ok(g.errors[0] && /Security Score nativo/.test(g.errors[0].message)); ok('GCP sem score nativo: erro explicativo, sem quebrar a sincronização');
+
   global.fetch = realFetch;
   console.log(`\n${passed} testes ok`);
 }

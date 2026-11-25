@@ -11,7 +11,7 @@
 (function (BT) {
   const h = BT.h;
   const P = () => BT.data.providers;
-  const KINDS = [['servers', '🖥️ Servidores', 'servidores'], ['storage', '💾 Storage', 'storage'], ['network', '🌐 Redes', 'networking'], ['baseline', '📦 Baseline', 'baseline']];
+  const KINDS = [['servers', '🖥️ Servidores', 'servidores'], ['storage', '💾 Storage', 'storage'], ['network', '🌐 Redes', 'networking'], ['baseline', '📦 Baseline', 'baseline'], ['tenant', '🏢 Tenant', 'tenant'], ['score', '🛡️ Security Score', 'score']];
   const ORDER = ['oci', 'aws', 'azure', 'gcp', 'zabbix', 'glpi'];
 
   const FORMS = {
@@ -243,7 +243,7 @@
     }
     const selP = new Set(opts.providers && opts.providers.length ? configured.filter((k) => opts.providers.includes(k) || opts.providers.includes(typeOf(k))) : configured);
     const byTpl = { network: ['network'], backup: ['storage'] };
-    const selK = new Set(opts.kinds || byTpl[BT.store.state.template] || ['servers', 'storage', 'network', 'baseline']);
+    const selK = new Set(opts.kinds || byTpl[BT.store.state.template] || ['servers', 'storage', 'network', 'baseline', 'tenant', 'score']);
     // período padrão = mês do book
     const y = Number(key.ano), mo = Number(key.mes);
     const pad = (n) => String(n).padStart(2, '0');
@@ -257,7 +257,7 @@
     };
     const go = async () => {
       btn.disabled = true;
-      const items = []; const errors = [];
+      const items = []; const errors = []; const tenantRows = [];
       for (const k of configured.filter((x) => selP.has(x))) {
         const p = typeOf(k); const label = labelOf(k);
         const account = multiOf(p) ? accName(provs, k) : '';
@@ -267,11 +267,24 @@
           r.errors.forEach((e) => errors.push(`${label}${e.kind !== p ? '/' + e.kind : ''}: ${e.message}`));
           if (P()[p].tool) r.results.forEach((res) => items.push(...toolItems(p, res).map((it) => (account ? Object.assign(it, { path: it.path.replace(P()[p].label, label) }) : it))));
           else r.results.forEach((sh) => {
+            if (sh.kind === 'tenant') { sh.rows.forEach((row) => tenantRows.push(Object.assign({ 'Cloud': P()[p].label, 'Conta': account || accName(provs, k) }, row))); return; }
+            if (sh.kind === 'score') {
+              const sc = BT.blocks.scoreItemsFromSheet(sh, label);
+              if (sc.length) items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, path: `${label} · ${sh.name}`, destTitle: 'Segurança', origin: 'score-' + k, replaceEmptyType: 'score', entry: { name: 'Security Score' },
+                blocks: [{ type: 'score', data: { title: 'Cloud Security Score', items: sc, note: '' } }], dest: '', newTitle: '', how: 'new', note: '' });
+              return;
+            }
             const kind = KINDS.find((x) => x[0] === sh.kind);
             items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, path: `${label} · ${sh.name}`, tokens: [p, kind[2]], entry: { name: kind[1].replace(/^\S+\s/, ''), path: '' },
               parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
           });
         } catch (e) { errors.push(`${label}: ${e.message}`); }
+      }
+      if (tenantRows.length) {
+        const fields = [...new Set(tenantRows.flatMap((r) => Object.keys(r)))];
+        items.unshift({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: 'generic', global: true, path: 'Informações do Tenant (todas as contas)', tokens: ['tenant'], entry: { name: 'Informações do Tenant', path: '' },
+          destTitle: 'Informações do Tenant', newTitleHint: 'Informações do Tenant', forceMapper: 'raw', groupHint: 'visao geral',
+          parsed: { name: 'Tenant', sheets: [{ name: 'Tenant', fields, rows: tenantRows.map((r) => Object.fromEntries(fields.map((f) => [f, r[f] || '']))), aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
       }
       m.close();
       if (errors.length) BT.ui.toast('Alguns itens falharam: ' + errors.join(' | '), { type: 'err', ms: 14000 });
