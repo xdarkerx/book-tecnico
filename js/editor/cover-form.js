@@ -26,7 +26,7 @@
       m.logoCliente = await U.compressImage(await U.readAsDataURL(f), 600); BT.store.touch(); render(view);
     } });
 
-    const autoAmb = [...new Set(BT.book.collect(st).map((p) => p.group.provider).filter(Boolean))].map((k) => BT.data.providers[k].label).join(', ');
+    const autoAmb = [...new Set(BT.book.collect(st).filter((p) => p.group.provider).map((p) => BT.data.providers[p.group.provider].label + (p.group.account ? ' ' + p.group.account : '')))].join(', ');
 
     view.innerHTML = '';
     view.append(

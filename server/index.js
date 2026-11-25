@@ -105,16 +105,20 @@ function serveStatic(req, res, pathname) {
 // ── credenciais: nunca devolvemos segredos ao navegador ────
 const SECRET = { oci: ['keyPem', 'passphrase'], aws: ['secretAccessKey', 'sessionToken'], azure: ['clientSecret'], gcp: ['serviceAccountJson'], zabbix: ['apiToken', 'password'], glpi: ['appToken', 'userToken', 'password'] };
 const MASK = '••••••••';
+// várias contas por provedor: "aws" é a primeira, "aws~xyz" as demais (ex.: PRD e HML)
+const provType = (k) => String(k || '').split('~')[0];
 function maskConnections(c) {
   const out = JSON.parse(JSON.stringify(c || { providers: {} }));
-  for (const [p, cfg] of Object.entries(out.providers || {})) for (const f of SECRET[p] || []) if (cfg[f]) cfg[f] = MASK;
+  for (const [p, cfg] of Object.entries(out.providers || {})) for (const f of SECRET[provType(p)] || []) if (cfg[f]) cfg[f] = MASK;
   return out;
 }
 function mergeConnections(old, incoming) {
   const out = { nome: incoming.nome || old.nome, providers: {} };
   for (const [p, cfg] of Object.entries(incoming.providers || {})) {
-    out.providers[p] = Object.assign({}, cfg);
-    for (const f of SECRET[p] || []) if (cfg[f] === MASK) out.providers[p][f] = (old.providers?.[p] || {})[f] || '';
+    if (!SECRET[provType(p)] || !cfg || typeof cfg !== 'object') continue;
+    const from = typeof cfg._from === 'string' ? cfg._from : p; // conta que mudou de chave (ex.: a primeira foi removida)
+    out.providers[p] = Object.assign({}, cfg); delete out.providers[p]._from;
+    for (const f of SECRET[provType(p)]) if (cfg[f] === MASK) out.providers[p][f] = (old.providers?.[from] || {})[f] || '';
   }
   return out;
 }
@@ -236,12 +240,12 @@ async function api(req, res, url) {
     case 'POST /api/cloud/test': {
       const { provider } = await readBody(req);
       const cfg = (await storage.api.getConnections(q.cliente)).providers?.[provider];
-      return send(res, 200, await cloud.test(provider, cfg));
+      return send(res, 200, await cloud.test(provType(provider), cfg));
     }
     case 'POST /api/cloud/pull': {
       const { provider, kinds, from, to } = await readBody(req);
       const cfg = (await storage.api.getConnections(q.cliente)).providers?.[provider];
-      return send(res, 200, await cloud.pull(provider, cfg, kinds, { from, to }));
+      return send(res, 200, await cloud.pull(provType(provider), cfg, kinds, { from, to }));
     }
   }
   throw httpError(404, 'Rota não encontrada: ' + route);

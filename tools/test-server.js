@@ -56,6 +56,15 @@ async function main() {
   assert.strictEqual(masked.providers.aws.secretAccessKey, '••••••••'); ok('segredos mascarados na API');
   await j('PUT', '/api/connections?cliente=acme-logistica', masked);
   assert.strictEqual(storage.api.getConnections('acme-logistica').providers.aws.secretAccessKey, 'SEGREDO'); ok('salvar com máscara preserva o segredo');
+  // várias contas no mesmo provedor (PRD e HML)
+  await j('PUT', '/api/connections?cliente=acme-logistica', { providers: { aws: { name: 'PRD', accessKeyId: 'AK1', secretAccessKey: 'S-PRD' }, 'aws~hml1': { name: 'HML', accessKeyId: 'AK2', secretAccessKey: 'S-HML' }, 'xpto~1': { a: 1 } } });
+  const m2 = (await j('GET', '/api/connections?cliente=acme-logistica')).data;
+  assert.strictEqual(m2.providers['aws~hml1'].secretAccessKey, '••••••••'); assert.ok(!m2.providers['xpto~1']); ok('conta extra (aws~…) tem segredos mascarados; provedor desconhecido é descartado');
+  // remove a primeira: a HML assume a chave "aws" levando o segredo (_from)
+  await j('PUT', '/api/connections?cliente=acme-logistica', { providers: { aws: Object.assign({}, m2.providers['aws~hml1'], { _from: 'aws~hml1' }) } });
+  const c3 = storage.api.getConnections('acme-logistica').providers;
+  assert.deepStrictEqual([c3.aws.name, c3.aws.secretAccessKey, c3.aws._from, c3['aws~hml1']], ['HML', 'S-HML', undefined, undefined]); ok('remover a primeira conta mantém o segredo da que assume o lugar');
+  assert.strictEqual((await j('POST', '/api/cloud/test?cliente=acme-logistica', { provider: 'aws~nada' })).data.ok, false); ok('testar conta inexistente responde sem erro 500');
   assert.strictEqual((await j('DELETE', '/api/book' + q)).status, 200);
   assert.strictEqual((await j('GET', '/api/books?cliente=acme-logistica')).data.length, 0); ok('excluir book');
   await j('PUT', '/api/book?cliente=Beta&ano=2026&mes=10&area=Network', { meta: { cliente: 'Beta', area: 'Network' }, groups: [] });

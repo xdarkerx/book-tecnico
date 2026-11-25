@@ -215,6 +215,11 @@ usar ⧉ na lista para gerar o próximo mês.
 2. No editor, use **☁️ Dados de cloud › 🔄 Sincronizar com a cloud**, escolha as clouds e o que buscar
    (servidores, storage, redes, baseline). Na tela de revisão, confira o destino e escolha as linhas antes de aplicar.
 
+**Várias contas no mesmo provedor (ex.: AWS PRD e HML):** em cada aba de **🔑 Conexões**, use **＋ Adicionar conta**,
+dê um nome a ela em **Nome da conta** (ex.: `PRD`, `HML`) e preencha as credenciais. **🗑 Remover conta** apaga a conta
+selecionada (ao salvar). Quando o provedor tem mais de uma conta ativa, a sincronização lista cada conta separadamente
+e o book ganha um menu por conta (ex.: "AWS · PRD" e "AWS · HML"), também listados em "Ambientes" na capa.
+
 | Cloud | Credencial | Permissão (somente leitura) |
 |---|---|---|
 | OCI | `~/.oci/config` do servidor ou API key (tenancy, user, fingerprint, chave) | `inspect all-resources`, `read instances/volumes/virtual-network-family/buckets` |

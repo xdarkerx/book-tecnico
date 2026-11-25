@@ -117,6 +117,12 @@ body.start-open{overflow:hidden}
 .fd textarea.inp{min-height:90px;font-family:var(--mono);font-size:10.5px}
 .sync-kinds{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .cx-sep{width:1px;background:var(--bd2);margin:4px 4px}
+.cx-accounts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.cx-accounts .lbl{margin-right:4px}
+.cx-accounts .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bd2);margin-right:2px}
+.cx-accounts .dot.ok{background:var(--ok,#22c55e)}
+.cx-account-row{display:flex;gap:10px;align-items:flex-end;margin-bottom:12px}
+.cx-account-row .fd{flex:1;margin:0}
 .cx-import{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border:1px dashed var(--bd2);border-radius:var(--r);margin-bottom:14px}
 .fd input[type=date]{color-scheme:var(--scheme)}
 /* excluir cliente / ano */

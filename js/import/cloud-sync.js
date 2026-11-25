@@ -44,7 +44,16 @@
     }
   };
 
-  const isOn = (cfg) => cfg && cfg.enabled !== false && Object.keys(cfg).filter((k) => k !== 'enabled' && cfg[k] !== '' && cfg[k] !== false).length > 0;
+  // várias contas por provedor: "aws" é a primeira, "aws~xyz" as demais (ex.: PRD e HML)
+  const typeOf = (k) => String(k).split('~')[0];
+  const accountsOf = (providers, p) => Object.keys(providers).filter((k) => k === p || k.startsWith(p + '~')).sort((a, b) => (a === p ? -1 : b === p ? 1 : 0));
+  const accName = (providers, k) => {
+    const cfg = providers[k] || {};
+    if (cfg.name) return cfg.name;
+    const list = accountsOf(providers, typeOf(k));
+    return list.length > 1 ? 'Conta ' + (list.indexOf(k) + 1) : 'Principal';
+  };
+  const isOn = (cfg) => cfg && cfg.enabled !== false && Object.keys(cfg).filter((k) => k !== 'enabled' && k !== 'name' && k !== '_from' && cfg[k] !== '' && cfg[k] !== false).length > 0;
 
   // ── Importar arquivos de chave / credencial ─────────────────
   function parseKeyFile(name, text) {
@@ -81,7 +90,8 @@
     if (BT.api.mode !== 'server') return BT.ui.toast('Conexões exigem o servidor: rode "npm run dev".', { type: 'err', ms: 6000 });
     const data = await BT.api.getConnections(clienteSlug);
     data.nome = data.nome || nome; data.providers = data.providers || {};
-    let cur = startTab || 'oci';
+    let cur = typeOf(startTab || 'oci');
+    let curKey = cur; // conta aberta dentro da aba
     const tabs = h('div', { class: 'cx-tabs' });
     const form = h('div');
     const result = h('div');
@@ -89,17 +99,48 @@
       tabs.innerHTML = '';
       ORDER.forEach((p, i) => {
         if (i === 4) tabs.appendChild(h('span', { class: 'cx-sep' }));
-        tabs.appendChild(h('button', { class: p === cur ? 'on' : '', onclick: () => { cur = p; drawTabs(); drawForm(); } }, [P()[p].icon + ' ' + P()[p].label, h('span', { class: 'dot' + (isOn(data.providers[p]) ? ' ok' : '') })]));
+        tabs.appendChild(h('button', { class: p === cur ? 'on' : '', onclick: () => { cur = p; curKey = p; drawTabs(); drawForm(); } }, [P()[p].icon + ' ' + P()[p].label + (accountsOf(data.providers, p).length > 1 ? ` (${accountsOf(data.providers, p).length})` : ''), h('span', { class: 'dot' + (accountsOf(data.providers, p).some((k) => isOn(data.providers[k])) ? ' ok' : '') })]));
       });
     };
     const drawForm = () => {
-      const cfg = data.providers[cur] = data.providers[cur] || { enabled: false };
+      if (!data.providers[curKey]) curKey = cur;
+      const cfg = data.providers[curKey] = data.providers[curKey] || { enabled: false };
       result.innerHTML = ''; form.innerHTML = '';
+      // contas deste provedor: escolher, adicionar, renomear, remover
+      const keys = accountsOf(data.providers, cur);
+      const addAccount = () => {
+        const k = cur + '~' + Math.random().toString(36).slice(2, 8);
+        data.providers[k] = { enabled: true, name: 'Conta ' + (keys.length + 1) };
+        curKey = k; drawTabs(); drawForm();
+      };
+      const removeAccount = async () => {
+        const name = accName(data.providers, curKey);
+        if (!(await BT.ui.modal.confirm(`Remover a conta "${name}" de ${P()[cur].label}? As credenciais dela são apagadas ao salvar.`, { okText: 'Remover', danger: true, title: 'Remover conta' }))) return;
+        const rest = keys.filter((k) => k !== curKey);
+        if (curKey === cur && rest.length) {
+          // a primeira conta saiu: a próxima assume a chave principal e leva os segredos junto
+          const next = rest[0];
+          data.providers[cur] = Object.assign({}, data.providers[next], { _from: data.providers[next]._from || next });
+          delete data.providers[next];
+        } else if (curKey === cur) data.providers[cur] = { enabled: false };
+        else delete data.providers[curKey];
+        curKey = cur; drawTabs(); drawForm();
+      };
+      const onLabel = () => `Ativar ${P()[cur].label}${keys.length > 1 ? ' · ' + accName(data.providers, curKey) : ''} para este cliente`;
+      form.appendChild(h('div', { class: 'cx-accounts' }, [
+        h('span', { class: 'lbl' }, 'Contas'),
+        ...keys.map((k) => h('button', { class: 'btn btn-xs ' + (k === curKey ? 'btn-primary' : 'btn-sec'), onclick: () => { curKey = k; drawForm(); } }, [h('span', { class: 'dot' + (isOn(data.providers[k]) ? ' ok' : '') }), h('span', { class: 'acc-name' }, accName(data.providers, k))])),
+        h('button', { class: 'btn btn-ghost btn-xs', title: 'Adicionar outra conta deste provedor (ex.: PRD e HML)', onclick: addAccount }, '＋ Adicionar conta')
+      ]));
+      form.appendChild(h('div', { class: 'cx-account-row' }, [
+        h('div', { class: 'fd' }, [h('label', {}, 'Nome da conta (aparece no book)'), h('input', { class: 'inp', value: cfg.name || '', placeholder: 'ex.: PRD, HML', oninput: (e) => { cfg.name = e.target.value.trim(); const b = form.querySelector('.cx-accounts .btn-primary .acc-name'); if (b) b.textContent = accName(data.providers, curKey); const t = form.querySelector('.acc-on'); if (t) t.textContent = onLabel(); } })]),
+        h('button', { class: 'btn btn-ghost btn-xs btn-del', title: 'Remover esta conta', onclick: removeAccount }, '🗑 Remover conta')
+      ]));
       const on = h('input', { type: 'checkbox', checked: isOn(cfg), onchange: (e) => { cfg.enabled = e.target.checked; drawTabs(); } });
       const touch = () => { if (cfg.enabled === false || !on.checked) { cfg.enabled = true; on.checked = true; drawTabs(); } };
       form.append(
         h('div', { class: 'cx-help', html: FORMS[cur].help }),
-        h('label', { class: 'switch', style: { marginBottom: '12px' } }, [on, `Ativar ${P()[cur].label} para este cliente`]),
+        h('label', { class: 'switch', style: { marginBottom: '12px' } }, [on, h('span', { class: 'acc-on' }, onLabel())]),
         h('div', { class: 'fg fg2' }, FORMS[cur].fields.map(([k, label, ph, type]) => {
           if (type === 'check') return h('label', { class: 'switch span-all' }, [h('input', { type: 'checkbox', checked: !!cfg[k], onchange: (e) => { cfg[k] = e.target.checked; touch(); } }), label]);
           return h('div', { class: 'fd' + (type === 'area' ? ' span-all' : '') }, [
@@ -115,19 +156,19 @@
       for (const f of e.target.files) {
         try {
           const parsed = parseKeyFile(f.name, await BT.core.utils.readAsText(f));
-          Object.entries(parsed).forEach(([p, cfg]) => { if (!FORMS[p]) return; data.providers[p] = Object.assign({}, data.providers[p] || {}, cfg, { enabled: true }); got.push(P()[p].label); });
+          Object.entries(parsed).forEach(([p, cfg]) => { if (!FORMS[typeOf(p)]) return; const k = p.includes('~') ? p : (p === cur ? curKey : p); data.providers[k] = Object.assign({}, data.providers[k] || {}, cfg, { enabled: true }); got.push(P()[typeOf(p)].label); });
         } catch (err) { console.warn(err); }
       }
       e.target.value = '';
       if (!got.length) return BT.ui.toast('Nenhuma credencial reconhecida nos arquivos.', { type: 'err' });
-      cur = ORDER.find((p) => got.includes(P()[p].label)) || cur;
+      const nc = ORDER.find((p) => got.includes(P()[p].label)) || cur; if (nc !== cur) { cur = nc; curKey = nc; }
       drawTabs(); drawForm();
       BT.ui.toast(`Chaves importadas: ${[...new Set(got)].join(', ')} — confira e clique em Salvar.`, { type: 'ok', ms: 6000 });
     } });
     const save = async () => { await BT.api.saveConnections(clienteSlug, data); drawTabs(); };
     const test = async () => {
       result.innerHTML = '<div class="cx-result">Testando…</div>';
-      try { await save(); const r = await BT.api.cloudTest(clienteSlug, cur); result.innerHTML = ''; result.appendChild(h('div', { class: 'cx-result ' + (r.ok ? 'ok' : 'err') }, (r.ok ? '✓ ' : '✕ ') + r.message)); }
+      try { await save(); const r = await BT.api.cloudTest(clienteSlug, curKey); result.innerHTML = ''; result.appendChild(h('div', { class: 'cx-result ' + (r.ok ? 'ok' : 'err') }, (r.ok ? '✓ ' : '✕ ') + r.message)); }
       catch (e) { result.innerHTML = ''; result.appendChild(h('div', { class: 'cx-result err' }, '✕ ' + e.message)); }
     };
     drawTabs(); drawForm();
@@ -192,12 +233,15 @@
     const id = BT.store.sessionId; if (!id) return BT.ui.toast('Abra um book primeiro.');
     const key = BT.api.keyOf(id);
     const conns = await BT.api.getConnections(key.cliente);
-    const configured = ORDER.filter((p) => isOn((conns.providers || {})[p]));
+    const provs = conns.providers || {};
+    const configured = ORDER.flatMap((p) => accountsOf(provs, p)).filter((k) => isOn(provs[k]));
+    const multiOf = (p) => configured.filter((k) => typeOf(k) === p).length > 1;
+    const labelOf = (k) => P()[typeOf(k)].label + (multiOf(typeOf(k)) ? ' · ' + accName(provs, k) : '');
     if (!configured.length) {
       BT.ui.toast('Nenhuma conexão configurada para este cliente.', { type: 'err' });
       return connections(key.cliente, BT.store.state.meta.cliente);
     }
-    const selP = new Set(opts.providers && opts.providers.length ? opts.providers.filter((p) => configured.includes(p)) : configured);
+    const selP = new Set(opts.providers && opts.providers.length ? configured.filter((k) => opts.providers.includes(k) || opts.providers.includes(typeOf(k))) : configured);
     const byTpl = { network: ['network'], backup: ['storage'] };
     const selK = new Set(opts.kinds || byTpl[BT.store.state.template] || ['servers', 'storage', 'network', 'baseline']);
     // período padrão = mês do book
@@ -208,24 +252,26 @@
     const chk = (set, v, label, cb) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: set.has(v), onchange: (e) => { e.target.checked ? set.add(v) : set.delete(v); cb && cb(); } }), label]);
     const kindsBox = h('div'); const periodBox = h('div');
     const refresh = () => {
-      kindsBox.hidden = ![...selP].some((p) => !P()[p].tool);
-      periodBox.hidden = ![...selP].some((p) => P()[p].tool);
+      kindsBox.hidden = ![...selP].some((k) => !P()[typeOf(k)].tool);
+      periodBox.hidden = ![...selP].some((k) => P()[typeOf(k)].tool);
     };
     const go = async () => {
       btn.disabled = true;
       const items = []; const errors = [];
-      for (const p of ORDER.filter((x) => selP.has(x))) {
-        status.textContent = `Consultando ${P()[p].display}…`;
+      for (const k of configured.filter((x) => selP.has(x))) {
+        const p = typeOf(k); const label = labelOf(k);
+        const account = multiOf(p) ? accName(provs, k) : '';
+        status.textContent = `Consultando ${P()[p].display}${account ? ' · ' + account : ''}…`;
         try {
-          const r = await BT.api.cloudPull(key.cliente, p, [...selK], per);
-          r.errors.forEach((e) => errors.push(`${P()[p].label}${e.kind !== p ? '/' + e.kind : ''}: ${e.message}`));
-          if (P()[p].tool) r.results.forEach((res) => items.push(...toolItems(p, res)));
+          const r = await BT.api.cloudPull(key.cliente, k, [...selK], per);
+          r.errors.forEach((e) => errors.push(`${label}${e.kind !== p ? '/' + e.kind : ''}: ${e.message}`));
+          if (P()[p].tool) r.results.forEach((res) => items.push(...toolItems(p, res).map((it) => (account ? Object.assign(it, { path: it.path.replace(P()[p].label, label) }) : it))));
           else r.results.forEach((sh) => {
-            const kind = KINDS.find((k) => k[0] === sh.kind);
-            items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, path: `${P()[p].label} · ${sh.name}`, tokens: [p, kind[2]], entry: { name: kind[1].replace(/^\S+\s/, ''), path: '' },
+            const kind = KINDS.find((x) => x[0] === sh.kind);
+            items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, path: `${label} · ${sh.name}`, tokens: [p, kind[2]], entry: { name: kind[1].replace(/^\S+\s/, ''), path: '' },
               parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
           });
-        } catch (e) { errors.push(`${P()[p].label}: ${e.message}`); }
+        } catch (e) { errors.push(`${label}: ${e.message}`); }
       }
       m.close();
       if (errors.length) BT.ui.toast('Alguns itens falharam: ' + errors.join(' | '), { type: 'err', ms: 14000 });
@@ -241,7 +287,7 @@
     const m = BT.ui.modal.open({
       title: '🔄 Sincronizar dados', size: 'md',
       body: [h('div', { class: 'lbl', style: { marginBottom: '8px' } }, 'Fontes configuradas'),
-        h('div', { class: 'cprow' }, configured.map((p) => chk(selP, p, P()[p].icon + ' ' + P()[p].label, refresh))),
+        h('div', { class: 'cprow' }, configured.map((k) => chk(selP, k, P()[typeOf(k)].icon + ' ' + labelOf(k), refresh))),
         kindsBox, periodBox,
         h('div', { style: { marginTop: '14px' } }, status),
         h('div', { class: 'cx-help' }, 'Na próxima tela você confere o destino de cada item no book e escolhe as linhas antes de aplicar.')],

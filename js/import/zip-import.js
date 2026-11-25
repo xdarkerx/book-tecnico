@@ -122,7 +122,9 @@
       const p = it.parsed;
       if (!it.provider) it.provider = BT.importer.detect.provider(p.sheets[0].fields, it.path, p.sheets.map((s) => s.name));
       if (!keepDest) {
-        const { hit, alias } = matchSection(T, it.tokens, it.provider);
+        // conta nomeada (ex.: AWS · HML): procura só no menu daquela conta
+        const scope = it.account ? { groups: T.groups.filter((g) => g.provider === it.provider && g.account === it.account) } : T;
+        const { hit, alias } = matchSection(scope, it.tokens, it.provider);
         it.dest = hit ? hit.section.id : '__new__';
         it.newTitle = hit ? '' : prettify(it.entry.name);
         it.mapper = alias && alias.mapper !== 'raw' ? alias.mapper : BT.importer.detect.kind(p.sheets[0].fields, p.sheets.map((s) => s.name));
@@ -299,11 +301,12 @@
 
       const sectionFor = (it) => {
         if (it.dest !== '__new__') return findSec(T, it.dest).section;
-        const key = (it.provider || '') + '|' + it.newTitle;
+        const key = (it.provider || '') + '|' + (it.account || '') + '|' + it.newTitle;
         if (newSections[key]) return newSections[key];
-        let g = it.provider && !BT.data.providers[it.provider]?.tool ? T.groups.find((x) => x.provider === it.provider) : null;
+        const cloudP = it.provider && !BT.data.providers[it.provider]?.tool;
+        let g = cloudP ? T.groups.find((x) => x.provider === it.provider && (x.account || '') === (it.account || '')) : null;
         if (!g && it.groupHint) g = T.groups.find((x) => norm(x.title).includes(norm(it.groupHint)));
-        if (!g && it.provider && !BT.data.providers[it.provider]?.tool) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: p.label, icon: p.icon, provider: it.provider, separator: true }); T.groups.push(g); }
+        if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: p.label + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true }); T.groups.push(g); }
         if (!g) g = T.groups[T.groups.length - 1] || (T.groups.push(BT.store.makeGroup({ title: 'Book', icon: '📄' })), T.groups[0]);
         const s = BT.store.makeSection({ title: it.newTitle || 'Importados', icon: it.kind === 'image' ? '🖼️' : '📄' });
         g.sections.push(s); g.collapsed = false;
@@ -332,7 +335,7 @@
             const list = it.items.filter((_, i) => it.selected.has(i));
             const rows = list.map((x) => cols.map((c) => String(x[c.key] ?? '')));
             const columns = cols.map((c) => ({ name: c.name, badge: !!c.badge }));
-            const note = opts.note ? (it.api ? `Fonte: ${BT.data.providers[it.provider].tool ? '' : 'API '}${BT.data.providers[it.provider].label}${it.periodLabel ? ' · ' + it.periodLabel : ''} · sincronizado em ${today}` : `Fonte: ${it.path} · ${BT.data.providers[it.provider || 'generic'].label} · importado em ${today}`) : '';
+            const note = opts.note ? (it.api ? `Fonte: ${BT.data.providers[it.provider].tool ? '' : 'API '}${BT.data.providers[it.provider].label}${it.account ? ' · ' + it.account : ''}${it.periodLabel ? ' · ' + it.periodLabel : ''} · sincronizado em ${today}` : `Fonte: ${it.path} · ${BT.data.providers[it.provider || 'generic'].label} · importado em ${today}`) : '';
             let table = null;
             if (it.how !== 'new') table = sec.blocks.find((b) => b.type === 'table' && !filledTables.has(b.id));
             if (table) BT.importer._applyToTable(table, it.how, columns, rows, note);
