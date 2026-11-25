@@ -252,6 +252,12 @@
       if (mf.governanca) meta.governanca = mf.governanca;
     }
     const opts = { kpi: true, charts: true, note: true, applyManifest: true };
+    // Segurança: riscos das recomendações/alertas que entram no book (lembra a última escolha neste navegador)
+    const LV = BT.blocks.RISK_LEVELS || [];
+    let riskSel = new Set(LV.map((x) => x[0]));
+    try { const saved = JSON.parse(localStorage.getItem('bt-import-riscos') || 'null'); if (Array.isArray(saved)) riskSel = new Set(saved); } catch (e) { /* sem preferência salva */ }
+    const scoreBlocks = () => items.filter((i) => i.kind === 'blocks' && i.include).flatMap((i) => i.blocks.filter((b) => b.type === 'score'));
+    const riskTotals = () => { const t = {}; scoreBlocks().forEach((b) => Object.entries(BT.blocks.riskCounts(b.data)).forEach(([k, n]) => (t[k] = (t[k] || 0) + n))); return t; };
 
     const m = BT.ui.modal.open({ title, size: 'lg', body: h('div'), footer: [] });
     const body = m.body;
@@ -324,6 +330,23 @@
         h('label', { class: 'switch' }, [h('input', { type: 'checkbox', checked: opts.note, onchange: (e) => (opts.note = e.target.checked) }), 'Nota com a origem dos dados']),
         countEl
       ]));
+      // riscos de segurança (só quando há recomendações/alertas com risco no que vai ser importado)
+      const tot = riskTotals();
+      if (Object.keys(tot).length) {
+        const sum = h('span', { class: 'wz-hint', style: { margin: 0 } });
+        const upd = () => {
+          const all = Object.values(tot).reduce((a, b) => a + b, 0);
+          const keep = Object.entries(tot).filter(([k]) => riskSel.has(k)).reduce((a, [, n]) => a + n, 0);
+          sum.textContent = `Entram ${keep} de ${all} recomendações/alertas.`;
+          try { localStorage.setItem('bt-import-riscos', JSON.stringify([...riskSel])); } catch (e) { /* sem armazenamento */ }
+        };
+        body.appendChild(h('div', { class: 'wz-risks' }, [
+          h('span', { class: 'lbl' }, '🛡️ Segurança — riscos a importar'),
+          h('div', { class: 'cprow' }, LV.filter(([k]) => tot[k]).map(([k, l]) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: riskSel.has(k), onchange: (e) => { e.target.checked ? riskSel.add(k) : riskSel.delete(k); upd(); } }), `${l} (${tot[k]})`]))),
+          sum
+        ]));
+        upd();
+      }
       updCount();
     }
     const countEl = h('span', { class: 'wz-count' });
@@ -418,6 +441,8 @@
             sec.blocks = sec.blocks.filter((b) => !same(b) && !(it.replaceEmptyType && b.type === it.replaceEmptyType && BT.blocks.isEmpty(b)));
             if (at < 0 || at > sec.blocks.length) at = 0;
             const fresh = it.blocks.map((b) => Object.assign(BT.core.utils.clone(b), { id: BT.uid('blk'), include: true }));
+            // só os riscos escolhidos na revisão (linhas sem risco reconhecido sempre entram)
+            fresh.forEach((b) => { if (b.type === 'score') b.data = BT.blocks.filterRisks(b.data, [...riskSel]); });
             fresh.forEach((b) => (b.data.origin = it.origin));
             sec.blocks.splice(at, 0, ...fresh);
           }

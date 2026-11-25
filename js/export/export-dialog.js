@@ -40,17 +40,6 @@
     };
     const tip = h('div', { class: 'wz-hint', html: '💡 Na janela de impressão: destino <b>Salvar como PDF</b>, papel <b>A4</b>, retrato, e marque <b>Gráficos de fundo</b> (Chrome) / <b>Plano de fundo</b> (Edge).' });
     const toc = h('input', { type: 'checkbox', checked: !!st.meta.mostrarSumario, onchange: (e) => { st.meta.mostrarSumario = e.target.checked; BT.store.touch(); } });
-    // Segurança: quais riscos das recomendações/alertas entram (fica salvo no book; vale para PDF, Word, HTML e pré-visualização)
-    let risks = null;
-    if (BT.blocks.hasRiskRows && BT.blocks.hasRiskRows(st)) {
-      const cur = new Set(Array.isArray(st.meta.riscosExport) ? st.meta.riscosExport : BT.blocks.RISK_LEVELS.map((x) => x[0]));
-      const save = () => { st.meta.riscosExport = cur.size === BT.blocks.RISK_LEVELS.length ? undefined : [...cur]; BT.store.touch(); };
-      risks = h('div', {}, [
-        h('div', { class: 'lbl', style: { margin: '16px 0 6px' } }, '🛡️ Segurança — riscos nas recomendações e alertas'),
-        h('div', { class: 'cprow' }, BT.blocks.RISK_LEVELS.map(([k, l]) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: cur.has(k), onchange: (e) => { e.target.checked ? cur.add(k) : cur.delete(k); save(); } }), l]))),
-        h('div', { class: 'wz-hint', style: { marginTop: '6px' } }, 'Itens sem risco informado sempre aparecem. A escolha fica salva neste book.')
-      ]);
-    }
 
     const go = async () => {
       if (!sel.size) return BT.ui.toast('Selecione ao menos uma seção com conteúdo.', { type: 'err' });
@@ -70,8 +59,7 @@
           h('button', { class: 'btn btn-ghost btn-xs', onclick: () => { tree.querySelectorAll('input[type=checkbox]:not(:disabled)').forEach((c) => { if (!c.checked) c.click(); }); } }, '☑ Tudo'),
           h('button', { class: 'btn btn-ghost btn-xs', onclick: () => { tree.querySelectorAll('input[type=checkbox]:not(:disabled)').forEach((c) => { if (c.checked) c.click(); }); } }, '☐ Nenhum')]),
         h('div', { class: 'wz-box' }, tree),
-        h('label', { class: 'switch', style: { marginTop: '12px' } }, [toc, 'Incluir sumário após a capa']),
-        risks
+        h('label', { class: 'switch', style: { marginTop: '12px' } }, [toc, 'Incluir sumário após a capa'])
       ],
       footer: [
         h('button', { class: 'btn btn-ghost btn-sm', onclick: () => m.close() }, 'Cancelar'),

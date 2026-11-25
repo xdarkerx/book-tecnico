@@ -150,3 +150,6 @@ body.start-open{overflow:hidden}
   .nv-search,.nv-sort{max-width:none;flex:1 1 100%}
   .nv-year-del{margin-left:0}
 }
+/* revisão da importação: riscos de segurança a importar (zip-import.js) */
+.wz-risks{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)}
+.wz-risks .cprow{margin:0}

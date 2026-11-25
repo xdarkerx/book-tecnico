@@ -52,16 +52,16 @@ assert.strictEqual(B.wordText('Servidor de banco de dados'), 'Servidor de banco 
 
 assert.strictEqual(B.cellText(ocid), `<span class="blong">${ocid}</span>`); assert.strictEqual(B.cellText('caedu'), 'caedu'); ok('HTML/PDF: só textos longos sem espaço podem quebrar (palavras normais ficam inteiras)');
 
-// exportação: escolher os riscos de recomendações/alertas
-const sec = { data: Object.assign({ title: 'Cloud Security Score', items: [], note: '' }, B.scoreTables('oci')) };
-sec.data.recs.rows = [['MFA', 'Crítica', '2', '(raiz)'], ['Patch', 'Média', '10', '(raiz)'], ['API key antiga', 'Baixa', '31', '(raiz)'], ['Sem risco', '', '1', '(raiz)']];
-const st = (riscos) => ({ meta: { riscosExport: riscos }, groups: [{ sections: [{ blocks: [Object.assign({ type: 'score' }, sec)] }] }] });
-const rowsIn = (h) => (h.match(/<tr>/g) || []).length - 1; // menos o cabeçalho
-assert.strictEqual(rowsIn(defs.score.render(sec, { target: 'web', state: st(undefined) })), 4); ok('riscos: sem escolha, todas as linhas aparecem');
-const filtered = defs.score.render(sec, { target: 'web', state: st(['critica', 'alta']) });
-assert.deepStrictEqual([rowsIn(filtered), /Riscos exibidos: Crítica, Alta — 2 de 4/.test(filtered), filtered.includes('API key antiga')], [2, true, false]); ok('riscos: só Crítica/Alta (+ linha sem risco) e nota "2 de 4" no book');
-assert.ok(/Riscos exibidos/.test(defs.score.word(sec, { target: 'word', state: st(['media']) }))); ok('riscos: filtro e nota também no Word');
+// importação: escolher os riscos de recomendações/alertas que entram no book
+const sd = Object.assign({ title: 'Cloud Security Score', items: [], note: '' }, B.scoreTables('oci'));
+sd.recs.rows = [['MFA', 'Crítica', '2', '(raiz)'], ['Patch', 'Média', '10', '(raiz)'], ['API key antiga', 'Baixa', '31', '(raiz)'], ['Sem risco', '', '1', '(raiz)']];
+sd.alerts.rows = [['BUCKET_IS_PUBLIC', 'Alta', 'bkt', 'Bucket', 'prod', '2026-11-14'], ['SL_OPEN', 'Baixa', 'sl', 'SecurityList', 'prod', '2026-11-09']];
+assert.deepStrictEqual(JSON.parse(JSON.stringify(B.riskCounts(sd))), { critica: 1, media: 1, baixa: 2, alta: 1 }); ok('riscos: conta recomendações e alertas de cada risco (para a tela de revisão)');
+const f = B.filterRisks(sd, ['critica', 'alta']);
+assert.deepStrictEqual([f.recs.rows.map((r) => r[0]), f.alerts.rows.map((r) => r[0])], [['MFA', 'Sem risco'], ['BUCKET_IS_PUBLIC']]); ok('riscos: só Crítica/Alta entram (linha sem risco sempre entra)');
+assert.strictEqual(sd.recs.rows.length, 4); ok('riscos: o filtro não altera os dados originais (dá para refazer a escolha)');
 assert.deepStrictEqual([B.riskLevelOf('HIGH'), B.riskLevelOf('Média'), B.riskLevelOf('Informational'), B.riskLevelOf('Disaster')], ['alta', 'media', 'info', 'critica']); ok('riscos: reconhece português e inglês');
-assert.strictEqual(B.hasRiskRows(st()), true); assert.strictEqual(B.hasRiskRows({ groups: [] }), false); ok('riscos: a opção só aparece na exportação quando o book tem recomendações/alertas');
+const exp = defs.score.render({ data: sd }, { target: 'web', state: { meta: { riscosExport: ['critica'] } } });
+assert.ok(exp.includes('API key antiga') && exp.includes('SL_OPEN') && !/Riscos exibidos/.test(exp)); ok('exportação mostra tudo o que está no book (o filtro é só na importação)');
 
 console.log(`\n${passed} testes do front ok`);

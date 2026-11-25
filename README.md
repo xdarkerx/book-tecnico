@@ -255,10 +255,10 @@ O bloco também está na paleta. No editor, o seletor **Formato de recomendaçõ
 barra colorida (≥ 80% bom, ≥ 60% atenção, abaixo disso crítico). No book, a severidade aparece como etiqueta colorida.
 Sincronizar de novo atualiza o bloco, sem duplicar.
 
-**Escolher os riscos no book:** em **⬇ Exportar**, a opção **🛡️ Segurança — riscos nas recomendações e alertas**
-(Crítica, Alta, Média, Baixa, Informativa) define quais linhas entram no PDF, no Word, no HTML e na pré-visualização.
-O editor continua com todas. Itens sem risco informado sempre aparecem, e o book mostra uma nota como "Riscos exibidos:
-Crítica, Alta — 12 de 40 item(ns)". A escolha fica salva no book.
+**Escolher os riscos ao importar:** na tela de revisão da sincronização (e do ZIP), a opção **🛡️ Segurança — riscos a
+importar** mostra quantas recomendações e alertas há de cada risco (Crítica, Alta, Média, Baixa, Informativa). Só os
+riscos marcados entram no book. A tela mostra o total, por exemplo "Entram 6 de 12 recomendações/alertas", e a escolha
+fica lembrada para as próximas importações neste navegador. Itens sem risco informado sempre entram.
 
 Se a sincronização trouxer as recomendações mas não a pontuação, a tela avisa o motivo (ex.: o Cloud Guard ainda não
 calculou a pontuação da tenancy). O resto entra normalmente.
