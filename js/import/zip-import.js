@@ -70,7 +70,9 @@
     const files = entries.filter((e) => !IGNORE.test(e.path) && e.size > 0);
     // remove pasta-raiz comum ("export-novembro/oci/..." → "oci/...")
     const firsts = new Set(files.map((f) => f.path.split('/')[0]));
-    const strip = firsts.size === 1 && files.every((f) => f.path.includes('/')) ? files[0].path.split('/')[0] + '/' : '';
+    // …mas não quando a pasta única é a própria cloud (ZIP só com "aws/…" perderia o provedor)
+    const root = firsts.size === 1 ? [...firsts][0] : '';
+    const strip = root && files.every((f) => f.path.includes('/')) && !providerFrom(tokensOf(root)) ? root + '/' : '';
     const items = []; const scoreByProv = {};
     for (const e of files) {
       const rel = e.path.slice(strip.length);
@@ -114,6 +116,13 @@
     return items;
   }
 
+  /** Menus da cloud/conta do item. A 1ª conta (primary) assume o menu da cloud ainda sem conta (ex.: "AWS" vira "AWS · PRD"). */
+  function accountGroups(T, it) {
+    const exact = T.groups.filter((g) => g.provider === it.provider && (g.account || '') === (it.account || ''));
+    if (exact.length || !it.account || !it.primary) return exact;
+    return T.groups.filter((g) => g.provider === it.provider && !g.account);
+  }
+
   /** Arquivo de segurança do ZIP: 'score' (pontuação), 'recs' (recomendações) ou 'alerts' (alertas). */
   function scorePart(tokens) {
     const sec = tokens.some((t) => /score|security|seguranca|securityhub|defender|cloudguard/.test(t));
@@ -134,7 +143,7 @@
   function plan(it, T, keepDest) {
     if (it.destTitle && !keepDest) {
       const cloudP = it.provider && !it.global && !BT.data.providers[it.provider]?.tool && it.provider !== 'generic';
-      const scoped = cloudP ? { groups: T.groups.filter((g) => g.provider === it.provider && (g.account || '') === (it.account || '')) } : null;
+      const scoped = cloudP ? { groups: accountGroups(T, it) } : null;
       const hit = scoped ? byDestTitle(scoped, it.destTitle) : byDestTitle(T, it.destTitle);
       it.dest = hit ? hit.section.id : '__new__';
       it.newTitle = hit ? '' : (it.newTitleHint || it.destTitle);
@@ -151,13 +160,14 @@
       if (!it.provider) it.provider = BT.importer.detect.provider(p.sheets[0].fields, it.path, p.sheets.map((s) => s.name));
       if (!keepDest) {
         // conta nomeada (ex.: AWS · HML): procura só no menu daquela conta
-        const scope = it.account ? { groups: T.groups.filter((g) => g.provider === it.provider && g.account === it.account) } : T;
+        const scope = it.account ? { groups: accountGroups(T, it) } : T;
         const { hit, alias } = matchSection(scope, it.tokens, it.provider);
         it.dest = hit ? hit.section.id : '__new__';
         it.newTitle = hit ? '' : prettify(it.entry.name);
         // Geral › Tenant: primeira seção do menu da cloud
         if (alias && alias.title === 'geral') { it.first = true; if (!hit) it.newTitle = 'Geral'; }
         it.mapper = alias && alias.mapper !== 'raw' ? alias.mapper : BT.importer.detect.kind(p.sheets[0].fields, p.sheets.map((s) => s.name));
+        if (alias && alias.title === 'geral') it.mapper = 'raw'; // tenant: mantém as colunas do arquivo
         // cabeçalhos iguais aos da planilha de destino → mantém colunas como estão
         const table = hit && hit.section.blocks.find((b) => b.type === 'table');
         if (table) {
@@ -334,12 +344,21 @@
         const key = (it.provider || '') + '|' + (it.account || '') + '|' + it.newTitle;
         if (newSections[key]) return newSections[key];
         const cloudP = it.provider && !it.global && it.provider !== 'generic' && !BT.data.providers[it.provider]?.tool;
-        let g = cloudP ? T.groups.find((x) => x.provider === it.provider && (x.account || '') === (it.account || '')) : null;
+        let g = cloudP ? accountGroups(T, it)[0] || null : null;
         if (!g && it.groupHint) g = T.groups.find((x) => norm(x.title).includes(norm(it.groupHint)));
-        if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: p.label + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true }); T.groups.push(g); }
+        if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: p.label + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true });
+          // fica logo depois do último menu da mesma cloud (ex.: AWS · HML depois de AWS · PRD)
+          const last = T.groups.map((x) => x.provider).lastIndexOf(it.provider);
+          if (last >= 0) T.groups.splice(last + 1, 0, g); else T.groups.push(g);
+        }
         if (!g) g = T.groups[T.groups.length - 1] || (T.groups.push(BT.store.makeGroup({ title: 'Book', icon: '📄' })), T.groups[0]);
         const s = BT.store.makeSection({ title: it.newTitle || 'Importados', icon: it.kind === 'image' ? '🖼️' : '📄' });
-        if (it.first) g.sections.unshift(s); else g.sections.push(s);
+        // menu de cloud: mantém a ordem padrão (Geral, Servidores, Networking, Segurança, Storage, Backup)
+        const RANK = ['geral', 'servidores', 'networking', 'seguranca', 'storage', 'backup'];
+        const rank = (t) => { const i = RANK.indexOf(norm(t)); return i < 0 ? RANK.length : i; };
+        if (it.first) g.sections.unshift(s);
+        else if (g.provider) { const at = g.sections.findIndex((x) => rank(x.title) > rank(s.title)); if (at < 0) g.sections.push(s); else g.sections.splice(at, 0, s); }
+        else g.sections.push(s);
         g.collapsed = false;
         return (newSections[key] = s);
       };
@@ -358,6 +377,12 @@
           }
         }
 
+        // 1ª conta de cada cloud assume o menu existente sem conta (vira "AWS · PRD")
+        for (const it of items.filter((i) => i.include && i.account && i.primary)) {
+          if (T.groups.some((g) => g.provider === it.provider && g.account === it.account)) continue;
+          const g = T.groups.find((x) => x.provider === it.provider && !x.account);
+          if (g) { g.account = it.account; g.title = (BT.data.providers[it.provider]?.label || g.title) + ' · ' + it.account; }
+        }
         for (const it of items.filter((i) => i.include)) {
           if (it.kind === 'logo') { T.meta.logoCliente = await U.compressImage(await U.readAsDataURL(await it.entry.file()), 600); continue; }
           if (it.kind === 'data') {

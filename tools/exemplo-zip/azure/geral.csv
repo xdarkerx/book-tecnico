@@ -1,0 +1,3 @@
+Tenant;Tenant ID;Assinatura;Subscription ID;Estado
+Demo Cloud SA;00000000-1111-2222-3333-444444444444;Produção;sub-prod-01;Enabled
+Demo Cloud SA;00000000-1111-2222-3333-444444444444;Desenvolvimento;sub-dev-02;Enabled

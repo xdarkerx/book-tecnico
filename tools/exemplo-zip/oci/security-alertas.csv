@@ -1,0 +1,3 @@
+Problema;Risco;Recurso;Tipo;Compartimento;Detectado em
+BUCKET_IS_PUBLIC;Crítica;bkt-relatorios;Bucket;prod/dados;2026-11-14
+SECURITY_LIST_OPEN_SOURCE;Alta;sl-app;SecurityList;prod/rede;2026-11-09

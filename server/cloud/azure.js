@@ -95,24 +95,27 @@ async function tenant(cfg) {
 /** Defender for Cloud: Secure Score, recomendações não íntegras e alertas de segurança. */
 async function score(cfg) {
   const rows = []; const recs = {}; const alerts = [];
+  // nome das assinaturas para o book ("Produção" em vez do GUID)
+  const names = Object.fromEntries((await arm(cfg, '/subscriptions?api-version=2022-12-01').catch(() => [])).map((s) => [s.subscriptionId, s.displayName]));
   for (const sub of await subscriptions(cfg)) {
+    const subName = names[sub] || sub;
     const list = await arm(cfg, `/subscriptions/${sub}/providers/Microsoft.Security/secureScores?api-version=2020-01-01`).catch(() => []);
     const s = list.find((x) => x.name === 'ascScore') || list[0];
     if (s && s.properties && s.properties.score) {
       const sc = s.properties.score;
-      rows.push({ 'Fonte': 'Microsoft Defender for Cloud', 'Escopo': s.properties.displayName && s.properties.displayName !== 'ASC score' ? s.properties.displayName : sub, 'Pontuação': Math.round((sc.percentage != null ? sc.percentage : sc.current / (sc.max || 1)) * 100), 'Máximo': 100, 'Classificação': `${sc.current} de ${sc.max} pontos` });
+      rows.push({ 'Fonte': 'Microsoft Defender for Cloud', 'Escopo': subName, 'Pontuação': Math.round((sc.percentage != null ? sc.percentage : sc.current / (sc.max || 1)) * 100), 'Máximo': 100, 'Classificação': `${sc.current} de ${sc.max} pontos` });
     }
     for (const a of await arm(cfg, `/subscriptions/${sub}/providers/Microsoft.Security/assessments?api-version=2021-06-01&$expand=metadata`).catch(() => [])) {
       const p = a.properties || {};
       if (!p.status || p.status.code !== 'Unhealthy') continue;
       const k = sub + '|' + p.displayName;
-      recs[k] = recs[k] || { 'Recomendação': p.displayName || a.name, 'Severidade': sevPt(p.metadata && p.metadata.severity), 'Recursos não íntegros': 0, 'Assinatura': sub };
+      recs[k] = recs[k] || { 'Recomendação': p.displayName || a.name, 'Severidade': sevPt(p.metadata && p.metadata.severity), 'Recursos não íntegros': 0, 'Assinatura': subName };
       recs[k]['Recursos não íntegros']++;
     }
     for (const a of await arm(cfg, `/subscriptions/${sub}/providers/Microsoft.Security/alerts?api-version=2022-01-01`).catch(() => [])) {
       const p = a.properties || {};
       if (p.status && /dismissed|resolved/i.test(p.status)) continue;
-      alerts.push({ 'Alerta': p.alertDisplayName || '', 'Severidade': sevPt(p.severity), 'Recurso': p.compromisedEntity || '', 'Data': String(p.timeGeneratedUtc || '').slice(0, 10), 'Status': p.status || '' });
+      alerts.push({ 'Alerta': p.alertDisplayName || '', 'Severidade': sevPt(p.severity), 'Recurso': p.compromisedEntity || '', 'Data': String(p.timeGeneratedUtc || '').slice(0, 10), 'Status': p.status || '', 'Assinatura': subName });
     }
   }
   if (!rows.length) throw new Error('Secure Score indisponível: confirme o Defender for Cloud nas assinaturas e a role Reader / Security Reader.');

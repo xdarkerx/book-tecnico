@@ -17,7 +17,7 @@
   const FORMATS = {
     oci: { recsTitle: 'Recomendações (Cloud Guard)', recs: ['Recomendação', 'Risco', 'Problemas', 'Compartimento'], alertsTitle: 'Problemas abertos (Cloud Guard)', alerts: ['Problema', 'Risco', 'Recurso', 'Tipo', 'Compartimento', 'Detectado em'] },
     aws: { recsTitle: 'Controles reprovados (Security Hub)', recs: ['Controle', 'Título', 'Severidade', 'Recursos reprovados', 'Região'], alertsTitle: 'Findings críticos e altos (GuardDuty, Inspector…)', alerts: ['Título', 'Produto', 'Severidade', 'Recurso', 'Última ocorrência'] },
-    azure: { recsTitle: 'Recomendações (Defender for Cloud)', recs: ['Recomendação', 'Severidade', 'Recursos não íntegros', 'Assinatura'], alertsTitle: 'Alertas de segurança (Defender for Cloud)', alerts: ['Alerta', 'Severidade', 'Recurso', 'Data', 'Status'] },
+    azure: { recsTitle: 'Recomendações (Defender for Cloud)', recs: ['Recomendação', 'Severidade', 'Recursos não íntegros', 'Assinatura'], alertsTitle: 'Alertas de segurança (Defender for Cloud)', alerts: ['Alerta', 'Severidade', 'Recurso', 'Data', 'Status', 'Assinatura'] },
     gcp: { recsTitle: 'Recomendações (Security Command Center)', recs: ['Achado', 'Categoria', 'Severidade', 'Recurso'], alertsTitle: 'Alertas (Security Command Center)', alerts: ['Alerta', 'Severidade', 'Recurso', 'Data', 'Status'] },
     generic: { recsTitle: 'Recomendações', recs: ['Recomendação', 'Severidade', 'Recurso', 'Status'], alertsTitle: 'Alertas', alerts: ['Alerta', 'Severidade', 'Recurso', 'Data', 'Status'] }
   };

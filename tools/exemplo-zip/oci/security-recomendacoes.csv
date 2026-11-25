@@ -1,0 +1,3 @@
+Recomendação;Risco;Problemas;Compartimento
+Habilitar MFA para usuários do console;Alta;4;(raiz)
+Restringir buckets públicos;Crítica;1;prod/dados

@@ -1,0 +1,3 @@
+Hostname;IP;SO;Localização;Função;Status
+oci-app01;10.10.1.10;Oracle Linux 8;sa-saopaulo-1;Aplicação;Running
+oci-db01;10.10.2.10;Oracle Linux 8;sa-saopaulo-1;Banco de dados;Running

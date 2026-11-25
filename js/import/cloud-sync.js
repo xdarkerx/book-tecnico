@@ -269,6 +269,7 @@
       for (const k of configured.filter((x) => selP.has(x))) {
         const p = typeOf(k); const label = labelOf(k);
         const account = multiOf(p) ? accName(provs, k) : '';
+        const primary = k === p; // a 1ª conta assume o menu da cloud que já existe no book
         status.textContent = `Consultando ${P()[p].display}${account ? ' · ' + account : ''}…`;
         try {
           const extra = p === 'zabbix' ? Object.assign({}, per, { severities: [...zbxSev].map(Number), onlyWithAlerts: !zbxAll.checked }) : per;
@@ -280,20 +281,20 @@
             const scoreSheets = r.results.filter((sh) => /^score/.test(sh.kind));
             if (scoreSheets.length) {
               const data = BT.blocks.scoreFromSheets(p, scoreSheets, label);
-              items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, path: `${label} · Cloud Security Score`, destTitle: 'Segurança', origin: 'score-' + k, replaceEmptyType: 'score', entry: { name: 'Security Score' },
+              items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, primary, path: `${label} · Cloud Security Score`, destTitle: 'Segurança', origin: 'score-' + k, replaceEmptyType: 'score', entry: { name: 'Security Score' },
                 blocks: [{ type: 'score', data }], dest: '', newTitle: '', how: 'new', note: '' });
             }
           }
           if (!P()[p].tool) r.results.filter((sh) => !/^score/.test(sh.kind)).forEach((sh) => {
             if (sh.kind === 'tenant') {
               // Geral › Tenant da própria cloud/conta (primeira seção do menu)
-              items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, path: `${label} · ${sh.name}`, tokens: [p, 'geral'], entry: { name: 'Geral', path: '' },
+              items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, 'geral'], entry: { name: 'Geral', path: '' },
                 destTitle: 'Geral', newTitleHint: 'Geral', forceMapper: 'raw', first: true,
                 parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
               return;
             }
-            const kind = KINDS.find((x) => x[0] === sh.kind);
-            items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, path: `${label} · ${sh.name}`, tokens: [p, kind[2]], entry: { name: kind[1].replace(/^\S+\s/, ''), path: '' },
+            const kind = KINDS.find((x) => x[0] === sh.kind) || [sh.kind, sh.name, sh.kind];
+            items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, kind[2]], entry: { name: kind[1].replace(/^\S+\s/, ''), path: '' },
               parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
           });
         } catch (e) { errors.push(`${label}: ${e.message}`); }

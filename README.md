@@ -298,6 +298,13 @@ Use **Criar a partir de ZIP** em "Novo book" (cria um book novo) ou **☁️ Dad
 | `book/objetivo.txt` / `.md` | texto da seção |
 | `*.book.json` | projeto completo usado como base |
 
+**Para testar:** a pasta `tools/exemplo-zip/` tem um exemplo pronto com Geral, Security Score (pontuação, recomendações
+e alertas) de OCI, AWS, Azure e GCP, servidores, incidentes e `manifest.json`. Para gerar o ZIP:
+
+```powershell
+Compress-Archive -Path .\tools\exemplo-zip\* -DestinationPath $HOME\Downloads\exemplo-book.zip -Force
+```
+
 Antes de aplicar, uma **tela de revisão** mostra cada arquivo com tipo, provedor, seção de destino e modo
 (substituir, acrescentar ou nova planilha). O botão **✎** escolhe as **linhas e colunas** de cada arquivo.
 O app aceita também uma pasta-raiz dentro do ZIP e ignora `__MACOSX`, `LEIA-ME` e arquivos ocultos.
@@ -486,7 +493,8 @@ js/
   export/      export-dialog, pdf, word, html, project-file
   editor/      nav-screen (Clientes › Ano › Books), settings (⚙️), sidebar, palette, panels (recolher), cover-form, canvas, router
   app.js       inicialização
-tools/build-book-styles.js, tools/build-html.js, tools/test-server.js, tools/test-support/fake-mongodb.js
+tools/build-book-styles.js, tools/build-html.js, tools/test-server.js, tools/test-edge.js, tools/test-front.js, tools/test-support/fake-mongodb.js
+tools/exemplo-zip/   arquivos de exemplo para testar a importação por ZIP (todas as clouds)
 ```
 
 ### Customizar

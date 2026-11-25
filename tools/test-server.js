@@ -500,7 +500,7 @@ async function main() {
   const [azt] = await azure2.tenant(azCfg);
   assert.deepStrictEqual([azt.rows[0].Tenant, azt.rows[0]['Tenant ID'], azt.rows[0].Assinatura, azt.rows[0]['Subscription ID']], ['Cliente SA', 'ten-1', 'Produção', 'sub-1']); ok('Azure Geral › tenant no formato Azure (tenant e assinaturas)');
   const [azs, azRecs, azAlerts] = await azure2.score(azCfg);
-  assert.deepStrictEqual([azs.rows[0]['Pontuação'], azs.rows[0].Escopo], ['70', 'sub-1']); ok('Azure Defender Secure Score em %');
+  assert.deepStrictEqual([azs.rows[0]['Pontuação'], azs.rows[0].Escopo, azRecs.rows[0].Assinatura], ['70', 'Produção', 'Produção']); ok('Azure Defender Secure Score em %');
   assert.deepStrictEqual([azRecs.rows.length, azRecs.rows[0]['Recursos não íntegros'], azRecs.rows[0].Severidade, azAlerts.rows.length, azAlerts.rows[0].Severidade], [1, '2', 'Alta', 1, 'Alta']); ok('Azure: recomendações não íntegras agrupadas e alertas ativos (descartados ficam de fora)');
   const cloudIdx = require('../server/cloud');
   const g = await cloudIdx.pull('gcp', { projectIds: 'p1', serviceAccountJson: '{}' }, ['score']);
