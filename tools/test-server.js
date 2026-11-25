@@ -395,6 +395,7 @@ async function main() {
     if (u.pathname.endsWith('/summarizeTrend')) return { items: [{ startTimestamp: Date.UTC(2026, 9, 31) / 1000, durationInSeconds: 86400, securityScore: 70, securityRating: 'FAIR' }, { startTimestamp: Date.UTC(2026, 10, 24) / 1000, durationInSeconds: 86400, securityScore: score || 0, securityRating: 'GOOD' }, { startTimestamp: Date.UTC(2026, 9, 2) / 1000, durationInSeconds: 86400, securityScore: 65, securityRating: 'FAIR' }] };
     if (u.pathname.endsWith('/recommendations')) return { items: [{ name: 'Resolve "User does not have MFA enabled"', riskLevel: 'CRITICAL', problemCount: 2, compartmentId: 'ten' }] };
     if (u.pathname.endsWith('/problems')) return { items: [] };
+    if (u.host.startsWith('objectstorage.')) { if (u.pathname === '/n/') return '"nsx"'; if (u.pathname.endsWith('/b')) return u.search.includes('c1') ? [{ name: 'bkt-relatorios', timeCreated: '2026-01-01T00:00:00Z' }] : []; if (u.pathname.endsWith('/b/bkt-relatorios')) return { name: 'bkt-relatorios', approximateSize: 123456789012, approximateCount: 10 }; }
     if (u.pathname.endsWith('/volumeBackupPolicies')) return u.search.includes('c1') ? [{ displayName: 'politica-diaria', schedules: [{ period: 'ONE_DAY', hourOfDay: 2, backupType: 'INCREMENTAL', retentionSeconds: 604800 }, { period: 'ONE_WEEK', backupType: 'FULL', retentionSeconds: 2592000 }] }] : [];
     if (u.pathname.endsWith('/bootVolumeBackups')) return u.search.includes('c1') ? [{ displayName: 'srv-db01 boot', lifecycleState: 'AVAILABLE', type: 'INCREMENTAL', sourceType: 'SCHEDULED', timeCreated: '2026-11-10T03:00:00Z', expirationTime: '2026-12-10T03:00:00Z' }, { displayName: 'antigo', lifecycleState: 'AVAILABLE', type: 'FULL', sourceType: 'MANUAL', timeCreated: '2026-09-01T03:00:00Z' }] : [];
     if (u.pathname.endsWith('/volumeBackups')) return u.search.includes('c1') ? [{ displayName: 'vol-dados', lifecycleState: 'FAULTY', type: 'FULL', sourceType: 'MANUAL', timeCreated: '2026-11-20T03:00:00Z' }] : [];
@@ -424,6 +425,8 @@ async function main() {
   const nw = await require('../server/cloud').pull('oci', ocfg1, ['servers'], { from: '2026-11-01', to: '2026-11-30', newOnly: true });
   const allSrv = await require('../server/cloud').pull('oci', ocfg1, ['servers'], { from: '2026-11-01', to: '2026-11-30' });
   assert.deepStrictEqual([nw.results[0].rows.map((r) => r['Display Name']), allSrv.results[0].rows.length], [['nova'], 2]); ok('recursos: "só os criados no mês" filtra pela data de criação; "todos" traz tudo');
+  const stg = (await require('../server/cloud').pull('oci', ocfg1, ['storage'], {})).results[0].rows.find((r) => r['Display Name'] === 'bkt-relatorios');
+  assert.deepStrictEqual([stg['Volume Type'], stg['Size in GBs']], ['Object Storage', '123,5 GB']); ok('OCI: tamanho aproximado dos buckets do Object Storage (em vez de "—")');
 
   // Azure
   mock((url, o) => {

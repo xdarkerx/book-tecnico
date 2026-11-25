@@ -82,6 +82,8 @@ async function regionsOf(c, cfg) {
   } catch (e) { return c.regionList; }
 }
 const day = (t) => String(t || '').slice(0, 10);
+/** bytes → "12,3 GB" (ou MB/TB) */
+const gb = (n) => { n = Number(n) || 0; const u = n >= 1e12 ? [1e12, 'TB'] : n >= 1e9 ? [1e9, 'GB'] : [1e6, 'MB']; return (Math.round((n / u[0]) * 10) / 10).toLocaleString('pt-BR') + ' ' + u[1]; };
 
 async function pull(cfg, kind, opts = {}) {
   const c = config(cfg);
@@ -130,8 +132,15 @@ async function pull(cfg, kind, opts = {}) {
       await U.pool(comps, 4, async (comp) => {
         for (const v of await listAll(c, `${iaas(r)}/volumes?compartmentId=${comp.id}&limit=1000`))
           if (v.lifecycleState !== 'TERMINATED') rows.push({ 'Display Name': v.displayName, 'Volume Type': 'Block Volume', 'Size in GBs': v.sizeInGBs + ' GB', 'Region': r, 'compartment_path': comp.path, 'Lifecycle State': v.lifecycleState, 'Criado em': day(v.timeCreated) });
-        if (ns) for (const b of await listAll(c, `https://objectstorage.${r}.oraclecloud.com/n/${ns}/b?compartmentId=${comp.id}&limit=1000`))
-          rows.push({ 'Display Name': b.name, 'Volume Type': 'Object Storage', 'Size in GBs': '', 'Region': r, 'compartment_path': comp.path, 'Lifecycle State': 'AVAILABLE', 'Criado em': day(b.timeCreated) });
+        if (ns) {
+          const buckets = await listAll(c, `https://objectstorage.${r}.oraclecloud.com/n/${ns}/b?compartmentId=${comp.id}&limit=1000`);
+          // tamanho aproximado de cada bucket (GetBucket ?fields=approximateSize; sem permissão fica em branco)
+          await U.pool(buckets, 6, async (b) => {
+            let size = '';
+            try { const d = (await call(c, 'GET', `https://objectstorage.${r}.oraclecloud.com/n/${ns}/b/${encodeURIComponent(b.name)}?fields=approximateSize,approximateCount`)).data || {}; if (d.approximateSize != null) size = gb(d.approximateSize); } catch (e) { /* segue sem tamanho */ }
+            rows.push({ 'Display Name': b.name, 'Volume Type': 'Object Storage', 'Size in GBs': size, 'Region': r, 'compartment_path': comp.path, 'Lifecycle State': 'AVAILABLE', 'Criado em': day(b.timeCreated) });
+          });
+        }
       });
     }
     if (kind === 'network') {
