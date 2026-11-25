@@ -28,6 +28,20 @@
   // severidade → badge do book
   const SEVCLS = (v) => { const s = String(v).toLowerCase(); return /cr[ií]tic|critical|disaster|desastre/.test(s) ? 'br' : /alta|high/.test(s) ? 'br' : /m[ée]dia|medium|moderate/.test(s) ? 'by' : /baixa|low|minor/.test(s) ? 'bg_' : /info/.test(s) ? 'bx' : ''; };
   const isSevCol = (c) => /severidade|risco|severity|risk/i.test(c);
+  // níveis de risco que dá para escolher na exportação (state.meta.riscosExport; vazio/ausente = todos)
+  const LEVELS = [['critica', 'Crítica'], ['alta', 'Alta'], ['media', 'Média'], ['baixa', 'Baixa'], ['info', 'Informativa']];
+  const levelOf = (v) => {
+    const s = String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    return /critic|disaster|desastre/.test(s) ? 'critica' : /alta|high/.test(s) ? 'alta' : /media|medium|moderate/.test(s) ? 'media' : /baixa|low|minor/.test(s) ? 'baixa' : /info/.test(s) ? 'info' : '';
+  };
+  /** Linhas que entram no book conforme os riscos escolhidos na exportação. Linha sem risco reconhecido sempre entra. */
+  function byRisk(t, rows, ctx) {
+    const want = ctx && ctx.state && ctx.state.meta && ctx.state.meta.riscosExport;
+    const si = t.columns.findIndex(isSevCol);
+    if (!Array.isArray(want) || si < 0) return { rows, filtered: false };
+    const out = rows.filter((r) => { const l = levelOf(r[si]); return !l || want.includes(l); });
+    return { rows: out, filtered: out.length !== rows.length, want };
+  }
 
   /** Editor simples de planilha (colunas fixas pelo formato, linhas livres). */
   function gridEditor(t, ctx, title) {
@@ -48,15 +62,20 @@
   }
 
   function tableHtml(t, title, ctx) {
-    const rows = rowsOf(t); if (!rows.length) return '';
+    const all = rowsOf(t); if (!all.length) return '';
+    const f = byRisk(t, all, ctx); const rows = f.rows;
+    if (!rows.length) return '';
+    const note = f.filtered ? `Riscos exibidos: ${LEVELS.filter(([k]) => f.want.includes(k)).map((x) => x[1]).join(', ')} — ${rows.length} de ${all.length} item(ns).` : '';
     const sevIdx = t.columns.findIndex(isSevCol);
     if (ctx && ctx.target === 'word') {
       const th = t.columns.map((c) => `<td style="background:#171C37;color:#fff;padding:5pt;font-family:Arial;font-size:7.5pt;font-weight:bold">${BT.esc(c)}</td>`).join('');
-      const tr = rows.map((r) => '<tr>' + t.columns.map((_, i) => `<td style="border-bottom:1px solid #eee;padding:5pt;font-family:Arial;font-size:8.5pt">${BT.esc(r[i] || '')}</td>`).join('') + '</tr>').join('');
-      return `<p style="font-family:Arial;font-size:9pt;font-weight:bold;color:#5E3FE1;margin:10pt 0 4pt">${BT.esc(title)}</p><table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse"><tr>${th}</tr>${tr}</table>`;
+      const tr = rows.map((r) => '<tr>' + t.columns.map((_, i) => `<td style="border-bottom:1px solid #eee;padding:5pt;font-family:Arial;font-size:8.5pt;vertical-align:top">${BT.blocks.wordText(r[i] || '')}</td>`).join('') + '</tr>').join('');
+      return `<p style="font-family:Arial;font-size:9pt;font-weight:bold;color:#5E3FE1;margin:10pt 0 4pt">${BT.esc(title)}</p><table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse"><tr>${th}</tr>${tr}</table>`
+        + (note ? `<p style="font-family:Consolas,monospace;font-size:7.5pt;color:#8890b0;margin:3pt 0 6pt">${BT.esc(note)}</p>` : '');
     }
     return `<div class="btbl-title">${BT.esc(title)}</div><table class="btbl compact"><thead><tr>${t.columns.map((c) => `<th>${BT.esc(c)}</th>`).join('')}</tr></thead><tbody>${
-      rows.map((r) => '<tr>' + t.columns.map((_, i) => { const v = r[i] || ''; return `<td>${i === sevIdx && v && SEVCLS(v) ? `<span class="bk ${SEVCLS(v)}">${BT.esc(v)}</span>` : BT.esc(v)}</td>`; }).join('') + '</tr>').join('')}</tbody></table>`;
+      rows.map((r) => '<tr>' + t.columns.map((_, i) => { const v = r[i] || ''; return `<td>${i === sevIdx && v && SEVCLS(v) ? `<span class="bk ${SEVCLS(v)}">${BT.esc(v)}</span>` : BT.blocks.cellText(v)}</td>`; }).join('') + '</tr>').join('')}</tbody></table>`
+      + (note ? `<div class="btbl-note">${BT.esc(note)}</div>` : '');
   }
 
   BT.blocks.register('score', {
@@ -150,5 +169,8 @@
     });
     return d;
   }
-  Object.assign(BT.blocks, { scoreItemsFromSheet, scoreFromSheets, scoreTables, SCORE_FORMATS: FORMATS });
+  /** O book tem recomendações/alertas com risco? (mostra a escolha de riscos no diálogo de exportação) */
+  const hasRiskRows = (state) => (state.groups || []).some((g) => g.sections.some((s) => s.blocks.some((b) => b.type === 'score' && b.include !== false
+    && ['recs', 'alerts'].some((k) => b.data[k] && b.data[k].columns.some(isSevCol) && rowsOf(b.data[k]).length))));
+  Object.assign(BT.blocks, { scoreItemsFromSheet, scoreFromSheets, scoreTables, SCORE_FORMATS: FORMATS, RISK_LEVELS: LEVELS, riskLevelOf: levelOf, hasRiskRows });
 })(window.BT);

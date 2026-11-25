@@ -33,7 +33,10 @@ module.exports = {
       try {
         if (EXTRA[kind]) {
           if (!c[EXTRA[kind]]) throw new Error(kind === 'score' ? 'Este provedor não tem um Security Score nativo pela API: preencha no bloco ou importe pelo ZIP (arquivo com "score" no nome).' : 'Informações de tenant indisponíveis para este provedor.');
-          results.push(...(await c[EXTRA[kind]](cfg)));
+          const got = await c[EXTRA[kind]](cfg);
+          // avisos parciais (ex.: recomendações vieram, a pontuação não) vão para a lista de erros da tela
+          got.filter((r) => r && r.kind === 'warning').forEach((w) => errors.push({ kind, message: w.message }));
+          results.push(...got.filter((r) => !(r && r.kind === 'warning')));
         } else results.push(...(await c.pull(cfg, kind)));
       }
       catch (e) { console.error(`[${provider}/${kind}]`, e.message); errors.push({ kind, message: e.message }); }

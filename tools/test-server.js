@@ -384,6 +384,21 @@ async function main() {
   assert.deepStrictEqual([oi.rows[0]['Display Name'], oi.rows[0]['Private IP'], oi.rows[0].compartment_path, oi.rows[0].Image], ['srv-db01', '10.0.1.10', 'prod', 'Oracle-Linux-8.7-2023.09.26-0']); ok('OCI instâncias + IP + compartimento (assinatura verificada)');
   const [ob] = await oci.pull(ocfg, 'baseline');
   assert.strictEqual(ob.rows.length, 2); ok('OCI baseline (Resource Search, POST assinado)');
+  // OCI Cloud Guard: recomendações vieram, pontuação não → aviso na sincronização (não some em silêncio)
+  const cgMock = (score) => mock((url) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith('/compartments')) return [];
+    if (u.pathname.endsWith('/securityScoreAggregations')) return { items: score ? [{ securityScore: score, securityRating: 'GOOD' }] : [] };
+    if (u.pathname.endsWith('/recommendations')) return { items: [{ name: 'Resolve "User does not have MFA enabled"', riskLevel: 'CRITICAL', problemCount: 2, compartmentId: 'ten' }] };
+    if (u.pathname.endsWith('/problems')) return { items: [] };
+    return [];
+  });
+  cgMock(0);
+  const cg = await require('../server/cloud').pull('oci', ocfg, ['score']);
+  assert.deepStrictEqual([cg.results.map((r) => r.kind), cg.errors.length, /Pontuação do Cloud Guard não veio/.test(cg.errors[0].message)], [['score_recs', 'score_alerts'], 1, true]); ok('OCI: sem pontuação do Cloud Guard → recomendações entram e a tela avisa o motivo');
+  cgMock(87);
+  const cg2 = await require('../server/cloud').pull('oci', ocfg, ['score']);
+  assert.deepStrictEqual([cg2.errors.length, cg2.results[0].rows[0]['Pontuação'], cg2.results[0].rows[0]['Classificação']], [0, '87', 'GOOD']); ok('OCI: pontuação do Cloud Guard quando disponível');
 
   // Azure
   mock((url, o) => {

@@ -255,6 +255,14 @@ O bloco também está na paleta. No editor, o seletor **Formato de recomendaçõ
 barra colorida (≥ 80% bom, ≥ 60% atenção, abaixo disso crítico). No book, a severidade aparece como etiqueta colorida.
 Sincronizar de novo atualiza o bloco, sem duplicar.
 
+**Escolher os riscos no book:** em **⬇ Exportar**, a opção **🛡️ Segurança — riscos nas recomendações e alertas**
+(Crítica, Alta, Média, Baixa, Informativa) define quais linhas entram no PDF, no Word, no HTML e na pré-visualização.
+O editor continua com todas. Itens sem risco informado sempre aparecem, e o book mostra uma nota como "Riscos exibidos:
+Crítica, Alta — 12 de 40 item(ns)". A escolha fica salva no book.
+
+Se a sincronização trouxer as recomendações mas não a pontuação, a tela avisa o motivo (ex.: o Cloud Guard ainda não
+calculou a pontuação da tenancy). O resto entra normalmente.
+
 #### Zabbix e GLPI (monitoramento e chamados)
 Configure-os nas mesmas **Conexões** do cliente. A sincronização usa o **período do book** (do primeiro ao
 último dia do mês), que pode ser ajustado.

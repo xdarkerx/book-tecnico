@@ -41,6 +41,15 @@
         oninput: (e) => { block.data.title = e.target.value; ctx.save(); }
       });
     },
+    /** Word não quebra "palavras" longas (OCID, ARN…): põe pontos de quebra invisíveis a cada 16 caracteres.
+     *  Recebe texto puro e devolve HTML escapado. No HTML/PDF quem quebra é o CSS (overflow-wrap). */
+    wordText(v) {
+      return BT.esc(v).replace(/[^\s<>&;]{25,}/g, (w) => w.replace(/(.{16})/g, '$1&#8203;'));
+    },
+    /** HTML/PDF: marca só os textos longos sem espaço (OCID, ARN…) para quebrarem dentro da célula (CSS .blong). */
+    cellText(v) {
+      return BT.esc(v).replace(/[^\s<>]{25,}/g, (w) => `<span class="blong">${w}</span>`);
+    },
     titleHtml(block, ctx, cls = 'bh2') {
       const t = (block.data.title || '').trim();
       if (!t) return '';

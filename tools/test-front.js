@@ -12,9 +12,12 @@ const ok = (msg) => { passed++; console.log('  ✓ ' + msg); };
 
 const defs = {};
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const BT = { h: () => ({}), esc, blocks: { register: (t, d) => (defs[t] = d), titleHtml: (b) => (b.data.title ? `<div class="bh2">${esc(b.data.title)}</div>` : '') } };
-vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'blocks', 'score.js'), 'utf8'), { window: { BT } });
+const BT = { h: () => ({}), esc };
+const load = (f) => vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'blocks', f), 'utf8'), { window: { BT } });
+load('registry.js'); // registro real (titleHtml, wordText…)
 const B = BT.blocks;
+const register = B.register; B.register = (t, d) => { defs[t] = d; register(t, d); };
+load('score.js');
 
 // pontuação: aceita %, vírgula e coluna Máximo
 const items = B.scoreItemsFromSheet({ fields: ['Conta', 'Pontuação', 'Máximo', 'Fonte'], rows: [{ Conta: 'Produção', 'Pontuação': '28', 'Máximo': '45', Fonte: 'Defender' }, { Conta: 'HML', 'Pontuação': '72,5%', 'Máximo': '', Fonte: 'X' }, { Conta: 'Vazio', 'Pontuação': '', Fonte: 'X' }] }, 'Azure');
@@ -41,5 +44,24 @@ const html = defs.score.render(blk, { target: 'preview' });
 assert.ok(html.includes('&lt;script&gt;') && !html.includes('<script>x')); ok('score: conteúdo das planilhas é escapado no HTML');
 assert.ok(/<span class="bk br">Crítica<\/span>/.test(html)); ok('score: severidade vira etiqueta colorida');
 assert.ok(defs.score.word(blk, { target: 'word' }).includes('Findings críticos')); ok('score: exportação Word inclui as planilhas com o título do formato');
+
+// textos longos (OCID) no Word: pontos de quebra invisíveis, sem mudar textos normais
+const ocid = 'ocid1.tenancy.oc1..aaaaaaaao4am5ubi7rjjmlfoa5mlyll3nidj6pikuygvil6uegbtstznxb6q';
+assert.ok(B.wordText(ocid).includes('&#8203;') && B.wordText(ocid).replace(/&#8203;/g, '') === ocid); ok('Word: OCID ganha pontos de quebra invisíveis (o texto continua igual)');
+assert.strictEqual(B.wordText('Servidor de banco de dados'), 'Servidor de banco de dados'); assert.strictEqual(B.wordText('<b>x</b>'), '&lt;b&gt;x&lt;/b&gt;'); ok('Word: texto normal não muda e continua escapado');
+
+assert.strictEqual(B.cellText(ocid), `<span class="blong">${ocid}</span>`); assert.strictEqual(B.cellText('caedu'), 'caedu'); ok('HTML/PDF: só textos longos sem espaço podem quebrar (palavras normais ficam inteiras)');
+
+// exportação: escolher os riscos de recomendações/alertas
+const sec = { data: Object.assign({ title: 'Cloud Security Score', items: [], note: '' }, B.scoreTables('oci')) };
+sec.data.recs.rows = [['MFA', 'Crítica', '2', '(raiz)'], ['Patch', 'Média', '10', '(raiz)'], ['API key antiga', 'Baixa', '31', '(raiz)'], ['Sem risco', '', '1', '(raiz)']];
+const st = (riscos) => ({ meta: { riscosExport: riscos }, groups: [{ sections: [{ blocks: [Object.assign({ type: 'score' }, sec)] }] }] });
+const rowsIn = (h) => (h.match(/<tr>/g) || []).length - 1; // menos o cabeçalho
+assert.strictEqual(rowsIn(defs.score.render(sec, { target: 'web', state: st(undefined) })), 4); ok('riscos: sem escolha, todas as linhas aparecem');
+const filtered = defs.score.render(sec, { target: 'web', state: st(['critica', 'alta']) });
+assert.deepStrictEqual([rowsIn(filtered), /Riscos exibidos: Crítica, Alta — 2 de 4/.test(filtered), filtered.includes('API key antiga')], [2, true, false]); ok('riscos: só Crítica/Alta (+ linha sem risco) e nota "2 de 4" no book');
+assert.ok(/Riscos exibidos/.test(defs.score.word(sec, { target: 'word', state: st(['media']) }))); ok('riscos: filtro e nota também no Word');
+assert.deepStrictEqual([B.riskLevelOf('HIGH'), B.riskLevelOf('Média'), B.riskLevelOf('Informational'), B.riskLevelOf('Disaster')], ['alta', 'media', 'info', 'critica']); ok('riscos: reconhece português e inglês');
+assert.strictEqual(B.hasRiskRows(st()), true); assert.strictEqual(B.hasRiskRows({ groups: [] }), false); ok('riscos: a opção só aparece na exportação quando o book tem recomendações/alertas');
 
 console.log(`\n${passed} testes do front ok`);

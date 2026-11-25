@@ -219,7 +219,7 @@
     render(b, ctx) {
       const d = normalize(b.data);
       const rows = d.rows.filter(rowHasData);
-      const cell = (v, col) => (col.badge ? BT.data.badge(v) : (BT.esc(v) || '—'));
+      const cell = (v, col) => (col.badge ? BT.data.badge(v) : (BT.blocks.cellText(v) || '—'));
       return BT.blocks.titleHtml(b, ctx, 'btbl-title') +
         `<table class="btbl${d.compact ? ' compact' : ''}"><thead><tr>${d.columns.map((c) => `<th>${BT.esc(c.name)}</th>`).join('')}</tr></thead>` +
         `<tbody>${rows.map((r) => `<tr>${r.map((v, i) => `<td>${cell(v, d.columns[i])}</td>`).join('')}</tr>`).join('')}</tbody></table>` +
@@ -233,7 +233,7 @@
       const th = d.columns.map((c) => `<th style="background:#171C37;color:#ffffff;border-bottom:2pt solid #5E3FE1;padding:5pt 6pt;text-align:left;font-family:Consolas,monospace;font-size:7pt;text-transform:uppercase;letter-spacing:.5px">${BT.esc(c.name)}</th>`).join('');
       const body = rows.map((r, ri) => `<tr>${r.map((v, i) => {
         const bg = ri % 2 ? '#fafafe' : '#ffffff';
-        let content = BT.esc(v) || '—';
+        let content = BT.blocks.wordText(v) || '—';
         if (d.columns[i].badge && String(v).trim()) {
           const [cbg, cfg] = BT.data.badgeColors[BT.data.badgeClass(v)];
           content = `<span style="background:${cbg};color:${cfg};font-weight:bold;font-family:Consolas,monospace;font-size:7pt;text-transform:uppercase">&nbsp;${BT.esc(v)}&nbsp;</span>`;

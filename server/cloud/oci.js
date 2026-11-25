@@ -151,10 +151,17 @@ async function score(cfg) {
   const CG = `https://cloudguard-cp-api.${c.region}.oci.oraclecloud.com/20200131`;
   const sub = `compartmentId=${c.tenancy}&compartmentIdInSubtree=true&accessLevel=ACCESSIBLE`;
   const out = []; const errs = [];
-  try {
-    const it = ((await call(c, 'GET', `${CG}/securityScoreAggregations?compartmentId=${c.tenancy}`)).data?.items || [])[0];
-    if (it) out.push(U.sheet('score', 'Cloud Guard (API)', [{ 'Fonte': 'OCI Cloud Guard', 'Escopo': 'Tenancy', 'Pontuação': it.securityScore, 'Máximo': 100, 'Classificação': it.securityRating || '' }]));
-  } catch (e) { errs.push(e.message); }
+  // pontuação: tenta só a tenancy e, se vier vazio, com os compartimentos abaixo dela
+  let scoreMsg = '';
+  for (const q of [`compartmentId=${c.tenancy}`, `${sub}`]) {
+    try {
+      const items = (await call(c, 'GET', `${CG}/securityScoreAggregations?${q}`)).data?.items || [];
+      const it = items.find((x) => x && (x.securityScore != null || x.score != null));
+      if (it) { out.push(U.sheet('score', 'Cloud Guard (API)', [{ 'Fonte': 'OCI Cloud Guard', 'Escopo': 'Tenancy', 'Pontuação': it.securityScore ?? it.score, 'Máximo': 100, 'Classificação': sevPt(it.securityRating) || it.securityRating || '' }])); scoreMsg = ''; break; }
+      scoreMsg = 'o Cloud Guard ainda não calculou a pontuação desta tenancy (a lista veio vazia)';
+    } catch (e) { scoreMsg = e.message; }
+  }
+  if (scoreMsg) errs.push(scoreMsg);
   let comp = {};
   try { comp = Object.fromEntries((await compartments(c)).map((x) => [x.id, x.path])); } catch (e) { /* nomes opcionais */ }
   try {
@@ -166,6 +173,8 @@ async function score(cfg) {
     out.push(U.sheet('score_alerts', 'Problemas Cloud Guard', probs.map((p) => ({ 'Problema': p.detectorRuleId || '', 'Risco': sevPt(p.riskLevel), 'Recurso': p.resourceName || '', 'Tipo': p.resourceType || '', 'Compartimento': comp[p.compartmentId] || '', 'Detectado em': String(p.timeLastDetected || '').slice(0, 10) }))));
   } catch (e) { errs.push(e.message); }
   if (!out.length) throw new Error('Cloud Guard indisponível: confirme que está habilitado e a política permite "read cloud-guard-family". ' + errs.join(' | '));
+  // parte funcionou, parte não: avisa o que faltou (aparece junto dos erros da sincronização)
+  if (scoreMsg) out.push({ kind: 'warning', of: 'score', message: 'Pontuação do Cloud Guard não veio: ' + scoreMsg });
   return out;
 }
 
