@@ -119,6 +119,10 @@ assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state
   const T = BT.blocks.get('topology');
   const d = { title: 'Topologia', provider: 'aws', model: { networks: [{ id: 'a', name: 'vpc-prd', cidr: '10.0.0.0/16', subnets: [{ name: 'pub', cidr: '10.0.1.0/24', public: true }], gateways: [{ type: 'Internet GW', name: '' }] }, { id: 'b', name: 'vpc-hml', cidr: '10.1.0.0/16', subnets: [], gateways: [] }],
     hubs: [{ id: 'tgw', type: 'Transit Gateway', name: 'tgw-core' }], links: [{ a: 'a', b: 'internet', type: 'internet' }, { a: 'b', b: 'tgw', type: 'attach' }, { a: 'tgw', b: 'onprem', type: 'vpn', label: 'VPN · matriz' }] } };
+  const c = T.svg(d); // compacto (padrão)
+  assert.ok(/vpc-prd/.test(c) && /TRANSIT GATEWAY/.test(c) && /1 rede\(s\) anexada/.test(c) && /ON-PREMISES/.test(c) && />TGW</.test(c) && />Internet</.test(c) && />NAT</.test(c) === false && !/10\.0\.1\.0\/24/.test(c) && /1 subnet \(1 púb\.\)/.test(c));
+  assert.ok(/10\.0\.1\.0\/24/.test(T.svg(Object.assign({}, d, { style: 'compact', showSubnets: true })))); ok('topologia compacta: cartões com etiquetas (Internet, TGW), hub com redes anexadas, subnets só se pedir');
+  d.style = 'detailed';
   const s = T.svg(d);
   assert.ok(/vpc-prd/.test(s) && /vpc-hml/.test(s) && /TRANSIT GATEWAY/.test(s) && />Internet</.test(s) && /On-premises/.test(s) && /VPN · matriz/.test(s));
   assert.ok(T.isEmpty({ data: { model: { networks: [] } } }) && !T.isEmpty({ data: d }));

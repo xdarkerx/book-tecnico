@@ -410,6 +410,25 @@ async function main() {
   assert.deepStrictEqual([cg2.errors.length, cg2.results[0].rows[0]['Pontuação'], cg2.results[0].rows[0]['Classificação']], [0, '87', 'Boa · risk score 30']); ok('OCI: pontuação do Cloud Guard (POST /securityScores, API 20200131) com o risk score');
   assert.ok(cgCalls.includes('POST /20200131/securityScores') && !cgCalls.some((c) => /securityScoreAggregations/.test(c))); ok('OCI: usa o endereço certo da pontuação (não o antigo securityScoreAggregations)');
   assert.ok(!cgCalls.some((c) => /summarizeTrend/.test(c)) && !cg2.results.some((r) => r.kind === 'score_trend')); ok('Cloud Guard: só a pontuação atual (sem histórico/comparativo mensal)');
+  // Cloud Guard fora da região da conexão: acha a região de relatório pela configuração (home region)
+  const cgHosts = [];
+  const cgFetch = (enabled) => { global.fetch = async (url, o = {}) => {
+    const u = new URL(String(url)); const J = (b, st = 200) => new Response(JSON.stringify(b), { status: st });
+    if (u.host.startsWith('cloudguard-cp-api.')) cgHosts.push(u.host.split('.')[1] + ' ' + u.pathname.split('/').pop());
+    if (u.pathname.endsWith('/regionSubscriptions')) return J([{ regionName: 'sa-saopaulo-1', status: 'READY' }, { regionName: 'us-ashburn-1', status: 'READY', isHomeRegion: true }]);
+    if (u.pathname.endsWith('/compartments')) return J([]);
+    if (u.host.startsWith('cloudguard-cp-api.sa-saopaulo-1') || !enabled) return J({ code: 404, message: 'Authorization failed or requested resource not found' }, 404);
+    if (u.pathname.endsWith('/configuration')) return J({ reportingRegion: 'us-ashburn-1', status: 'ENABLED' });
+    if (u.pathname.endsWith('/securityScores')) return J({ items: [{ securityScore: 91, securityRating: 'EXCELLENT' }] });
+    return J({ items: [] });
+  }; };
+  cgFetch(true);
+  const cg3 = await require('../server/cloud').pull('oci', ocfg, ['score']);
+  assert.deepStrictEqual([cg3.errors.length, cg3.results[0].rows[0]['Pontuação'], cgHosts.filter((h) => /securityScores/.test(h))], [0, '91', ['us-ashburn-1 securityScores']]); ok('Cloud Guard: usa a região de relatório (home region) quando a da conexão devolve 404');
+  cgFetch(false);
+  const cg4 = await require('../server/cloud').pull('oci', ocfg, ['score']);
+  assert.ok(/read cloud-guard-family in tenancy/.test(cg4.errors[0].message) && /sa-saopaulo-1 e us-ashburn-1/.test(cg4.errors[0].message)); ok('Cloud Guard: sem acesso, a mensagem diz as regiões tentadas e a política que falta');
+  cgMock(87); // volta o mock da OCI para os testes seguintes
   // backup só do período, em todas as regiões assinadas (campo Regiões vazio)
   const ociBk = await require('../server/cloud').pull('oci', Object.assign({}, ocfg, { regions: '' }), ['backup'], { from: '2026-11-01', to: '2026-11-30' });
   const bkRows = ociBk.results[0].rows.filter((r) => r['Situação'] !== 'Política ativa');

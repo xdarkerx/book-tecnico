@@ -237,9 +237,29 @@ async function tenant(cfg) {
   return [U.sheet('tenant', 'Tenancy OCI (API)', [{ 'Tenancy': t.name || '', 'OCID': c.tenancy, 'Região principal': home, 'Regiões assinadas': subs.map((s) => s.regionName).join(', '), 'Descrição': t.description || '' }])];
 }
 /** Cloud Guard: pontuação, recomendações e problemas (alertas) ativos. */
+/** O Cloud Guard só responde na "região de relatório" da tenancy (escolhida ao habilitar, em geral a home region).
+ *  Pergunta a configuração na região da conexão e na home region; devolve { region, status } ou o motivo. */
+async function cloudGuardRegion(c) {
+  const tried = []; let home = '';
+  try { home = (((await call(c, 'GET', `https://identity.${c.region}.oraclecloud.com/20160918/tenancies/${c.tenancy}/regionSubscriptions`)).data || []).find((s) => s.isHomeRegion) || {}).regionName || ''; } catch (e) { /* sem permissão: tenta só a região da conexão */ }
+  for (const r of [...new Set([c.region, home].filter(Boolean))]) {
+    try {
+      const cf = (await call(c, 'GET', `https://cloudguard-cp-api.${r}.oci.oraclecloud.com/20200131/configuration?compartmentId=${c.tenancy}`)).data || {};
+      return { region: cf.reportingRegion || r, status: cf.status || '' };
+    } catch (e) { tried.push(`${r}: ${e.status || ''} ${String(e.message).replace(/^.*?: /, '').slice(0, 120)}`); }
+  }
+  return { region: '', home, tried };
+}
+
 async function score(cfg) {
   const c = config(cfg);
-  const CG = `https://cloudguard-cp-api.${c.region}.oci.oraclecloud.com/20200131`;
+  const where = await cloudGuardRegion(c);
+  if (!where.region) {
+    throw new Error(`Cloud Guard não respondeu (tentado em ${where.tried.map((t) => t.split(':')[0]).join(' e ')}). Confirme que o Cloud Guard está habilitado na tenancy ` +
+      `e que o grupo do usuário da API tem a política "allow group <grupo> to read cloud-guard-family in tenancy" (o 404 da OCI também significa falta de permissão).`);
+  }
+  if (where.status && !/ENABLED/i.test(where.status)) throw new Error(`O Cloud Guard está ${where.status === 'DISABLED' ? 'desabilitado' : where.status} nesta tenancy: habilite em Identity & Security › Cloud Guard.`);
+  const CG = `https://cloudguard-cp-api.${where.region}.oci.oraclecloud.com/20200131`;
   const sub = `compartmentId=${c.tenancy}&compartmentIdInSubtree=true&accessLevel=ACCESSIBLE`;
   const out = []; const errs = [];
   // pontuação: POST /securityScores (sem corpo, só compartmentId) — API Cloud Guard 20200131

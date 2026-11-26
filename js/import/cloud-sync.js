@@ -312,7 +312,7 @@
               const t = sh.topology || {};
               if ((t.networks || []).length) items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, primary, path: `${label} · Topologia de rede (${t.networks.length} rede${t.networks.length !== 1 ? 's' : ''})`,
                 destTitle: 'Networking', newTitleHint: 'Networking', origin: 'topology-' + k, replaceEmptyType: 'image', entry: { name: 'Topologia' },
-                blocks: [{ type: 'topology', data: { title: 'Topologia de rede', provider: p, account, origin: 'topology-' + k, showSubnets: true, showGateways: true, hidden: [], model: t } }], dest: '', newTitle: '', how: 'new', note: '' });
+                blocks: [{ type: 'topology', data: { title: 'Topologia de rede', provider: p, account, origin: 'topology-' + k, style: 'compact', hidden: [], model: t } }], dest: '', newTitle: '', how: 'new', note: '' });
               return;
             }
             if (sh.kind === 'vulns') {
