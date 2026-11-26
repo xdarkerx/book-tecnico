@@ -8,10 +8,14 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=5173 \
     BOOK_DATA_DIR=/data \
-    TZ=America/Sao_Paulo \n    BOOK_CHROMIUM=/usr/bin/chromium-browser \n    BOOK_EXPORT_BASE=/exports
+    TZ=America/Sao_Paulo \
+    BOOK_CHROMIUM=/usr/bin/chromium-browser \
+    BOOK_EXPORT_BASE=/exports
 
-# navegador sem janela + fontes (texto, acentos e os emojis dos ícones das seções)
-RUN apk add --no-cache chromium nss freetype harfbuzz ttf-freefont font-noto font-noto-emoji
+# navegador sem janela + fontes (acentos e os emojis dos ícones das seções) para o book automático (~900 MB).
+# Sem book automático: BOOK_AUTOMATION=false no .env (a imagem fica com ~200 MB e o 🤖 avisa que falta o navegador).
+ARG BOOK_AUTOMATION=true
+RUN if [ "$BOOK_AUTOMATION" = "true" ]; then apk add --no-cache chromium nss freetype harfbuzz font-dejavu font-noto-emoji; fi
 
 # app (o servidor monta o index.html com as partes de html/)
 COPY package.json package-lock.json ./

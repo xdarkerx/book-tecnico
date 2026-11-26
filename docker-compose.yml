@@ -8,7 +8,10 @@
 name: book-tecnico
 services:
   book-tecnico:
-    build: .
+    build:
+      context: .
+      args:
+        BOOK_AUTOMATION: ${BOOK_AUTOMATION:-true}   # false = imagem sem o navegador do book automático (~900 MB a menos)
     image: book-tecnico:latest
     container_name: book-tecnico
     ports:

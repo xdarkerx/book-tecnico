@@ -267,10 +267,10 @@ as **recomendações** e os **alertas**, com as colunas no formato de cada cloud
 
 | Cloud | Pontuação | Recomendações | Alertas | Permissão extra |
 |---|---|---|---|---|
-| OCI | Cloud Guard (0–100), com o histórico dos últimos meses e o risk score | recomendações do Cloud Guard (risco, problemas, compartimento) | problemas abertos do Cloud Guard | `read cloud-guard-family` |
+| OCI | Cloud Guard (0–100) e o risk score | recomendações do Cloud Guard (risco, problemas, compartimento) | problemas abertos do Cloud Guard | `read cloud-guard-family` |
 | AWS | Security Hub: % de controles aprovados por região | controles reprovados (controle, título, severidade, recursos reprovados) | findings críticos e altos de outros serviços (GuardDuty, Inspector…) | `securityhub:GetFindings`, `iam:ListAccountAliases` |
 | Azure | Defender for Cloud Secure Score por assinatura | recomendações não íntegras (severidade, recursos afetados) | alertas de segurança ativos | Reader ou Security Reader |
-| GCP | sem score nativo: à mão ou pelo ZIP | à mão ou pelo ZIP | à mão ou pelo ZIP | — |
+| GCP | sem pontuação nativa (à mão ou pelo ZIP) | achados do **Security Command Center** (configuração e vulnerabilidade, agrupados) | ameaças ativas do Security Command Center | `roles/securitycenter.findingsViewer` |
 
 O bloco também está na paleta. No editor, o seletor **Formato de recomendações e alertas** define as colunas
 (OCI, AWS, Azure, GCP ou Genérico), e as linhas podem ser editadas à mão. Cada pontuação mostra o percentual e uma
@@ -286,13 +286,27 @@ com o seu padrão (Importação padrão). Itens sem risco informado sempre entra
 - **💡 Recomendações** e **🚨 Problemas / alertas:** ligue ou desligue cada parte. Quando desligada, a parte some do
   book, mas os dados continuam no bloco.
 - **📊 Gráficos de risco:** rosca com as recomendações por risco e colunas com os problemas/alertas por risco.
-- **📈 Comparativo mensal:** cada pontuação mostra a variação em relação ao mês anterior (ex.: "▲ +6 pts vs out/26"),
-  e um gráfico de linha mostra a evolução dos últimos meses. Os meses anteriores vêm do histórico do **Cloud Guard** e da
-  pontuação salva nos **books dos meses anteriores** do mesmo cliente e área. Para AWS e Azure, o comparativo se forma
-  sincronizando todo mês.
+- **↔️ Comparativo com o mês passado** (ligado por padrão): cada pontuação mostra a do mês anterior e a variação, por
+  exemplo "out/26: 82% · ▲ +7 pts". O valor vem da pontuação salva no **book do mês anterior** do mesmo cliente e área.
+  Vale para todas as clouds, e o botão **🔄 Buscar meses anteriores** no editor atualiza.
+- **📈 Gráfico de evolução** (desligado por padrão): linha com a pontuação dos últimos meses que tiverem book.
 
 Se a sincronização trouxer as recomendações mas não a pontuação, a tela avisa o motivo (ex.: o Cloud Guard ainda não
 calculou a pontuação da tenancy). O resto entra normalmente.
+
+#### O que cada cloud traz (mesmos recursos em todas)
+
+| Recurso | OCI | AWS | Azure | GCP |
+|---|---|---|---|---|
+| Onde busca (com o campo vazio na conexão) | todas as regiões assinadas e todos os compartimentos | todas as regiões habilitadas na conta | todas as assinaturas visíveis e grupos de recursos | todos os projetos acessíveis |
+| Geral (tenant) | tenancy, OCID, regiões | conta, alias, ARN, regiões | tenant e assinaturas | projetos |
+| Servidores (SO pelo nome da imagem) | ✅ | ✅ (descrição da AMI) | ✅ | ✅ |
+| Storage com tamanho | volumes e buckets | EBS e S3 (CloudWatch) | discos e storage accounts (Azure Monitor) | discos e buckets (Cloud Monitoring) |
+| Redes com CIDR | ✅ | ✅ | ✅ | ✅ |
+| "Só os criados no mês" | ✅ | ✅ (menos VPC: a AWS não informa a data) | ✅ (menos VNet) | ✅ |
+| Backups feitos no mês | backups de boot/block volume | jobs do AWS Backup e snapshots EBS | jobs do Azure Backup | snapshots |
+| Políticas de backup | políticas de volume | planos do AWS Backup e DLM | políticas dos cofres | agendamentos de snapshot |
+| Segurança | Cloud Guard (pontuação, recomendações, problemas) | Security Hub (pontuação, controles reprovados, findings) | Defender (Secure Score, recomendações, alertas) | Security Command Center (achados e ameaças; sem pontuação nativa) |
 
 #### Zabbix e GLPI (monitoramento e chamados)
 Configure-os nas mesmas **Conexões** do cliente. A sincronização usa o **período do book** (do primeiro ao
@@ -364,6 +378,39 @@ Pelo botão **⚙️** no topo do editor, **⚙️ Configurações** na tela de 
 - **Login e acesso:** usuários, login normal e Microsoft (SAML) e **grupos do Entra ID** (abaixo).
 - **Edição simultânea:** bloqueio do book (abaixo).
 - **Backup**, **Lixeira** e **Logs e auditoria** (abaixo).
+
+### 🤖 Book automático (gerar, salvar na rede e enviar por e-mail)
+Na página do cliente, use **🤖 Book automático**. Todo mês, no **dia e hora** escolhidos, o Book Técnico gera o book do
+**mês anterior**, que já está fechado:
+1. Cria o book do mês a partir do **último book** do cliente, com os mesmos menus, seções e textos fixos (equipe,
+   ferramentas, objetivo…). Se o book do mês já existir, usa ele.
+2. **Sincroniza** com as mesmas escolhas da **última sincronização manual** do cliente (clouds e contas, tipos,
+   servidores todos ou do mês, backup, severidades do Zabbix e riscos da Segurança). Aplica direto, sem revisão.
+3. **Exporta** nos formatos marcados: PDF, Word e/ou HTML. Com mais de um, vai um **ZIP** com todos.
+4. **Salva** na pasta da rede do cliente e **envia por e-mail** para a(s) caixa(s) do cliente.
+
+**Configurações:**
+- **No cliente** (só administradores alteram): ligar/desligar, dia (1–28), hora, formatos, área, pasta de destino,
+  e-mails (vários separados por vírgula), assunto e mensagem (`{cliente}` e `{mes}` são trocados). **▶ Gerar agora**
+  roda na hora e mostra o resultado (arquivo, pasta, envio e avisos).
+- **Administrador › ✉️ E-mail e automação:**
+  - **SMTP** (Microsoft 365, Gmail com senha de app, servidor próprio) ou **Microsoft 365 (Graph)**: App Registration
+    com a permissão de **aplicativo** `Mail.Send`, enviando como a caixa do remetente. Anexos acima de 3 MB vão por
+    sessão de upload, até 150 MB.
+  - **Enviar e-mail de teste.**
+  - **Pasta base:** cada cliente salva em `<pasta base>/<nome do cliente>`.
+- **Agenda:** um cliente que só tem books a partir de um mês não gera os meses anteriores a esse. Se a geração falhar,
+  tenta de novo de hora em hora, até 3 vezes. O erro fica na tela do cliente e nos logs de auditoria.
+
+**Como funciona:** o servidor abre o próprio app num **Chromium sem janela** e roda a mesma sincronização, montagem e
+exportação da tela, então o book automático sai igual ao feito à mão. Fora do container ele usa o Chrome ou o Edge da
+máquina, ou o caminho em `BOOK_CHROMIUM`.
+
+**No container:**
+- A imagem já traz o Chromium (cerca de 900 MB a mais). Sem book automático, use `BOOK_AUTOMATION=false` no `.env`.
+- Os arquivos vão para `/exports`, que é a pasta da máquina definida em `BOOK_EXPORT_DIR` no `.env` (padrão:
+  `./books-gerados`).
+- Para salvar num compartilhamento de rede, mapeie o compartilhamento nesta máquina e aponte `BOOK_EXPORT_DIR` para ele.
 
 ### 🗑️ Lixeira (com GUID)
 Cada **cliente, ano e book tem um GUID**. Excluir não apaga: vai para a lixeira com **quem excluiu e quando**.
