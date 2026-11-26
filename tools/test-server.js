@@ -546,8 +546,61 @@ async function main() {
   assert.deepStrictEqual([azs.rows[0]['Pontuação'], azs.rows[0].Escopo, azRecs.rows[0].Assinatura], ['70', 'Produção', 'Produção']); ok('Azure Defender Secure Score em %');
   assert.deepStrictEqual([azRecs.rows.length, azRecs.rows[0]['Recursos não íntegros'], azRecs.rows[0].Severidade, azAlerts.rows.length, azAlerts.rows[0].Severidade], [1, '2', 'Alta', 1, 'Alta']); ok('Azure: recomendações não íntegras agrupadas e alertas ativos (descartados ficam de fora)');
   const cloudIdx = require('../server/cloud');
-  const g = await cloudIdx.pull('gcp', { projectIds: 'p1', serviceAccountJson: '{}' }, ['score']);
-  assert.ok(g.errors[0] && /Security Score nativo/.test(g.errors[0].message)); ok('GCP sem score nativo: erro explicativo, sem quebrar a sincronização');
+  // ── paridade entre clouds ──
+  // GCP: conta de serviço de teste (chave gerada aqui), projetos de todos os acessíveis, tamanho dos buckets e Security Command Center
+  const gkey = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const gsa = JSON.stringify({ type: 'service_account', client_email: 'book@proj.iam.gserviceaccount.com', private_key: gkey, project_id: 'proj-sa', token_uri: 'https://oauth2.googleapis.com/token' });
+  mock((url) => {
+    if (url.includes('oauth2.googleapis.com/token')) return { access_token: 'GT', expires_in: 3600 };
+    if (url.includes('cloudresourcemanager.googleapis.com/v1/projects?')) return { projects: [{ projectId: 'proj-a' }, { projectId: 'proj-b' }] };
+    if (url.includes('/storage/v1/b?project=proj-a')) return { items: [{ name: 'bkt-a', storageClass: 'STANDARD', location: 'US', timeCreated: '2026-01-01T00:00:00Z' }] };
+    if (url.includes('/storage/v1/b?project=')) return { items: [] };
+    if (url.includes('monitoring.googleapis.com/v3/projects/proj-a/timeSeries')) return { timeSeries: [{ resource: { labels: { bucket_name: 'bkt-a' } }, points: [{ value: { doubleValue: 2500000000 } }] }, { resource: { labels: { bucket_name: 'bkt-a' } }, points: [{ value: { doubleValue: 500000000 } }] }] };
+    if (url.includes('securitycenter.googleapis.com/v1/projects/proj-a/')) return { listFindingsResults: [
+      { finding: { category: 'PUBLIC_BUCKET_ACL', findingClass: 'MISCONFIGURATION', severity: 'HIGH', resourceName: '//storage/bkt-a' } },
+      { finding: { category: 'PUBLIC_BUCKET_ACL', findingClass: 'MISCONFIGURATION', severity: 'HIGH', resourceName: '//storage/bkt-c' } },
+      { finding: { category: 'Malware: Bad Domain', findingClass: 'THREAT', severity: 'CRITICAL', resourceName: '//compute/vm-1', eventTime: '2026-11-20T10:00:00Z' } }] };
+    if (url.includes('securitycenter.googleapis.com')) return { listFindingsResults: [] };
+    return { items: {} };
+  });
+  const gcfg = { serviceAccountJson: gsa };
+  const gst = (await cloudIdx.pull('gcp', gcfg, ['storage'])).results[0].rows;
+  assert.deepStrictEqual([gst.map((r) => r.Project), gst[0].Size], [['proj-a'], '3 GB']); ok('GCP: sem projeto na conexão busca em todos os projetos acessíveis; tamanho do bucket pelo Cloud Monitoring');
+  const gsc = await cloudIdx.pull('gcp', gcfg, ['score']);
+  const grec = gsc.results.find((r) => r.kind === 'score_recs').rows; const gal = gsc.results.find((r) => r.kind === 'score_alerts').rows;
+  assert.deepStrictEqual([grec[0]['Achado'], grec[0]['Recursos afetados'], grec[0].Severidade, gal[0].Alerta, gal[0].Severidade, /pontuação de segurança nativa/.test(gsc.errors[0].message)], ['PUBLIC_BUCKET_ACL', '2', 'Alta', 'Malware: Bad Domain', 'Crítica', true]); ok('GCP: Security Command Center — achados agrupados (recomendações) e ameaças (alertas); avisa que não há pontuação nativa');
+  // AWS: todas as regiões habilitadas, SO pela AMI, tamanho do S3 e jobs do AWS Backup
+  mock((url, o) => {
+    const body = String(o.body || '');
+    if (body.includes('Action=DescribeRegions')) return '<r><regionInfo><item><regionName>sa-east-1</regionName><optInStatus>opt-in-not-required</optInStatus></item><item><regionName>me-south-1</regionName><optInStatus>not-opted-in</optInStatus></item></regionInfo></r>';
+    if (body.includes('Action=DescribeInstances')) return '<r><reservationSet><item><instancesSet><item><instanceId>i-1</instanceId><imageId>ami-1</imageId><platformDetails>Windows</platformDetails><instanceState><name>running</name></instanceState><tagSet><item><key>Name</key><value>srv-ad01</value></item></tagSet></item></instancesSet></item></reservationSet></r>';
+    if (body.includes('Action=DescribeImages')) return '<r><imagesSet><item><imageId>ami-1</imageId><name>Windows_Server-2019-English-Full-Base</name><description>Microsoft Windows Server 2019 with Desktop Experience</description></item></imagesSet></r>';
+    if (body.includes('Action=DescribeVolumes')) return '<r/>';
+    if (url === 'https://s3.amazonaws.com/') return '<r><Buckets><Bucket><Name>logs-prd</Name><CreationDate>2025-01-01T00:00:00Z</CreationDate></Bucket></Buckets></r>';
+    if (url.includes('?location=')) return '<LocationConstraint>sa-east-1</LocationConstraint>';
+    if (body.includes('Action=GetMetricStatistics')) return body.includes('StandardStorage') && !body.includes('IAStorage') ? '<r><Datapoints><member><Timestamp>2026-11-25T00:00:00Z</Timestamp><Average>1500000000</Average></member></Datapoints></r>' : '<r/>';
+    if (url.includes('/backup-jobs/')) { assert.ok(/createdAfter=2026-11-01/.test(url)); return { BackupJobs: [{ ResourceArn: 'arn:aws:rds:sa-east-1:1:db:banco-prd', ResourceType: 'RDS', State: 'COMPLETED', CreationDate: Date.UTC(2026, 10, 10) / 1000, BackupVaultName: 'cofre', CreatedBy: { BackupPlanId: 'p1' } }] }; }
+    if (body.includes('Action=DescribeSnapshots')) return '<r><snapshotSet><item><snapshotId>snap-1</snapshotId><volumeId>vol-1</volumeId><volumeSize>50</volumeSize><status>completed</status><startTime>2026-11-12T00:00:00Z</startTime><description>Created by AWS Backup</description></item><item><snapshotId>snap-2</snapshotId><volumeId>vol-2</volumeId><volumeSize>20</volumeSize><status>completed</status><startTime>2026-11-13T00:00:00Z</startTime><description>manual</description></item></snapshotSet></r>';
+    return '<r/>';
+  });
+  const acfg = { accessKeyId: 'AK', secretAccessKey: 'S' }; // sem regiões
+  assert.deepStrictEqual(await require('../server/cloud/aws').regionsOf({ accessKeyId: 'AK', secretAccessKey: 'S' }, acfg), ['sa-east-1']); ok('AWS: sem regiões na conexão busca em todas as habilitadas (ignora as não ativadas)');
+  const asrv = (await cloudIdx.pull('aws', acfg, ['servers'])).results[0].rows;
+  assert.strictEqual(asrv[0]['Platform Details'], 'Microsoft Windows Server 2019 with Desktop Experience'); ok('AWS: SO pela descrição da AMI (em vez de "Windows"/"Linux/UNIX")');
+  const ast = (await cloudIdx.pull('aws', acfg, ['storage'])).results[0].rows.find((r) => r.Name === 'logs-prd');
+  assert.deepStrictEqual([ast['Size (GiB)'], ast.Region], ['1,5 GB', 'sa-east-1']); ok('AWS: tamanho dos buckets S3 (CloudWatch) e região do bucket');
+  const abk = (await cloudIdx.pull('aws', acfg, ['backup'], { from: '2026-11-01', to: '2026-11-30', backupMode: 'jobs' })).results[0].rows;
+  assert.deepStrictEqual(abk.map((r) => r.Item).sort(), ['banco-prd (RDS)', 'vol-2 (20 GiB)']); ok('AWS: backups feitos incluem os jobs do AWS Backup (RDS etc.) sem repetir os snapshots criados por ele');
+  // Azure: capacidade usada das storage accounts
+  mock((url) => {
+    if (url.includes('oauth2')) return { access_token: 'T', expires_in: 3600 };
+    if (url.includes('/subscriptions?')) return { value: [{ subscriptionId: 'sub-1', displayName: 'Prod' }] };
+    if (url.includes('storageAccounts?')) return { value: [{ id: '/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/stprd', name: 'stprd', kind: 'StorageV2', sku: { name: 'Standard_LRS' }, location: 'brazilsouth', properties: { creationTime: '2025-01-01T00:00:00Z' } }] };
+    if (url.includes('/providers/Microsoft.Insights/metrics')) return { value: [{ timeseries: [{ data: [{ average: 1000 }, { average: 250000000000 }] }] }] };
+    return { value: [] };
+  });
+  const azs2 = (await cloudIdx.pull('azure', { tenantId: 't', clientId: 'c', clientSecret: 's' }, ['storage'])).results[0].rows.find((r) => r.Name === 'stprd');
+  assert.strictEqual(azs2.Capacity, '250 GB'); ok('Azure: capacidade usada das storage accounts (Azure Monitor)');
 
   global.fetch = realFetch;
   console.log(`\n${passed} testes ok`);

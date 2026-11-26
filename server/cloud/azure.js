@@ -35,6 +35,8 @@ async function subscriptions(cfg) {
   if (ids.length) return ids;
   return (await arm(cfg, '/subscriptions?api-version=2022-12-01')).map((s) => s.subscriptionId);
 }
+/** bytes → "12,3 GB" (ou MB/TB) */
+const gb = (n) => { n = Number(n) || 0; const u = n >= 1e12 ? [1e12, 'TB'] : n >= 1e9 ? [1e9, 'GB'] : [1e6, 'MB']; return (Math.round((n / u[0]) * 10) / 10).toLocaleString('pt-BR') + ' ' + u[1]; };
 const rg = (id) => (String(id).match(/resourceGroups\/([^/]+)/i) || [])[1] || '';
 
 async function test(cfg) {
@@ -66,8 +68,17 @@ async function pull(cfg, kind, opts = {}) {
       }
     }
     if (kind === 'storage') {
-      for (const s of await arm(cfg, `${S}/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01`))
-        rows.push({ 'Name': s.name, 'Kind': `${s.kind} · ${s.sku?.name || ''}`, 'Capacity': '', 'Location': s.location, 'Resource Group': rg(s.id), 'Status': s.properties?.statusOfPrimary || '', 'Criado em': String(s.properties?.creationTime || '').slice(0, 10) });
+      // capacidade usada de cada storage account: métrica UsedCapacity do Azure Monitor (última hora com dado)
+      await U.pool(await arm(cfg, `${S}/providers/Microsoft.Storage/storageAccounts?api-version=2023-01-01`), 6, async (s) => {
+        let size = '';
+        try {
+          const end = new Date(); const start = new Date(end - 24 * 3600000);
+          const m = await arm(cfg, `${s.id}/providers/Microsoft.Insights/metrics?api-version=2023-10-01&metricnames=UsedCapacity&aggregation=Average&interval=PT1H&timespan=${start.toISOString()}/${end.toISOString()}`);
+          const pts = ((m[0] && m[0].timeseries && m[0].timeseries[0] && m[0].timeseries[0].data) || []).filter((x) => x.average != null);
+          if (pts.length) size = gb(pts[pts.length - 1].average);
+        } catch (e) { /* sem permissão de leitura de métricas */ }
+        rows.push({ 'Name': s.name, 'Kind': `${s.kind} · ${s.sku?.name || ''}`, 'Capacity': size, 'Location': s.location, 'Resource Group': rg(s.id), 'Status': s.properties?.statusOfPrimary || '', 'Criado em': String(s.properties?.creationTime || '').slice(0, 10) });
+      });
       for (const d of await arm(cfg, `${S}/providers/Microsoft.Compute/disks?api-version=2023-04-02`))
         rows.push({ 'Name': d.name, 'Kind': 'Disco ' + (d.sku?.name || ''), 'Capacity': (d.properties?.diskSizeGB ?? '') + ' GiB', 'Location': d.location, 'Resource Group': rg(d.id), 'Status': d.properties?.diskState || '', 'Criado em': String(d.properties?.timeCreated || '').slice(0, 10) });
     }

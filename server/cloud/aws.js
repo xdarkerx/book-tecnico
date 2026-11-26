@@ -2,7 +2,9 @@
  * Config (por cliente):
  *   { profile?: 'default', credentialsFile?: '~/.aws/credentials',
  *     accessKeyId?, secretAccessKey?, sessionToken?, regions: 'sa-east-1,us-east-1' }
- * Permissões somente leitura: ec2:Describe*, s3:ListAllMyBuckets, sts:GetCallerIdentity
+ * Permissões somente leitura: ec2:Describe*, s3:ListAllMyBuckets, s3:GetBucketLocation, cloudwatch:GetMetricStatistics,
+ *   sts:GetCallerIdentity, backup:List*, dlm:Get*, securityhub:GetFindings, iam:ListAccountAliases (ou a política ReadOnlyAccess)
+ * Regiões: as informadas na conexão ou, se vazio, todas as regiões habilitadas na conta.
  */
 const crypto = require('crypto');
 const U = require('./util');
@@ -45,6 +47,15 @@ function credentials(cfg) {
   throw new Error('Credenciais AWS não encontradas (informe Access Key/Secret ou um profile de ~/.aws/credentials).');
 }
 const regions = (cfg) => { const r = U.list(cfg.regions); return r.length ? r : ['us-east-1']; };
+/** Regiões a consultar: as da conexão ou, se vazio, todas as habilitadas na conta (DescribeRegions). */
+async function regionsOf(creds, cfg) {
+  if (U.list(cfg.regions).length) return U.list(cfg.regions);
+  try {
+    const [xml] = await query(creds, 'ec2', 'us-east-1', 'DescribeRegions', {});
+    const list = U.find(xml, 'regionInfo').flatMap((x) => U.all(x, 'item')).filter((r) => !/not-opted-in/.test(U.text(r, 'optInStatus'))).map((r) => U.text(r, 'regionName')).filter(Boolean);
+    return list.length ? list : ['us-east-1'];
+  } catch (e) { return ['us-east-1']; }
+}
 
 /** Chamada da Query API (EC2/STS): POST form-urlencoded, resposta XML. Pagina por NextToken. */
 async function query(creds, service, region, action, params = {}, version = '2016-11-15') {
@@ -75,19 +86,33 @@ const period = (opts = {}) => ({ from: opts.from ? new Date(opts.from + 'T00:00:
 const inPeriod = (d, p) => { const t = new Date(d); return t >= p.from && t <= p.to; };
 async function pull(cfg, kind, opts = {}) {
   const creds = credentials(cfg);
-  const regs = regions(cfg);
-  if (kind === 'backup') return [U.sheet('backup', 'Backup AWS (API)', [...(wantPolicies(opts) ? await backupPlans(creds, regs) : []), ...(wantJobs(opts) ? await snapshots(creds, regs, period(opts)) : [])])];
+  const regs = await regionsOf(creds, cfg);
+  if (kind === 'backup') return [U.sheet('backup', 'Backup AWS (API)', [...(wantPolicies(opts) ? await backupPlans(creds, regs) : []), ...(wantJobs(opts) ? [...await backupJobs(creds, regs, period(opts)), ...await snapshots(creds, regs, period(opts), { skipAwsBackup: true })] : [])])];
   if (kind === 'servers') {
     const rows = [];
-    for (const r of regs) for (const page of await query(creds, 'ec2', r, 'DescribeInstances', { MaxResults: '1000' }))
-      for (const inst of U.find(page, 'instancesSet').flatMap((s) => U.all(s, 'item'))) {
+    for (const r of regs) {
+      const insts = [];
+      for (const page of await query(creds, 'ec2', r, 'DescribeInstances', { MaxResults: '1000' })) insts.push(...U.find(page, 'instancesSet').flatMap((s) => U.all(s, 'item')));
+      // SO pelo nome/descrição da imagem (AMI): "Windows Server 2019…", "Amazon Linux 2023…" em vez de "Linux/UNIX"
+      const amis = {};
+      const ids = [...new Set(insts.map((i) => U.text(i, 'imageId')).filter(Boolean))];
+      for (let k = 0; k < ids.length; k += 100) {
+        try {
+          const params = {}; ids.slice(k, k + 100).forEach((id, n) => (params[`ImageId.${n + 1}`] = id));
+          for (const page of await query(creds, 'ec2', r, 'DescribeImages', params))
+            for (const im of U.find(page, 'imagesSet').flatMap((x) => U.all(x, 'item'))) amis[U.text(im, 'imageId')] = U.text(im, 'description') || U.text(im, 'name');
+        } catch (e) { /* AMI apagada ou sem permissão: fica o platformDetails */ }
+      }
+      for (const inst of insts) {
+        const os = amis[U.text(inst, 'imageId')];
         rows.push({
           'Name': tag(inst, 'Name') || U.text(inst, 'instanceId'), 'Instance ID': U.text(inst, 'instanceId'),
-          'Private IP Address': U.text(inst, 'privateIpAddress'), 'Platform Details': U.text(inst, 'platformDetails') || U.text(inst, 'platform') || 'Linux/UNIX',
+          'Private IP Address': U.text(inst, 'privateIpAddress'), 'Platform Details': (os && os.length <= 80 ? os : '') || U.text(inst, 'platformDetails') || U.text(inst, 'platform') || 'Linux/UNIX',
           'Instance State': U.text(inst, 'instanceState/name'), 'Availability Zone': U.text(inst, 'placement/availabilityZone'),
           'VPC ID': U.text(inst, 'vpcId'), 'Instance Type': U.text(inst, 'instanceType'), 'Tag:Environment': tag(inst, 'Environment') || tag(inst, 'env'), 'Criado em': U.text(inst, 'launchTime').slice(0, 10)
         });
       }
+    }
     return [U.sheet('servers', 'EC2 (API)', rows)];
   }
   if (kind === 'storage') {
@@ -98,7 +123,16 @@ async function pull(cfg, kind, opts = {}) {
     // S3 (global)
     const { headers } = sign({ method: 'GET', host: 's3.amazonaws.com', region: 'us-east-1', service: 's3', creds });
     const xml = U.parseXml(await (await U.request('https://s3.amazonaws.com/', { headers })).text());
-    for (const b of U.find(xml, 'Bucket')) rows.push({ 'Name': U.text(b, 'Name'), 'Volume Type': 'S3 Bucket', 'Size (GiB)': '', 'Region': 'global', 'State': 'available', 'Criado em': U.text(b, 'CreationDate').slice(0, 10) });
+    // tamanho de cada bucket: região (GetBucketLocation) + métrica BucketSizeBytes do CloudWatch
+    await U.pool(U.find(xml, 'Bucket'), 6, async (b) => {
+      const name = U.text(b, 'Name'); let region = 'us-east-1', size = '';
+      try {
+        const h = sign({ method: 'GET', host: 's3.amazonaws.com', region: 'us-east-1', service: 's3', path: '/' + encodeURIComponent(name), query: { location: '' }, creds }).headers;
+        region = U.text(U.parseXml(await (await U.request(`https://s3.amazonaws.com/${encodeURIComponent(name)}?location=`, { headers: h })).text()), 'LocationConstraint') || 'us-east-1';
+      } catch (e) { /* sem s3:GetBucketLocation */ }
+      try { const bytes = await s3Size(creds, region, name); if (bytes != null) size = gb(bytes); } catch (e) { /* sem cloudwatch:GetMetricStatistics */ }
+      rows.push({ 'Name': name, 'Volume Type': 'S3 Bucket', 'Size (GiB)': size, 'Region': region, 'State': 'available', 'Criado em': U.text(b, 'CreationDate').slice(0, 10) });
+    });
     return [U.sheet('storage', 'EBS + S3 (API)', rows)];
   }
   if (kind === 'network') {
@@ -141,7 +175,7 @@ async function tenant(cfg) {
   let alias = '';
   try { const [ax] = await query(creds, 'iam', 'us-east-1', 'ListAccountAliases', {}, '2010-05-08'); alias = U.text(U.find(ax, 'member')[0] || { text: '' }); } catch (e) { /* sem iam:ListAccountAliases */ }
   const acc = U.text(U.find(xml, 'Account')[0]);
-  return [U.sheet('tenant', 'Conta AWS (API)', [{ 'Conta': alias || acc, 'Account ID': acc, 'Alias': alias, 'ARN': U.text(U.find(xml, 'Arn')[0]), 'Regiões': regions(cfg).join(', ') }])];
+  return [U.sheet('tenant', 'Conta AWS (API)', [{ 'Conta': alias || acc, 'Account ID': acc, 'Alias': alias, 'ARN': U.text(U.find(xml, 'Arn')[0]), 'Regiões': (await regionsOf(creds, cfg)).join(', ') }])];
 }
 /** Security Hub: findings paginados com filtro. */
 async function findings(creds, r, filters, maxPages = 100) {
@@ -160,7 +194,7 @@ const EQ = (v) => [{ Value: v, Comparison: 'EQUALS' }];
 async function score(cfg) {
   const creds = credentials(cfg);
   const scores = []; const recs = {}; const alerts = [];
-  for (const r of regions(cfg)) {
+  for (const r of await regionsOf(creds, cfg)) {
     const status = {};
     for (const f of await findings(creds, r, { ProductName: EQ('Security Hub'), RecordState: EQ('ACTIVE'), WorkflowStatus: [{ Value: 'SUPPRESSED', Comparison: 'NOT_EQUALS' }] })) {
       const id = (f.Compliance && f.Compliance.SecurityControlId) || f.GeneratorId; const st = f.Compliance && f.Compliance.Status;
@@ -189,10 +223,46 @@ async function score(cfg) {
 const wantJobs = (o) => (o.backupMode || 'both') !== 'policies';
 const wantPolicies = (o) => (o.backupMode || 'both') !== 'jobs';
 /** GET assinado de uma API REST JSON da AWS (AWS Backup, DLM). */
-async function restGet(creds, service, r, path) {
+async function restGet(creds, service, r, path, query = {}) {
   const host = `${service}.${r}.amazonaws.com`;
-  const { headers } = sign({ method: 'GET', host, region: r, service, path, creds });
-  return (await U.request(`https://${host}${path}`, { headers })).json();
+  const { headers, canonicalQuery } = sign({ method: 'GET', host, region: r, service, path, query, creds });
+  return (await U.request(`https://${host}${path}${canonicalQuery ? '?' + canonicalQuery : ''}`, { headers })).json();
+}
+/** Backups feitos no período pelo AWS Backup (EC2, EBS, RDS, EFS, DynamoDB…). */
+async function backupJobs(creds, regs, p) {
+  const rows = [];
+  const ST = { COMPLETED: 'OK', FAILED: 'Falha', ABORTED: 'Abortado', EXPIRED: 'Expirado', RUNNING: 'Em andamento', CREATED: 'Em andamento', PENDING: 'Em andamento', PARTIAL: 'Parcial' };
+  for (const r of regs) {
+    try {
+      let token = null; let n = 0;
+      do {
+        const q = Object.assign({ createdAfter: p.from.toISOString(), createdBefore: p.to.toISOString(), maxResults: '1000' }, token ? { nextToken: token } : {});
+        const j = await restGet(creds, 'backup', r, '/backup-jobs/', q);
+        for (const b of j.BackupJobs || []) {
+          const created = typeof b.CreationDate === 'number' ? new Date(b.CreationDate * 1000) : new Date(b.CreationDate);
+          rows.push({ 'Item': `${String(b.ResourceArn || '').split(/[:/]/).pop()} (${b.ResourceType || ''})`, 'Situação': ST[b.State] || b.State, 'Ferramenta': `AWS Backup (${b.BackupVaultName || 'cofre'})`,
+            'Frequência': b.CreatedBy && b.CreatedBy.BackupPlanId ? 'Agendado (plano)' : 'Sob demanda', 'Retenção': '—', 'Criado em': created.toISOString().slice(0, 10), 'Região': r });
+        }
+        token = j.NextToken;
+      } while (token && ++n < 20);
+    } catch (e) { /* sem AWS Backup na região ou sem permissão backup:ListBackupJobs */ }
+  }
+  return rows;
+}
+/** bytes → "12,3 GB" (ou MB/TB) */
+const gb = (n) => { n = Number(n) || 0; const u = n >= 1e12 ? [1e12, 'TB'] : n >= 1e9 ? [1e9, 'GB'] : [1e6, 'MB']; return (Math.round((n / u[0]) * 10) / 10).toLocaleString('pt-BR') + ' ' + u[1]; };
+/** Tamanho do bucket S3 (soma das classes de armazenamento), métrica diária do CloudWatch. */
+async function s3Size(creds, region, bucket) {
+  let total = null;
+  for (const st of ['StandardStorage', 'StandardIAStorage', 'OneZoneIAStorage', 'IntelligentTieringFAStorage', 'GlacierStorage', 'DeepArchiveStorage']) {
+    const now = new Date();
+    const [xml] = await query(creds, 'monitoring', region, 'GetMetricStatistics', { Namespace: 'AWS/S3', MetricName: 'BucketSizeBytes', 'Dimensions.member.1.Name': 'BucketName', 'Dimensions.member.1.Value': bucket,
+      'Dimensions.member.2.Name': 'StorageType', 'Dimensions.member.2.Value': st, StartTime: new Date(now - 3 * 86400000).toISOString(), EndTime: now.toISOString(), Period: '86400', 'Statistics.member.1': 'Average' }, '2010-08-01');
+    const pts = U.find(xml, 'member').map((m) => ({ t: U.text(m, 'Timestamp'), v: parseFloat(U.text(m, 'Average')) })).filter((p) => p.t && !isNaN(p.v)).sort((a, b) => a.t.localeCompare(b.t));
+    if (pts.length) total = (total || 0) + pts[pts.length - 1].v;
+    if (st === 'StandardStorage' && total == null) break; // bucket vazio ou sem métrica: não insiste nas outras classes
+  }
+  return total;
 }
 const cronTxt = (e) => { const m = String(e || '').match(/cron\((\S+) (\S+) (\S+) (\S+) (\S+) (\S+)\)/); if (!m) return String(e || ''); const [, mi, hr, dom, , dow] = m; return `${dow !== '?' && dow !== '*' ? 'Semanal (' + dow + ')' : dom !== '*' && dom !== '?' ? 'Mensal (dia ' + dom + ')' : 'Diário'} ${hr.padStart(2, '0')}:${mi.padStart(2, '0')} UTC`; };
 /** Políticas: planos do AWS Backup (regras com agenda e retenção) e políticas do Data Lifecycle Manager. */
@@ -215,7 +285,7 @@ async function backupPlans(creds, regs) {
   return rows;
 }
 /** Backup do período: snapshots EBS (manuais, AWS Backup e Data Lifecycle Manager). */
-async function snapshots(creds, regs, p) {
+async function snapshots(creds, regs, p, o = {}) {
   const rows = [];
   const ST = { completed: 'OK', pending: 'Em andamento', error: 'Falha', recoverable: 'Recuperável', recovering: 'Recuperando' };
   for (const r of regs) for (const page of await query(creds, 'ec2', r, 'DescribeSnapshots', { 'Owner.1': 'self', MaxResults: '1000' }))
@@ -223,6 +293,7 @@ async function snapshots(creds, regs, p) {
       const start = U.text(s, 'startTime');
       if (!inPeriod(start, p)) continue;
       const desc = U.text(s, 'description');
+      if (o.skipAwsBackup && /AWS Backup/i.test(desc)) continue; // já aparece nos jobs do AWS Backup
       const how = /AWS Backup/i.test(desc) ? 'AWS Backup (plano)' : tag(s, 'dlm:managed') || /Data Lifecycle/i.test(desc) ? 'Agendado (DLM)' : 'Manual';
       rows.push({ 'Item': tag(s, 'Name') || `${U.text(s, 'volumeId')} (${U.text(s, 'volumeSize')} GiB)`, 'Situação': ST[U.text(s, 'status')] || U.text(s, 'status'), 'Ferramenta': 'Snapshot EBS',
         'Frequência': how, 'Retenção': '—', 'Criado em': start.slice(0, 10), 'Região': r });
@@ -230,4 +301,4 @@ async function snapshots(creds, regs, p) {
   return rows.sort((a, b) => String(b['Criado em']).localeCompare(a['Criado em']));
 }
 
-module.exports = { label: 'Amazon Web Services', test, pull, tenant, score, sign };
+module.exports = { label: 'Amazon Web Services', test, pull, tenant, score, sign, regionsOf };
