@@ -16,86 +16,98 @@
       { title: 'Ferramentas', icon: '🔧', blocks: [t(['Categoria', 'Ferramenta(s)'])] }
     ]
   });
-  const ops = (extra = []) => ({
-    title: 'Operações', icon: '⚡', separator: true, subtitle: 'Operação & próximos passos', collapsed: true, sections: [
-      { title: 'Incidentes', icon: '⚠️', blocks: [t(['Item', 'Descrição', 'Severidade', 'Status', 'Ação Tomada'], [2, 3])] },
-      ...extra,
-      { title: 'Melhorias', icon: '🚀', blocks: [t(['Prioridade', 'Área', 'Descrição', 'Responsável', 'Prazo'], [0])] },
-      { title: 'Próximos Passos', icon: '📌', blocks: [t(['Prioridade', 'Ação / Compromisso', 'Responsável', 'Prazo', 'Status'], [0, 4])] }
-    ]
-  });
-  const PROVS = [['oci', 'VCNs'], ['aws', 'VPCs'], ['azure', 'VNets'], ['gcp', 'Redes VPC']];
+  const imgs = (title = '') => ({ type: 'image', data: { title, images: [], layout: 'grid2' } });
+  const NET = { oci: 'VCN', aws: 'VPC', azure: 'VNet', gcp: 'VPC Network' };
+  const CLOUDS = ['oci', 'aws', 'azure', 'gcp'];
+  // Menu de cada cloud no mesmo formato do InfraCloud (a sincronização preenche as seções de mesmo nome)
+  const cloudGroup = (p, sections) => {
+    const P = BT.data.providers[p];
+    return { title: P.label, icon: P.icon, separator: true, provider: p, subtitle: '', collapsed: p !== 'oci', sections: sections(P) };
+  };
 
+  // Estrutura dos books de Network: escopo e baseline dos equipamentos, capacity, rotina de backup, serviços,
+  // endereçamento IP, links de internet, VPNs e melhorias. Mesmo formato do InfraCloud.
   function network() {
     return {
-      meta: meta(), ui: { route: 'cover' },
+      meta: { ...meta(), time: 'Network', subtitulo: 'Relatório Mensal de Redes' }, ui: { route: 'cover' },
       groups: [
-        book('<p>Apresentar a arquitetura e a operação de rede do ambiente do cliente: topologia, conectividade híbrida, segmentação, segurança de rede e pontos de atenção.</p>'),
+        book('<p>Fornecer uma visão detalhada da infraestrutura de rede do cliente, abordando topologia, configurações, segurança, gerenciamento e manutenção. A documentação visa garantir a padronização e facilitar futuras atualizações, suporte e expansão.</p>'),
         {
-          title: 'Topologia', icon: '🧭', separator: true, subtitle: 'Visão geral da rede', sections: [
-            { title: 'Diagrama geral', icon: '🗺️', blocks: [img('Topologia de rede'), text('', 'Descrição da arquitetura')] },
-            { title: 'Conectividade', icon: '🔗', blocks: [kpi(['Links / túneis', 'Ativos', 'Com falha']), t(['Origem', 'Destino', 'Tipo', 'Banda', 'Redundância', 'Status'], [5], 'VPN · FastConnect · ExpressRoute · Direct Connect · Interconnect')] }
+          title: 'Visão Geral', icon: '🌐', separator: true, subtitle: 'Escopo e baseline da rede', sections: [
+            { title: 'Escopo', icon: '🎯', blocks: [text('<p>Este documento apresenta as informações dos ambientes de rede do cliente.</p>'), img('Topologia de rede')] },
+            { title: 'Baseline completo', icon: '🧾', blocks: [t(['Categoria', 'Equipamento', 'Ambiente', 'Fabricante', 'Modelo', 'Versão', 'Monitoria'], [6])] },
+            { title: 'Levantamento de datas', icon: '📅', blocks: [t(['Equipamento', 'Ambiente', 'Modelo', 'Licenciamento', 'End of Support', 'End of Life'])] }
           ]
         },
-        ...PROVS.map(([p, rede]) => {
-          const P = BT.data.providers[p];
-          return {
-            title: P.label, icon: P.icon, provider: p, separator: true, collapsed: p !== 'oci', sections: [
-              { title: `Redes (${rede})`, icon: '🌐', blocks: [t(['Rede', 'CIDR', P.group, 'Subnets'], [], rede)] },
-              { title: 'Subnets', icon: '🧩', blocks: [t(['Subnet', 'CIDR', 'Rede', 'Pública / Privada', 'Route table'], [3])] },
-              { title: 'Segurança de rede', icon: '🛡️', blocks: [t(['Regra / Grupo', 'Origem', 'Destino', 'Porta / Protocolo', 'Ação', 'Observação'], [4])] }
-            ]
-          };
-        }),
         {
-          title: 'Serviços de rede', icon: '🛰️', separator: true, collapsed: true, sections: [
-            { title: 'Load Balancers', icon: '⚖️', blocks: [t(['Nome', 'Tipo', 'IP / DNS', 'Backends', 'Status'], [4])] },
-            { title: 'DNS', icon: '📛', blocks: [t(['Zona', 'Tipo', 'Registros', 'Observação'])] },
-            { title: 'Firewall & WAF', icon: '🔥', blocks: [t(['Equipamento / Serviço', 'Política', 'Regras', 'Status'], [3]), img('Evidências')] }
+          title: 'Equipamentos', icon: '🧰', separator: true, subtitle: 'Capacity, rotinas e serviços', sections: [
+            { title: 'Recursos e capacity', icon: '📊', blocks: [kpi(['Memória', 'CPU', 'Swap']), imgs('Gráficos de CPU e memória')] },
+            { title: 'Rotina de backup', icon: '💾', blocks: [text('<p>Os equipamentos possuem rotinas automáticas configuradas pelo administrador. As rotinas seguem os seguintes padrões:</p>'), t(['Horário', 'Descrição'])] },
+            { title: 'Serviços', icon: '🛰️', blocks: [t(['Serviço', 'Servidor', 'Criticidade', 'Responsável', 'Monitorado', 'Observações'], [2, 4])] }
           ]
         },
-        ops([{ title: 'Mudanças de rede', icon: '🔀', blocks: [t(['Data', 'Mudança', 'Impacto', 'Responsável', 'Status'], [2, 4])] }])
+        {
+          title: 'Conectividade', icon: '🔗', separator: true, subtitle: 'Endereçamento, links e VPNs', sections: [
+            { title: 'Endereçamento IP', icon: '🔢', blocks: [text('<p>O endereçamento IP da rede é documentado para garantir organização, controle e facilidade na administração dos dispositivos conectados.</p>'), t(['Interface / VLAN', 'Nome', 'Faixa de IP', 'Localidade', 'Finalidade'])] },
+            { title: 'Links de Internet', icon: '🌍', blocks: [t(['Localidade', 'Operadora', 'Velocidade', 'Endereçamento IP', 'Interface conectada'])] },
+            { title: 'VPN Site-to-Site', icon: '🔐', blocks: [t(['Localidade', 'Nome', 'Interface', 'Descrição'])] }
+          ]
+        },
+        ...CLOUDS.map((p) => cloudGroup(p, (P) => [
+          { title: 'Networking', icon: '🌐', blocks: [t([NET[p], 'CIDR', P.group]), imgs('Topologia de rede')] }
+        ])),
+        {
+          title: 'Operações', icon: '⚡', separator: true, subtitle: 'Incidentes, melhorias e próximos passos', collapsed: true, sections: [
+            { title: 'Incidentes', icon: '⚠️', blocks: [t(['Equipamento', 'Descrição', 'Severidade', 'Status', 'Ação Tomada'], [2, 3])] },
+            { title: 'Melhorias', icon: '🚀', blocks: [t(['Descrição', 'Resultado', 'Status', 'Prazo de execução'], [2], 'Levantamento de melhorias')] },
+            { title: 'Próximos Passos', icon: '📌', blocks: [t(['Prioridade', 'Ação / Compromisso', 'Responsável', 'Prazo', 'Status'], [0, 4])] }
+          ]
+        }
       ]
     };
   }
 
+  // Estrutura dos books de Backup: escopo do contrato, arquitetura e repositórios, baseline do mês,
+  // status dos jobs, consumo dos buckets, incidentes e conclusão. Mesmo formato do InfraCloud.
   function backup() {
     return {
-      meta: meta(), ui: { route: 'cover' },
+      meta: { ...meta(), time: 'Backup', subtitulo: 'Relatório Mensal de Backup' }, ui: { route: 'cover' },
       groups: [
-        book('<p>Apresentar a situação da rotina de backup e recuperação do ambiente: cobertura, execução dos jobs, retenção, testes de restore e riscos.</p>'),
+        book('<p>Apresentar a visão técnica e operacional do ambiente de backup do cliente, consolidando inventário, execuções, incidentes e recomendações técnicas.</p>'),
         {
-          title: 'Visão Geral', icon: '📊', separator: true, subtitle: 'Indicadores de backup', sections: [
-            { title: 'Indicadores', icon: '📈', blocks: [kpi(['Taxa de sucesso', 'Jobs executados', 'Falhas', 'Servidores protegidos', 'Volume protegido (TB)']), img('Gráfico de execuções')] },
-            { title: 'Política de backup', icon: '📜', blocks: [t(['Ambiente', 'Ferramenta', 'Escopo', 'Frequência', 'Retenção', 'Janela'], [], 'Política vigente')] }
+          title: 'Visão Geral', icon: '🌐', separator: true, subtitle: 'Escopo, arquitetura e baseline de backup', sections: [
+            { title: 'Escopo', icon: '🎯', blocks: [text('<p>Este documento apresenta as informações do ambiente de backup do cliente.</p>'), t(['Item', 'Quantidade'], [], 'Dentro do escopo do contrato')] },
+            { title: 'Arquitetura', icon: '🏗️', blocks: [img('Arquitetura de backup'), text('', 'Componentes'), t(['Repositório', 'Tipo / Camada', 'Consumo atual', 'Região', 'Finalidade'], [], 'Repositórios de backup')] },
+            { title: 'Baseline de backup', icon: '🧾', blocks: [kpi(['Servidores protegidos', 'Itens protegidos', 'Taxa de sucesso']), t(['Servidor', 'Item protegido (banco / VM / pasta)', 'Política', 'Frequência', 'Retenção'])] }
           ]
         },
         {
-          title: 'Execuções', icon: '🗓️', separator: true, sections: [
-            { title: 'Jobs', icon: '▶️', blocks: [t(['Job', 'Servidor / Recurso', 'Última execução', 'Resultado', 'Tamanho', 'Duração'], [3])] },
-            { title: 'Falhas e alertas', icon: '❗', blocks: [t(['Data', 'Job', 'Erro', 'Causa', 'Ação', 'Status'], [5])] }
+          title: 'Execuções', icon: '🗓️', separator: true, subtitle: 'Status dos jobs e consumo', sections: [
+            { title: 'Status dos backups', icon: '✅', blocks: [imgs('Status dos jobs'), t(['Job', 'Servidor / Recurso', 'Última execução', 'Resultado', 'Tamanho', 'Duração'], [3])] },
+            { title: 'Consumo dos buckets', icon: '🪣', blocks: [imgs('Consumo dos buckets'), t(['Bucket / Repositório', 'Camada', 'Usado', 'Variação no mês'])] }
           ]
         },
+        ...CLOUDS.map((p) => cloudGroup(p, () => [
+          { title: 'Storage', icon: '💾', blocks: [t(['Nome', 'Tipo', 'Capacidade', 'Utilizado', 'Status'], [4])] },
+          { title: 'Backup', icon: '📦', blocks: [t(['Item', 'Situação', 'Ferramenta', 'Frequência', 'Retenção', 'Teste Restore'], [1, 5])] }
+        ])),
         {
-          title: 'Cobertura por cloud', icon: '☁️', separator: true, collapsed: true, sections: [
-            ...['oci', 'aws', 'azure', 'vmware'].map((p) => ({ title: `Backup ${BT.data.providers[p].label}`, icon: BT.data.providers[p].icon, blocks: [t(['Item', 'Situação', 'Ferramenta', 'Frequência', 'Retenção', 'Teste Restore'], [1, 5])] }))
+          title: 'Operações', icon: '⚡', separator: true, subtitle: 'Incidentes, conclusão e próximos passos', collapsed: true, sections: [
+            { title: 'Incidentes', icon: '⚠️', blocks: [text('<p>Não houve falhas de backup no período.</p>'), t(['Data', 'Job / Servidor', 'Descrição', 'Severidade', 'Status', 'Ação Tomada'], [3, 4])] },
+            { title: 'Testes de restore', icon: '🧪', blocks: [t(['Data', 'Servidor', 'Item restaurado', 'Resultado', 'Tempo (RTO)', 'Observação'], [3])] },
+            { title: 'Melhorias', icon: '🚀', blocks: [t(['Prioridade', 'Área', 'Descrição', 'Responsável', 'Prazo'], [0])] },
+            { title: 'Conclusão', icon: '🏁', blocks: [text('<p>Durante o período avaliado, o ambiente de backup manteve-se operacional, com resposta eficaz aos eventos identificados.</p>')] },
+            { title: 'Próximos Passos', icon: '📌', blocks: [t(['Prioridade', 'Ação / Compromisso', 'Responsável', 'Prazo', 'Status'], [0, 4])] }
           ]
-        },
-        {
-          title: 'Recuperação', icon: '🛟', separator: true, collapsed: true, sections: [
-            { title: 'Testes de restore', icon: '🧪', blocks: [t(['Data', 'Servidor', 'Item restaurado', 'Resultado', 'RTO obtido', 'Observação'], [3])] },
-            { title: 'Retenção & Storage', icon: '🗄️', blocks: [t(['Repositório', 'Tipo', 'Capacidade', 'Usado', 'Livre', 'Status'], [5])] }
-          ]
-        },
-        ops()
+        }
       ]
     };
   }
 
   const BUILTIN = [
     { id: 'infracloud', name: 'InfraCloud', icon: '☁️', desc: 'Completo: todas as clouds (servidores, rede, segurança, storage, backup) + operações', area: 'InfraCloud', build: () => BT.data.defaultTemplate() },
-    { id: 'network', name: 'Network', icon: '🌐', desc: 'Topologia, conectividade, VCN/VPC/VNet, subnets, segurança de rede, LB, DNS, firewall', area: 'Network', build: network },
-    { id: 'backup', name: 'Backup', icon: '📦', desc: 'Indicadores, política, jobs, falhas, cobertura por cloud, testes de restore e retenção', area: 'Backup', build: backup },
+    { id: 'network', name: 'Network', icon: '🌐', desc: 'Baseline dos equipamentos, datas de suporte, capacity, rotina de backup, serviços, endereçamento IP, links, VPNs e redes das clouds', area: 'Network', build: network },
+    { id: 'backup', name: 'Backup', icon: '📦', desc: 'Escopo do contrato, arquitetura e repositórios, baseline, status dos jobs, consumo dos buckets, backup por cloud, incidentes e conclusão', area: 'Backup', build: backup },
     { id: 'blank', name: 'Em branco', icon: '⬜', desc: 'Monte seus próprios menus e seções', area: '', build: () => BT.data.blankTemplate() }
   ];
 
