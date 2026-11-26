@@ -83,7 +83,7 @@
           title: 'Operações', icon: '⚡', separator: true, subtitle: 'Monitoramento · Zabbix · Capacidade e Alertas', collapsed: true,
           sections: [
             { title: 'Incidentes', icon: '⚠️', blocks: [table(['Servidor', 'Descrição', 'Severidade', 'Status', 'Ação Tomada'], [2, 3])] },
-            { title: 'Vulnerabilidades', icon: '🛡️', blocks: [table(['Sistema', 'Vulnerabilidade', 'CVSS', 'Status', 'Ação'], [3])] },
+            { title: 'Vulnerabilidades', icon: '🛡️', blocks: [table(['CVE', 'Vulnerabilidade', 'Severidade', 'CVSS', 'Sistemas afetados', 'Ação sugerida', 'Fonte'], [2])] },
             { title: 'Capacidade', icon: '📊', blocks: [{ type: 'monitor', data: { title: '', origin: 'zabbix-capacity', z: null, resumo: '', show: {} } }, images('Gráficos de capacidade')] },
             { title: 'Monitoramento', icon: '📡', blocks: [table(['Host', 'IP', 'CPU média', 'Memória média', 'Maior disco', 'Alertas', 'Status'], [6])] },
             { title: 'Servidores — Recomendações', icon: '🖥️', blocks: [table(['Servidor', 'Recurso', 'Situação', 'Ação sugerida', 'Prioridade'], [4])] },

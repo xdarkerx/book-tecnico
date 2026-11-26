@@ -301,4 +301,34 @@ async function snapshots(creds, regs, p, o = {}) {
   return rows.sort((a, b) => String(b['Criado em']).localeCompare(a['Criado em']));
 }
 
-module.exports = { label: 'Amazon Web Services', test, pull, tenant, score, sign, regionsOf };
+/** Amazon Inspector: vulnerabilidades de pacotes (CVEs) ativas nas instâncias EC2, imagens e funções. Permissão: inspector2:ListFindings. */
+async function vulns(cfg) {
+  const creds = credentials(cfg);
+  const V = require('./vulns');
+  const list = []; const errs = []; let ok = 0;
+  for (const r of await regionsOf(creds, cfg)) {
+    try {
+      let token; let n = 0;
+      do {
+        const body = JSON.stringify(Object.assign({ maxResults: 100, filterCriteria: { findingStatus: [{ comparison: 'EQUALS', value: 'ACTIVE' }], findingType: [{ comparison: 'EQUALS', value: 'PACKAGE_VULNERABILITY' }] } }, token ? { nextToken: token } : {}));
+        const host = `inspector2.${r}.amazonaws.com`;
+        const { headers } = sign({ method: 'POST', host, region: r, service: 'inspector2', path: '/findings/list', body, headers: { 'content-type': 'application/json' }, creds });
+        const j = await (await U.request(`https://${host}/findings/list`, { method: 'POST', headers, body })).json();
+        ok++;
+        for (const f of j.findings || []) {
+          const d = f.packageVulnerabilityDetails || {};
+          const res = (f.resources || [])[0] || {};
+          const name = (res.tags && (res.tags.Name || res.tags.name)) || String(res.id || '').split('/').pop();
+          const pk = (d.vulnerablePackages || [])[0] || {};
+          list.push({ cve: d.vulnerabilityId, title: f.title, severity: f.severity, cvss: f.inspectorScore ?? ((d.cvss || [])[0] || {}).baseScore, host: name,
+            fix: (f.remediation && f.remediation.recommendation && f.remediation.recommendation.text) || (pk.fixedInVersion ? `Atualizar ${pk.name} para ${pk.fixedInVersion}` : ''), pkg: pk.name ? `${pk.name} ${pk.version || ''}`.trim() : '' });
+        }
+        token = j.nextToken;
+      } while (token && ++n < 50);
+    } catch (e) { errs.push(`${r}: ${e.message}`); }
+  }
+  if (!ok) throw new Error('Amazon Inspector indisponível (ative o Inspector e a permissão inspector2:ListFindings). ' + (errs[0] || ''));
+  return [V.aggregate(list, 'Amazon Inspector')];
+}
+
+module.exports = { label: 'Amazon Web Services', test, pull, tenant, score, vulns, sign, regionsOf };

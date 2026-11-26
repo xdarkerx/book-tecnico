@@ -245,4 +245,37 @@ async function score(cfg) {
   return out;
 }
 
-module.exports = { label: 'Oracle Cloud Infrastructure', test, pull, tenant, score, backups, config, _call: call };
+/** Vulnerability Scanning (VSS): o último scan de cada instância, com os CVEs encontrados. Política: "read vss-family". */
+async function vulns(cfg) {
+  const c = config(cfg);
+  const V = require('./vulns');
+  const regs = await regionsOf(c, cfg);
+  const comps = await compartments(c);
+  const latest = new Map(); const errs = []; let ok = 0;
+  for (const r of regs) {
+    const VSS = `https://vss-cp-api.${r}.oci.oraclecloud.com/20210215`;
+    await U.pool(comps, 4, async (cp) => {
+      try {
+        for (const s of await listAll(c, `${VSS}/hostScanResults?compartmentId=${cp.id}&limit=1000&sortBy=timeStarted&sortOrder=DESC`, 10)) {
+          const old = latest.get(s.instanceId);
+          if (!old || String(s.timeStarted) > String(old.s.timeStarted)) latest.set(s.instanceId, { s, r, VSS });
+        }
+        ok++;
+      } catch (e) { errs.push(e.message); }
+    });
+  }
+  if (!ok) throw new Error('Vulnerability Scanning indisponível (habilite o serviço e a política "read vss-family"). ' + (errs[0] || ''));
+  const list = [];
+  await U.pool([...latest.values()], 4, async ({ s, r, VSS }) => {
+    let host = s.instanceName || s.instanceId;
+    try { host = (await call(c, 'GET', `${iaas(r)}/instances/${s.instanceId}`)).data?.displayName || host; } catch (e) { /* nome opcional */ }
+    try {
+      const d = (await call(c, 'GET', `${VSS}/hostScanResults/${s.id}`)).data || {};
+      for (const p of [...(d.problems || []), ...(d.vulnerabilities || [])])
+        list.push({ cve: p.cveReference || p.cveId || p.name, title: p.cveReference ? p.name : String(p.description || '').slice(0, 160), severity: p.severity, cvss: p.cvssScore ?? p.cvss3Score, host, fix: p.recommendation || p.remediation || '', pkg: p.packageName || '' });
+    } catch (e) { errs.push(e.message); }
+  });
+  return [V.aggregate(list, 'OCI Vulnerability Scanning')];
+}
+
+module.exports = { label: 'Oracle Cloud Infrastructure', test, pull, tenant, score, vulns, backups, config, _call: call };

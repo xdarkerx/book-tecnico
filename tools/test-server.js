@@ -460,8 +460,8 @@ async function main() {
     if (b.method !== 'apiinfo.version') assert.strictEqual(o.headers.authorization, 'Bearer TOK');
     switch (b.method) {
       case 'apiinfo.version': return R('7.0.5');
-      case 'hostgroup.get': return R([{ groupid: '10', name: 'BRITECH' }, { groupid: '11', name: 'OUTRO' }]);
-      case 'host.get': return R([{ hostid: '1', host: 'srv-db01', name: 'BRITECH.SRV-DB01', status: '0', interfaces: [{ ip: '10.0.0.1' }] }, { hostid: '2', host: 'srv-web01', name: 'BRITECH.SRV-WEB01', status: '0', interfaces: [{ ip: '10.0.0.2' }] }]);
+      case 'hostgroup.get': return R([{ groupid: '10', name: 'CLIENTE' }, { groupid: '11', name: 'OUTRO' }]);
+      case 'host.get': return R([{ hostid: '1', host: 'srv-db01', name: 'CLIENTE.SRV-DB01', status: '0', interfaces: [{ ip: '10.0.0.1' }] }, { hostid: '2', host: 'srv-web01', name: 'CLIENTE.SRV-WEB01', status: '0', interfaces: [{ ip: '10.0.0.2' }] }]);
       case 'event.get': return R([
         { eventid: '1', objectid: 't1', name: 'Alta utilização de memória', severity: '3', clock: String(ts('2026-09-03T10:00:00')) },
         { eventid: '2', objectid: 't1', name: 'Alta utilização de memória', severity: '3', clock: String(ts('2026-09-04T10:00:00')) },
@@ -469,9 +469,9 @@ async function main() {
         { eventid: '4', objectid: 't3', name: 'Zabbix agent is not available', severity: '3', clock: String(ts('2026-09-05T11:00:00')) }]);
       case 'problem.get': return R([{ eventid: '3', objectid: 't2', name: 'Disco D: espaço', severity: '4', r_eventid: '0', clock: String(ts('2026-09-05T10:00:00')) }]);
       case 'trigger.get': return R([
-        { triggerid: 't1', description: 'Alta utilização de memória', status: '0', hosts: [{ hostid: '1', name: 'BRITECH.SRV-DB01' }] },
-        { triggerid: 't2', description: 'Disco D: espaço em disco criticamente baixo', status: '0', hosts: [{ hostid: '1', name: 'BRITECH.SRV-DB01' }] },
-        { triggerid: 't3', description: 'Zabbix agent is not available', status: '0', hosts: [{ hostid: '2', name: 'BRITECH.SRV-WEB01' }] }]);
+        { triggerid: 't1', description: 'Alta utilização de memória', status: '0', hosts: [{ hostid: '1', name: 'CLIENTE.SRV-DB01' }] },
+        { triggerid: 't2', description: 'Disco D: espaço em disco criticamente baixo', status: '0', hosts: [{ hostid: '1', name: 'CLIENTE.SRV-DB01' }] },
+        { triggerid: 't3', description: 'Zabbix agent is not available', status: '0', hosts: [{ hostid: '2', name: 'CLIENTE.SRV-WEB01' }] }]);
       case 'item.get':
         if (b.params.search) return R([{ hostid: '1', key_: 'vfs.fs.size[D:,pused]', lastvalue: '93.4', status: '0' }, { hostid: '1', key_: 'vfs.fs.size[C:,pused]', lastvalue: '40', status: '0' }]);
         if (b.params.filter.key_.includes('system.cpu.util')) return R([{ itemid: 'c1', hostid: '1', key_: 'system.cpu.util', lastvalue: '35', status: '0' }, { itemid: 'c2', hostid: '2', key_: 'system.cpu.util', lastvalue: '12', status: '0' }]);
@@ -481,17 +481,17 @@ async function main() {
     return R([]);
   });
   const zbx = require('../server/cloud/zabbix');
-  const [zr] = await zbx.pull({ url: 'https://zbx.local/zabbix', apiToken: 'TOK', hostGroups: 'britech' }, 'zabbix', { from: '2026-09-01', to: '2026-09-30' });
+  const [zr] = await zbx.pull({ url: 'https://zbx.local/zabbix', apiToken: 'TOK', hostGroups: 'cliente' }, 'zabbix', { from: '2026-09-01', to: '2026-09-30' });
   const zs = zr.summary;
-  assert.deepStrictEqual([zs.totalHosts, zs.totalAlerts, zs.top5[0].host, zs.top5[0].alerts.mem, zs.top5[0].alerts.disk], [2, 4, 'BRITECH.SRV-DB01', 2, 1]); ok('Zabbix: hosts, alertas e top 5 (falha de coleta não conta como recurso)');
+  assert.deepStrictEqual([zs.totalHosts, zs.totalAlerts, zs.top5[0].host, zs.top5[0].alerts.mem, zs.top5[0].alerts.disk], [2, 4, 'CLIENTE.SRV-DB01', 2, 1]); ok('Zabbix: hosts, alertas e top 5 (falha de coleta não conta como recurso)');
   assert.strictEqual(zs.topMem[0].avg, 86.2); assert.strictEqual(zs.diskIssues[0].fs, 'D:'); ok('Zabbix: média de memória (trends) e disco D: 93,4%');
   const recs = zr.sheets.recommendations.rows;
   assert.ok(recs.some((r) => r.Recurso === 'Memória' && r.Prioridade === 'Média') && recs.some((r) => r.Recurso === 'Disco' && r.Prioridade === 'Alta')); ok('Zabbix: recomendações de RAM e disco geradas');
   assert.ok(/Memória: 1 host\(s\) com média acima de 80%/.test(zs.summary)); ok('Zabbix: resumo executivo');
   // severidades escolhidas (só Alta = 4) e só servidores com alertas
-  const [zr2] = await zbx.pull({ url: 'https://zbx.local/zabbix', apiToken: 'TOK', hostGroups: 'britech' }, 'zabbix', { from: '2026-09-01', to: '2026-09-30', severities: [4], onlyWithAlerts: true });
+  const [zr2] = await zbx.pull({ url: 'https://zbx.local/zabbix', apiToken: 'TOK', hostGroups: 'cliente' }, 'zabbix', { from: '2026-09-01', to: '2026-09-30', severities: [4], onlyWithAlerts: true });
   assert.deepStrictEqual([zr2.summary.totalAlerts, zr2.summary.bySeverity[3], zr2.summary.bySeverity[4]], [1, 0, 1]); ok('Zabbix: filtra alertas pelas severidades escolhidas');
-  assert.deepStrictEqual(zr2.sheets.hosts.rows.map((r) => r.Host), ['BRITECH.SRV-DB01']); ok('Zabbix: opção de deixar de fora servidores sem alerta no período');
+  assert.deepStrictEqual(zr2.sheets.hosts.rows.map((r) => r.Host), ['CLIENTE.SRV-DB01']); ok('Zabbix: opção de deixar de fora servidores sem alerta no período');
   assert.strictEqual(zr.sheets.hosts.rows.length, 2); ok('Zabbix: por padrão inclui servidores sem alerta');
   assert.strictEqual(zbx.classify('Alto uso de espaço de swap'), 'other'); assert.strictEqual(zbx.classify('C:: Utilização de espaço em disco'), 'disk'); ok('Zabbix: classificação de triggers igual ao book original');
 
@@ -501,9 +501,9 @@ async function main() {
     if (url.endsWith('/killSession')) return {};
     assert.strictEqual(o.headers['Session-Token'], 'S');
     return [
-      { id: 12, name: 'Lentidão no ERP', date: '2026-09-20 10:00:00', solvedate: '2026-09-20 14:00:00', status: 5, priority: 4, type: 1, itilcategories_id: 'Infra > Servidores', entities_id: 'BRITech' },
-      { id: 11, name: 'Criar usuário', date: '2026-09-02 09:00:00', solvedate: null, status: 2, priority: 3, type: 2, itilcategories_id: 'Acessos', entities_id: 'BRITech' },
-      { id: 9, name: 'Antigo aberto', date: '2026-08-10 09:00:00', solvedate: null, status: 4, priority: 2, type: 1, itilcategories_id: 'Rede', entities_id: 'BRITech' }];
+      { id: 12, name: 'Lentidão no ERP', date: '2026-09-20 10:00:00', solvedate: '2026-09-20 14:00:00', status: 5, priority: 4, type: 1, itilcategories_id: 'Infra > Servidores', entities_id: 'Cliente' },
+      { id: 11, name: 'Criar usuário', date: '2026-09-02 09:00:00', solvedate: null, status: 2, priority: 3, type: 2, itilcategories_id: 'Acessos', entities_id: 'Cliente' },
+      { id: 9, name: 'Antigo aberto', date: '2026-08-10 09:00:00', solvedate: null, status: 4, priority: 2, type: 1, itilcategories_id: 'Rede', entities_id: 'Cliente' }];
   });
   const glpi = require('../server/cloud/glpi');
   const [gr] = await glpi.pull({ url: 'https://glpi.local', userToken: 'UT', appToken: 'AT' }, 'glpi', { from: '2026-09-01', to: '2026-09-30' });
@@ -602,6 +602,86 @@ async function main() {
   const azs2 = (await cloudIdx.pull('azure', { tenantId: 't', clientId: 'c', clientSecret: 's' }, ['storage'])).results[0].rows.find((r) => r.Name === 'stprd');
   assert.strictEqual(azs2.Capacity, '250 GB'); ok('Azure: capacidade usada das storage accounts (Azure Monitor)');
 
+  // ── Vulnerabilidades (CVEs) ──
+  const V = require('../server/cloud/vulns');
+  const agg = V.aggregate([
+    { cve: 'CVE-2024-1', severity: 'HIGH', cvss: 7.5, host: 'srv-a', pkg: 'openssl 1.1' },
+    { cve: 'cve-2024-1', severity: 'Critical', cvss: 9.1, host: 'srv-b' },
+    { cve: 'CVE-2023-9', severity: '', cvss: 5, host: 'srv-a', fix: 'Atualizar o kernel' },
+    { cve: '', title: '' }], 'Teste');
+  assert.deepStrictEqual(agg.rows.map((r) => [r.CVE, r.Severidade, r.CVSS, r['Sistemas afetados']]), [['CVE-2024-1', 'Crítica', '9.1', '2 — srv-a, srv-b'], ['CVE-2023-9', 'Média', '5.0', '1 — srv-a']]);
+  assert.deepStrictEqual([agg.kind, agg.summary.total, agg.summary.hosts, agg.rows[1]['Ação sugerida'], agg.rows[0]['Ação sugerida']], ['vulns', 2, 2, 'Atualizar o kernel', 'Atualizar openssl 1.1']); ok('vulnerabilidades: uma linha por CVE, maior severidade/CVSS, servidores afetados e severidade pelo CVSS quando falta');
+  // Zabbix: com só a severidade Alta, a memória (alertas Média) fica sem alerta e não vira recomendação, mesmo com uso alto
+  const zrecs2 = zr2.sheets.recommendations.rows;
+  assert.ok(!zrecs2.some((r) => r.Recurso === 'Memória') && zrecs2.some((r) => r.Recurso === 'Disco')); ok('Zabbix: servidor sem alerta no período não entra nas recomendações (cliente pode ter pedido para não alertar)');
+
+  // Wazuh 4.8+ (indexer) e até 4.7 (API do manager)
+  mock((url, o) => {
+    if (url.endsWith('/security/user/authenticate')) { assert.ok(/^Basic /.test(o.headers.authorization)); return { data: { token: 'WT' } }; }
+    if (url.includes('/agents?')) return { data: { affected_items: [{ id: '000', name: 'manager' }, { id: '001', name: 'srv-web' }, { id: '002', name: 'srv-db' }] } };
+    if (url.includes('/_search')) return { hits: { hits: [
+      { _source: { agent: { id: '001', name: 'srv-web' }, vulnerability: { id: 'CVE-2024-3094', severity: 'Critical', score: { base: 10 } }, package: { name: 'xz', version: '5.6.0' } }, sort: [1] },
+      { _source: { agent: { id: '002', name: 'srv-db' }, vulnerability: { id: 'CVE-2024-3094', severity: 'Critical', score: { base: 10 } }, package: { name: 'xz', version: '5.6.0' } }, sort: [2] },
+      { _source: { agent: { id: '002', name: 'srv-db' }, vulnerability: { id: 'CVE-2022-1', severity: 'Low', score: { base: 2.1 } }, package: { name: 'bash' } }, sort: [3] }] } };
+    if (url.includes('/vulnerability/001')) return { data: { affected_items: [{ cve: 'CVE-2021-44228', severity: 'Critical', cvss3_score: 10, name: 'log4j', version: '2.14' }] } };
+    if (url.includes('/vulnerability/')) return { data: { affected_items: [] } };
+    return { data: {} };
+  });
+  const wz = require('../server/cloud/wazuh');
+  const [wr] = await wz.pull({ url: 'https://wazuh:55000', user: 'u', password: 'p', indexerUrl: 'https://wazuh:9200' }, 'wazuh');
+  assert.deepStrictEqual([wr.kind, wr.summary.agents, wr.sheets.vulns.rows[0].CVE, wr.sheets.vulns.rows[0]['Sistemas afetados'], wr.sheets.vulns.rows.length], ['vulns', 2, 'CVE-2024-3094', '2 — srv-web, srv-db', 2]); ok('Wazuh 4.8+: CVEs do indexer agrupados por CVE (agente 000 do manager fica de fora)');
+  const [wr2] = await wz.pull({ url: 'https://wazuh:55000', user: 'u', password: 'p' }, 'wazuh');
+  assert.deepStrictEqual([wr2.sheets.vulns.rows[0].CVE, wr2.sheets.vulns.rows[0].Severidade, wr2.sheets.vulns.rows[0]['Sistemas afetados']], ['CVE-2021-44228', 'Crítica', '1 — srv-web']); ok('Wazuh até 4.7: CVEs por agente pela API do manager');
+
+  // Microsoft Defender for Endpoint
+  mock((url) => {
+    if (url.includes('oauth2')) { return { access_token: 'DT', expires_in: 3600 }; }
+    if (url.includes('SoftwareVulnerabilitiesByMachine')) return { value: [
+      { deviceName: 'pc-01', rbacGroupName: 'Servidores', cveId: 'CVE-2024-38063', vulnerabilitySeverityLevel: 'Critical', softwareVendor: 'microsoft', softwareName: 'windows_server_2019', recommendedSecurityUpdate: 'KB5041578' },
+      { deviceName: 'pc-02', rbacGroupName: 'Estações', cveId: 'CVE-2024-38063', vulnerabilitySeverityLevel: 'Critical' },
+      { deviceName: 'pc-01', rbacGroupName: 'Servidores', cveId: 'CVE-2023-1', vulnerabilitySeverityLevel: 'Medium' }] };
+    if (url.includes('/api/vulnerabilities/CVE-2024-38063')) return { id: 'CVE-2024-38063', cvssV3: 9.8 };
+    return { value: [] };
+  });
+  const df = require('../server/cloud/defender');
+  const [dr] = await df.pull({ tenantId: 't', clientId: 'c', clientSecret: 's', deviceGroup: 'servidores' });
+  assert.deepStrictEqual(dr.sheets.vulns.rows.map((r) => [r.CVE, r.CVSS, r['Sistemas afetados'], r['Ação sugerida']]), [['CVE-2024-38063', '9.8', '1 — pc-01', 'KB5041578'], ['CVE-2023-1', '', '1 — pc-01', '']]); ok('Defender for Endpoint: CVEs por dispositivo, filtro por grupo e CVSS dos mais graves');
+
+  // CVEs pelas clouds (opção "Vulnerabilidades" da sincronização)
+  mock((url) => {
+    if (url.includes('inspector2.sa-east-1.amazonaws.com/findings/list')) return { findings: [{ title: 'CVE-2024-6387 - openssh', severity: 'HIGH', inspectorScore: 8.1, packageVulnerabilityDetails: { vulnerabilityId: 'CVE-2024-6387', vulnerablePackages: [{ name: 'openssh', version: '8.9', fixedInVersion: '9.8' }] }, resources: [{ id: 'arn:aws:ec2:sa-east-1:1:instance/i-1', tags: { Name: 'app-prd' } }] }] };
+    return {};
+  });
+  const awv = (await cloudIdx.pull('aws', { accessKeyId: 'AK', secretAccessKey: 'S', regions: 'sa-east-1' }, ['vulns'])).results[0];
+  assert.deepStrictEqual([awv.kind, awv.rows[0].CVE, awv.rows[0]['Sistemas afetados'], awv.rows[0]['Ação sugerida'], awv.rows[0].Fonte], ['vulns', 'CVE-2024-6387', '1 — app-prd', 'Atualizar openssh para 9.8', 'Amazon Inspector']); ok('AWS: CVEs do Amazon Inspector (nome da instância pela tag Name)');
+  mock((url, o) => {
+    if (url.includes('oauth2')) return { access_token: 'T', expires_in: 3600 };
+    if (url.includes('/subscriptions?')) return { value: [{ subscriptionId: 'sub-1' }] };
+    if (url.includes('Microsoft.ResourceGraph')) { assert.ok(/subassessments/.test(JSON.parse(o.body).query)); return { data: [{ id: '/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-sql/providers/Microsoft.Security/assessments/x/subAssessments/y',
+      properties: { id: 'CVE-2024-21413', displayName: 'Outlook RCE', status: { code: 'Unhealthy', severity: 'High' }, remediation: 'Instalar a atualização', resourceDetails: { id: '/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-sql' }, additionalData: { assessedResourceType: 'ServerVulnerabilityTvm', cvss: { '3.0': { base: 9.8 } } } } }] }; }
+    return { value: [] };
+  });
+  const zv = (await cloudIdx.pull('azure', { tenantId: 't2', clientId: 'c', clientSecret: 's' }, ['vulns'])).results[0];
+  assert.deepStrictEqual([zv.rows[0].CVE, zv.rows[0].CVSS, zv.rows[0]['Sistemas afetados'], zv.rows[0].Severidade], ['CVE-2024-21413', '9.8', '1 — vm-sql', 'Alta']); ok('Azure: CVEs das VMs pelo Defender for Cloud (Resource Graph)');
+  mock((url) => {
+    if (url.includes('oauth2.googleapis.com/token')) return { access_token: 'GT', expires_in: 3600 };
+    if (url.includes('cloudresourcemanager')) return { projects: [{ projectId: 'proj-a' }] };
+    if (url.includes('securitycenter')) { assert.ok(decodeURIComponent(url).includes('findingClass="VULNERABILITY"')); return { listFindingsResults: [{ finding: { category: 'OS_VULNERABILITY', severity: 'CRITICAL', resourceName: '//compute/instances/vm-web', vulnerability: { cve: { id: 'CVE-2024-1086', cvssv3: { baseScore: 7.8 } }, offendingPackage: { packageName: 'linux-kernel', packageVersion: '5.15' } } } }] }; }
+    return {};
+  });
+  const gv = (await cloudIdx.pull('gcp', gcfg, ['vulns'])).results[0];
+  assert.deepStrictEqual([gv.rows[0].CVE, gv.rows[0].Severidade, gv.rows[0]['Sistemas afetados']], ['CVE-2024-1086', 'Crítica', '1 — vm-web']); ok('GCP: CVEs do Security Command Center');
+  mock((url) => {
+    if (url.includes('regionSubscriptions')) return [{ regionName: 'sa-saopaulo-1', status: 'READY' }];
+    if (url.includes('/compartments?')) return [];
+    if (url.includes('/hostScanResults?')) return [{ id: 'hs1', instanceId: 'ocid1.instance.x', timeStarted: '2026-11-01T00:00:00Z' }, { id: 'hs0', instanceId: 'ocid1.instance.x', timeStarted: '2026-10-01T00:00:00Z' }];
+    if (url.includes('/instances/ocid1.instance.x')) return { displayName: 'vm-oci' };
+    if (url.includes('/hostScanResults/hs1')) return { problems: [{ name: 'openssl', cveReference: 'CVE-2024-5535', severity: 'HIGH', recommendation: 'Atualizar o openssl' }] };
+    if (url.includes('/hostScanResults/hs0')) return { problems: [{ name: 'velho', cveReference: 'CVE-2000-1', severity: 'LOW' }] };
+    return [];
+  });
+  const ov = (await cloudIdx.pull('oci', ocfg, ['vulns'])).results[0];
+  assert.deepStrictEqual(ov.rows.map((r) => [r.CVE, r.Severidade, r['Sistemas afetados'], r['Ação sugerida']]), [['CVE-2024-5535', 'Alta', '1 — vm-oci', 'Atualizar o openssl']]); ok('OCI: CVEs do último scan de cada instância (Vulnerability Scanning)');
   global.fetch = realFetch;
   console.log(`\n${passed} testes ok`);
 }

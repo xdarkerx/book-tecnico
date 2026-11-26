@@ -5,14 +5,14 @@
  *   ~/.aws/credentials, JSON de conta de serviço GCP, JSON do service principal Azure, JSON com
  *   várias conexões) e preenche os formulários.
  * - Sincronizar: o servidor consulta as clouds (inventário), o Zabbix (capacidade, monitoramento,
- *   recomendações de CPU/RAM/disco) e o GLPI (chamados) e a tela de revisão mostra o destino
+ *   recomendações de CPU/RAM/disco), o GLPI (chamados), o Wazuh e o Defender for Endpoint (CVEs) e a tela de revisão mostra o destino
  *   de cada item no book antes de aplicar.
  */
 (function (BT) {
   const h = BT.h;
   const P = () => BT.data.providers;
-  const KINDS = [['servers', '🖥️ Servidores', 'servidores'], ['storage', '💾 Storage', 'storage'], ['network', '🌐 Redes', 'networking'], ['backup', '🗄️ Backup (só do mês)', 'backup'], ['baseline', '📦 Baseline', 'baseline'], ['tenant', '🏷️ Geral (tenant)', 'geral'], ['score', '🛡️ Security Score', 'score']];
-  const ORDER = ['oci', 'aws', 'azure', 'gcp', 'zabbix', 'glpi'];
+  const KINDS = [['servers', '🖥️ Servidores', 'servidores'], ['storage', '💾 Storage', 'storage'], ['network', '🌐 Redes', 'networking'], ['backup', '🗄️ Backup (só do mês)', 'backup'], ['baseline', '📦 Baseline', 'baseline'], ['tenant', '🏷️ Geral (tenant)', 'geral'], ['score', '🛡️ Security Score', 'score'], ['vulns', '🐞 Vulnerabilidades (CVEs)', 'vulnerabilidades']];
+  const ORDER = ['oci', 'aws', 'azure', 'gcp', 'zabbix', 'glpi', 'wazuh', 'defender'];
 
   const FORMS = {
     oci: {
@@ -34,13 +34,22 @@
     },
     zabbix: {
       help: 'Preenche <b>Capacidade</b> (relatório com resumo executivo, top hosts CPU/memória/disco e gráficos), <b>Monitoramento</b> (hosts) e <b>Servidores — Recomendações</b> (onde aumentar RAM, CPU ou disco). Use um <b>API token</b> (Usuários › Tokens de API) com acesso de leitura aos host groups.',
-      fields: [['url', 'URL do Zabbix', 'https://zabbix.empresa.com'], ['hostGroups', 'Host groups (separados por vírgula)', 'BRITECH, BRITECH/SQL'], ['apiToken', 'API token', '', 'secret'], ['user', 'ou usuário', ''], ['password', 'senha', '', 'secret'],
+      fields: [['url', 'URL do Zabbix', 'https://zabbix.empresa.com'], ['hostGroups', 'Host groups (separados por vírgula)', 'CLIENTE, CLIENTE/SQL'], ['apiToken', 'API token', '', 'secret'], ['user', 'ou usuário', ''], ['password', 'senha', '', 'secret'],
         ['cpuWarn', 'Limite CPU (%) para recomendar', '80'], ['memWarn', 'Limite memória (%)', '80'], ['diskWarn', 'Limite disco (%)', '85'], ['insecure', 'Aceitar certificado autoassinado', '', 'check']]
     },
     glpi: {
       help: 'Preenche <b>Incidentes</b> com os chamados do período (indicadores, gráficos por status/categoria e a planilha). Habilite a API REST em <i>Configurar › Geral › API</i>; o token pessoal fica em <i>Preferências › Chaves de acesso remoto</i>.',
       fields: [['url', 'URL do GLPI', 'https://glpi.empresa.com'], ['appToken', 'App-Token (cliente da API)', '', 'secret'], ['userToken', 'Token de usuário (API token)', '', 'secret'], ['user', 'ou usuário', ''], ['password', 'senha', '', 'secret'],
-        ['entity', 'Entidade (filtra pelo nome, opcional)', 'BRITech'], ['insecure', 'Aceitar certificado autoassinado', '', 'check']]
+        ['entity', 'Entidade (filtra pelo nome, opcional)', 'Nome da entidade'], ['insecure', 'Aceitar certificado autoassinado', '', 'check']]
+    },
+    wazuh: {
+      help: 'Preenche <b>Vulnerabilidades</b> com os CVEs dos agentes (um por linha, com os servidores afetados), indicadores e gráfico por severidade. Use um usuário da API do manager (porta 55000) com leitura de agentes. <b>Wazuh 4.8 ou mais novo:</b> os CVEs ficam no indexer (porta 9200): informe o endereço e um usuário com leitura do índice <code>wazuh-states-vulnerabilities-*</code>.',
+      fields: [['url', 'URL da API do manager', 'https://wazuh.empresa.com:55000'], ['user', 'Usuário da API', 'wazuh-wui'], ['password', 'Senha', '', 'secret'], ['group', 'Grupo de agentes (opcional)', 'default'],
+        ['indexerUrl', 'URL do indexer (Wazuh 4.8+)', 'https://wazuh.empresa.com:9200'], ['indexerUser', 'Usuário do indexer (vazio = o da API)', 'admin'], ['indexerPassword', 'Senha do indexer', '', 'secret'], ['insecure', 'Aceitar certificado autoassinado', '', 'check']]
+    },
+    defender: {
+      help: 'Preenche <b>Vulnerabilidades</b> com os CVEs dos dispositivos do <b>Microsoft Defender for Endpoint</b> (gerenciamento de vulnerabilidades). Crie um <b>App Registration</b> com a permissão de <b>aplicativo</b> <code>Vulnerability.Read.All</code> da API <i>WindowsDefenderATP</i> e dê o consentimento de administrador. Para os CVEs das VMs pelo <b>Defender for Cloud</b>, use a conexão Azure com a opção Vulnerabilidades.',
+      fields: [['tenantId', 'Tenant ID', ''], ['clientId', 'Client (application) ID', ''], ['clientSecret', 'Client secret', '', 'secret'], ['deviceGroup', 'Grupo de dispositivos (filtra pelo nome, opcional)', '']]
     }
   };
 
@@ -65,6 +74,8 @@
       else if (j.appId && j.password && j.tenant) out.azure = { clientId: j.appId, clientSecret: j.password, tenantId: j.tenant };
       else if (j.clientId && (j.clientSecret || j.secret) && (j.tenantId || j.tenant)) out.azure = { clientId: j.clientId, clientSecret: j.clientSecret || j.secret, tenantId: j.tenantId || j.tenant, subscriptionIds: j.subscriptionId || '' };
       else if (j.zabbix || /zabbix/i.test(j.url || '')) out.zabbix = Object.assign({ url: j.url, apiToken: j.apiToken || j.token }, j.zabbix || {});
+      else if (j.wazuh) out.wazuh = j.wazuh;
+      else if (j.defender) out.defender = j.defender;
       else if (j.glpi || j.app_token || j.appToken && j.userToken) out.glpi = Object.assign({ url: j.url, appToken: j.app_token || j.appToken, userToken: j.user_token || j.userToken }, j.glpi || {});
       else if (j.AccessKeyId || j.accessKeyId) out.aws = { accessKeyId: j.AccessKeyId || j.accessKeyId, secretAccessKey: j.SecretAccessKey || j.secretAccessKey, sessionToken: j.SessionToken || j.sessionToken || '' };
       return out;
@@ -98,7 +109,7 @@
     const drawTabs = () => {
       tabs.innerHTML = '';
       ORDER.forEach((p, i) => {
-        if (i === 4) tabs.appendChild(h('span', { class: 'cx-sep' }));
+        if (i === 4 || i === 6) tabs.appendChild(h('span', { class: 'cx-sep' }));
         tabs.appendChild(h('button', { class: p === cur ? 'on' : '', onclick: () => { cur = p; curKey = p; drawTabs(); drawForm(); } }, [P()[p].icon + ' ' + P()[p].label + (accountsOf(data.providers, p).length > 1 ? ` (${accountsOf(data.providers, p).length})` : ''), h('span', { class: 'dot' + (accountsOf(data.providers, p).some((k) => isOn(data.providers[k])) ? ' ok' : '') })]));
       });
     };
@@ -185,9 +196,34 @@
     });
   }
 
+  // ── Vulnerabilidades (CVEs): mesmo formato para clouds, Wazuh e Defender ──
+  const VSEV = [['Crítica', '🟥 Crítica'], ['Alta', '🟧 Alta'], ['Média', '🟨 Média'], ['Baixa', '🟦 Baixa'], ['Informativa', 'ℹ️ Informativa']];
+  /** sh: sheet "vulns" (uma linha por CVE) → indicadores + gráfico por severidade e a planilha, em Operações › Vulnerabilidades. */
+  function vulnItems(sh, { provider, account = '', primary, label, key, severities }) {
+    const sevs = severities && severities.length ? severities : ['Crítica', 'Alta'];
+    const rows = sh.rows.filter((r) => sevs.includes(r['Severidade']) || (!r['Severidade'] && sevs.includes('Informativa')));
+    const count = (s) => rows.filter((r) => r['Severidade'] === s).length;
+    const hosts = new Set(rows.flatMap((r) => String(r['Sistemas afetados'] || '').replace(/^\d+ — /, '').replace(/ \+\d+$/, '').split(', ').filter(Boolean)));
+    const shown = VSEV.filter(([s]) => sevs.includes(s));
+    const source = (sh.summary && sh.summary.source) || label;
+    const base = { api: true, include: true, provider, account, primary, global: true, groupHint: 'opera', dest: '', newTitle: '', how: 'new', note: '', destTitle: 'Vulnerabilidades', newTitleHint: 'Vulnerabilidades' };
+    const items = [Object.assign({}, base, {
+      id: BT.uid('zi'), kind: 'blocks', path: `${label} · Vulnerabilidades: indicadores e gráfico`, origin: 'vulns-' + key, entry: { name: 'Vulnerabilidades' },
+      blocks: [
+        { type: 'kpi', data: { title: `Vulnerabilidades — ${source}`, items: [{ label: 'CVEs', value: String(rows.length) }, ...shown.map(([s]) => ({ label: s, value: String(count(s)) })), { label: 'Sistemas afetados', value: String(hosts.size) }] } },
+        { type: 'chart', data: { title: `CVEs por severidade — ${source}`, kind: 'donut', source: 'manual', labels: shown.map(([s]) => s), series: [{ name: 'CVEs', values: shown.map(([s]) => count(s)) }], table: {}, showValues: true, legend: true, height: 220, unit: '' } }
+      ]
+    })];
+    if (rows.length) items.push(Object.assign({}, base, {
+      id: BT.uid('zi'), kind: 'data', path: `${label} · ${sh.name} (${rows.length} CVE${rows.length !== 1 ? 's' : ''})`, tokens: [], entry: { name: 'Vulnerabilidades', path: '' }, forceMapper: 'raw',
+      parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows, aoa: [] }] }
+    }));
+    return items;
+  }
+
   // ── Itens de revisão a partir das ferramentas ───────────────
   const pct = (v) => (v == null ? '' : v);
-  function toolItems(p, res) {
+  function toolItems(p, res, opts = {}) {
     const items = [];
     const base = { api: true, include: true, provider: p, dest: '', newTitle: '', how: 'new', note: '', groupHint: 'opera' };
     const dataItem = (sheet, destTitle, newTitleHint, label) => Object.assign({}, base, {
@@ -224,13 +260,14 @@
       }));
       items.push(dataItem(res.sheets.tickets, 'Incidentes', 'Incidentes', 'Chamados do período'));
     }
+    if ((p === 'wazuh' || p === 'defender') && res.sheets && res.sheets.vulns) items.push(...vulnItems(res.sheets.vulns, { provider: p, label: P()[p].label, key: opts.key || p, severities: opts.severities }));
     return items;
   }
 
   const ALL_KINDS = ['servers', 'storage', 'network', 'backup', 'baseline', 'tenant', 'score'];
   /** Busca os dados das conexões do cliente e monta os itens da revisão (sem tela). Usada pela janela de sincronização
    *  e pela geração automática no servidor. pf (perfil): { sources: ['oci','aws~hml'…] (vazio = todas), kinds, newOnly,
-   *  backupMode, zabbix: { severities, onlyWithAlerts }, period: { from, to } (padrão = mês do book) } → { items, errors } */
+   *  backupMode, zabbix: { severities, onlyWithAlerts }, vulns: { severities: ['Crítica','Alta'…] }, period: { from, to } (padrão = mês do book) } → { items, errors } */
   async function collect(key, pf = {}, onStatus = () => {}) {
     const conns = await BT.api.getConnections(key.cliente);
     const provs = conns.providers || {};
@@ -250,7 +287,8 @@
           const extra = p === 'zabbix' ? Object.assign({}, per, { severities: (pf.zabbix && pf.zabbix.severities) || [0, 1, 2, 3, 4, 5], onlyWithAlerts: !!(pf.zabbix && pf.zabbix.onlyWithAlerts) }) : Object.assign({}, per, { newOnly: !!pf.newOnly, backupMode: pf.backupMode || 'both' });
           const r = await BT.api.cloudPull(key.cliente, k, pf.kinds && pf.kinds.length ? pf.kinds : ALL_KINDS, extra);
           r.errors.forEach((e) => errors.push(`${label}${e.kind !== p ? '/' + e.kind : ''}: ${e.message}`));
-          if (P()[p].tool) r.results.forEach((res) => items.push(...toolItems(p, res).map((it) => (account ? Object.assign(it, { path: it.path.replace(P()[p].label, label) }) : it))));
+          const vsev = (pf.vulns && pf.vulns.severities) || ['Crítica', 'Alta'];
+          if (P()[p].tool) r.results.forEach((res) => items.push(...toolItems(p, res, { key: k, severities: vsev }).map((it) => (account ? Object.assign(it, { path: it.path.replace(P()[p].label, label) }) : it))));
           else {
             // score + recomendações + alertas da mesma conta viram UM bloco Cloud Security Score
             const scoreSheets = r.results.filter((sh) => /^score/.test(sh.kind));
@@ -267,6 +305,11 @@
               items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, 'geral'], entry: { name: 'Geral', path: '' },
                 destTitle: 'Geral', newTitleHint: 'Geral', forceMapper: 'raw', first: true,
                 parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
+              return;
+            }
+            if (sh.kind === 'vulns') {
+              // CVEs da cloud (VSS, Inspector, Defender for Cloud, SCC) em Operações › Vulnerabilidades
+              items.push(...vulnItems(sh, { provider: p, account, primary, label, key: k, severities: vsev }));
               return;
             }
             if (sh.kind === 'backup') {
@@ -309,7 +352,9 @@
     const per = { from: `${y}-${pad(mo)}-01`, to: `${y}-${pad(mo)}-${pad(new Date(y, mo, 0).getDate())}` };
     const status = h('div', { class: 'cx-help' });
     const chk = (set, v, label, cb) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: set.has(v), onchange: (e) => { e.target.checked ? set.add(v) : set.delete(v); cb && cb(); } }), label]);
-    const kindsBox = h('div'); const periodBox = h('div'); const zbxBox = h('div');
+    const kindsBox = h('div'); const periodBox = h('div'); const zbxBox = h('div'); const vulnBox = h('div');
+    // vulnerabilidades: quais severidades entram no book (clouds com a opção marcada, Wazuh e Defender)
+    const vulnSev = new Set(defs.vulnSeverities || ['Crítica', 'Alta']);
     // Zabbix: severidades a importar e se entram os servidores sem nenhum alerta no período
     const ZSEV = [['5', '🟥 Desastre'], ['4', '🟧 Alta'], ['3', '🟨 Média'], ['2', '🟦 Atenção'], ['1', 'ℹ️ Informação'], ['0', '⬜ Não classificado']];
     const zbxSev = new Set(defs.zabbixSeverities.map(String));
@@ -324,15 +369,19 @@
       h('label', { class: 'cp' }, [h('input', { type: 'radio', name: 'sync-bk', checked: backupMode === v, onchange: () => (backupMode = v) }), l])));
     zbxBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'Zabbix — severidades dos alertas'), h('div', { class: 'cprow' }, ZSEV.map(([v, l]) => chk(zbxSev, v, l))),
       h('label', { class: 'switch', style: { marginTop: '10px' } }, [zbxAll, 'Incluir servidores sem nenhum alerta no período (Monitoramento)']));
+    vulnBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'Vulnerabilidades (CVEs) — severidades'), h('div', { class: 'cprow' }, VSEV.map(([v, l]) => chk(vulnSev, v, l))),
+      h('div', { class: 'cx-help', style: { marginTop: '6px' } }, 'Entram em Operações › Vulnerabilidades, uma linha por CVE com os servidores afetados. Nas clouds, marque "🐞 Vulnerabilidades (CVEs)" acima para usar o serviço de segurança da cloud (OCI Vulnerability Scanning, Amazon Inspector, Defender for Cloud, Security Command Center).'));
     const refresh = () => {
       kindsBox.hidden = ![...selP].some((k) => !P()[typeOf(k)].tool);
-      periodBox.hidden = ![...selP].some((k) => P()[typeOf(k)].tool);
+      vulnBox.hidden = !([...selP].some((k) => ['wazuh', 'defender'].includes(typeOf(k))) || (selK.has('vulns') && !kindsBox.hidden));
+      periodBox.hidden = ![...selP].some((k) => ['zabbix', 'glpi'].includes(typeOf(k)));
       zbxBox.hidden = ![...selP].some((k) => typeOf(k) === 'zabbix');
     };
     const go = async () => {
       if (!zbxBox.hidden && !zbxSev.size) return BT.ui.toast('Escolha ao menos uma severidade do Zabbix.', { type: 'err' });
+      if (!vulnBox.hidden && !vulnSev.size) return BT.ui.toast('Escolha ao menos uma severidade das vulnerabilidades.', { type: 'err' });
       btn.disabled = true;
-      const pf = { sources: [...selP], kinds: [...selK], newOnly, backupMode, zabbix: { severities: [...zbxSev].map(Number), onlyWithAlerts: !zbxAll.checked }, period: per };
+      const pf = { sources: [...selP], kinds: [...selK], newOnly, backupMode, zabbix: { severities: [...zbxSev].map(Number), onlyWithAlerts: !zbxAll.checked }, vulns: { severities: [...vulnSev] }, period: per };
       const { items, errors } = await collect(key, pf, (t) => (status.textContent = t));
       m.close();
       if (errors.length) BT.ui.toast('Alguns itens falharam: ' + errors.join(' | '), { type: 'err', ms: 14000 });
@@ -342,7 +391,7 @@
       BT.importer.zip.review(items, null, null, '🔄 Sincronizar — revisar e escolher itens', { onApplied: saveProfile });
     };
     const btn = h('button', { class: 'btn btn-primary btn-sm', onclick: go }, '🔄 Buscar dados');
-    kindsBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'O que buscar nas clouds'), h('div', { class: 'cprow' }, KINDS.map(([k, l]) => chk(selK, k, l))),
+    kindsBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'O que buscar nas clouds'), h('div', { class: 'cprow' }, KINDS.map(([k, l]) => chk(selK, k, l, refresh))),
       h('div', { class: 'lbl', style: { margin: '14px 0 8px' } }, 'Servidores, storage e redes'), scope,
       h('div', { class: 'lbl', style: { margin: '14px 0 8px' } }, 'Backup'), bkScope,
       h('div', { class: 'cx-help', style: { marginTop: '6px' } }, 'Busca em todos os compartimentos/grupos/projetos. Os backups feitos são só os do mês do book.'));
@@ -354,12 +403,12 @@
       title: '🔄 Sincronizar dados', size: 'md',
       body: [h('div', { class: 'lbl', style: { marginBottom: '8px' } }, 'Fontes configuradas'),
         h('div', { class: 'cprow' }, configured.map((k) => chk(selP, k, P()[typeOf(k)].icon + ' ' + labelOf(k), refresh))),
-        kindsBox, periodBox, zbxBox,
+        kindsBox, vulnBox, periodBox, zbxBox,
         h('div', { style: { marginTop: '14px' } }, status),
         h('div', { class: 'cx-help' }, 'Na próxima tela você confere o destino de cada item no book e escolhe as linhas antes de aplicar.')],
       footer: [h('button', { class: 'btn btn-ghost btn-sm', onclick: () => connections(key.cliente, BT.store.state.meta.cliente) }, '🔑 Conexões'), h('span', { class: 'spacer' }), h('button', { class: 'btn btn-ghost btn-sm', onclick: () => m.close() }, 'Cancelar'), btn]
     });
   }
 
-  BT.importer.cloud = { connections, sync, collect, parseKeyFile, toolItems };
+  BT.importer.cloud = { connections, sync, collect, parseKeyFile, toolItems, vulnItems };
 })(window.BT);

@@ -170,4 +170,35 @@ async function score(cfg) {
     U.sheet('score_alerts', 'Alertas de segurança (Defender)', alerts)];
 }
 
-module.exports = { label: 'Microsoft Azure', test, pull, tenant, score };
+/** Consulta do Azure Resource Graph (paginada por $skipToken). */
+async function graph(cfg, subs, query) {
+  const tk = await token(cfg);
+  const out = []; let skip = null; let n = 0;
+  do {
+    const body = JSON.stringify({ subscriptions: subs, query, options: Object.assign({ $top: 1000 }, skip ? { $skipToken: skip } : {}) });
+    const j = await (await U.request(ARM + '/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01', { method: 'POST', headers: { authorization: 'Bearer ' + tk, 'content-type': 'application/json' }, body, timeout: 60000 })).json();
+    out.push(...(Array.isArray(j.data) ? j.data : []));
+    skip = j.$skipToken;
+  } while (skip && ++n < 50);
+  return out;
+}
+/** Defender for Cloud: CVEs das máquinas (avaliação de vulnerabilidades do Defender for Servers / MDVM). Role: Reader / Security Reader. */
+async function vulns(cfg) {
+  const V = require('./vulns');
+  const rows = await graph(cfg, await subscriptions(cfg), `securityresources
+| where type == "microsoft.security/assessments/subassessments"
+| where tostring(properties.additionalData.assessedResourceType) startswith "ServerVulnerability"
+| where tostring(properties.status.code) == "Unhealthy"
+| project id, properties`);
+  const list = rows.flatMap((x) => {
+    const p = x.properties || {}; const ad = p.additionalData || {};
+    const cves = (ad.cve || []).map((c) => (c && c.title) || c).filter((c) => /^CVE-/i.test(String(c)));
+    const rd = p.resourceDetails || {};
+    const host = rd.ResourceName || rd.resourceName || (String(rd.id || x.id).match(/(?:virtualMachines|machines)\/([^/]+)/i) || [])[1] || '';
+    const base = { title: p.displayName, severity: p.status && p.status.severity, cvss: V.findCvss(ad.cvss), host, fix: p.remediation || '', pkg: (ad.software || ad.softwareDetails || {}).name || '' };
+    return (cves.length ? cves : [/^CVE-/i.test(p.id || '') ? p.id : p.displayName]).map((cve) => Object.assign({ cve }, base));
+  });
+  return [V.aggregate(list, 'Microsoft Defender for Cloud')];
+}
+
+module.exports = { label: 'Microsoft Azure', test, pull, tenant, score, vulns };

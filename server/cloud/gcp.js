@@ -152,4 +152,25 @@ async function score(cfg) {
     { kind: 'warning', message: 'O GCP não tem uma pontuação de segurança nativa: o bloco traz os achados e as ameaças do Security Command Center (a pontuação pode ser preenchida à mão).' }];
 }
 
-module.exports = { label: 'Google Cloud Platform', test, pull, tenant, score };
+/** Security Command Center: achados de vulnerabilidade com CVE (VM Manager, Artifact Analysis, Web Security Scanner…). */
+async function vulns(cfg) {
+  const V = require('./vulns');
+  const list = []; const errs = []; let ok = 0;
+  for (const p of await projectsOf(cfg)) {
+    try {
+      for (const page of await get(cfg, `https://securitycenter.googleapis.com/v1/projects/${p}/sources/-/findings?filter=${encodeURIComponent('state="ACTIVE" AND findingClass="VULNERABILITY"')}&pageSize=1000`)) {
+        ok++;
+        for (const r of page.listFindingsResults || []) {
+          const f = r.finding || {}; const v = f.vulnerability || {}; const cve = v.cve || {};
+          list.push({ cve: cve.id || f.category, title: f.description ? String(f.description).slice(0, 160) : f.category, severity: f.severity, cvss: cve.cvssv3 && cve.cvssv3.baseScore,
+            host: String(f.resourceName || '').split('/').pop(), fix: f.nextSteps || (v.fixedPackage ? `Atualizar para ${v.fixedPackage.packageName || ''} ${v.fixedPackage.packageVersion || ''}`.trim() : ''),
+            pkg: v.offendingPackage ? `${v.offendingPackage.packageName || ''} ${v.offendingPackage.packageVersion || ''}`.trim() : '' });
+        }
+      }
+    } catch (e) { errs.push(`${p}: ${e.message}`); }
+  }
+  if (!ok) throw new Error('Security Command Center indisponível (ative o SCC e dê roles/securitycenter.findingsViewer à conta de serviço). ' + (errs[0] || ''));
+  return [V.aggregate(list, 'GCP Security Command Center')];
+}
+
+module.exports = { label: 'Google Cloud Platform', test, pull, tenant, score, vulns };

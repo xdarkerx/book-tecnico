@@ -35,7 +35,7 @@
         h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { const k = BT.api.keyOf(BT.store.sessionId); BT.editor.nav.show({ cliente: k.cliente, ano: k.ano }); } }, '🗂 Outros books')]),
       h('div', { class: 'card', style: { marginTop: '18px' } }, [
         h('div', { class: 'fg fg2' }, [
-          field('Nome do cliente (como aparece na capa)', 'cliente', { placeholder: 'ex.: SIMPAR, JSL…' }),
+          field('Nome do cliente (como aparece na capa)', 'cliente', { placeholder: 'ex.: ACME, Empresa X…' }),
           h('div', { class: 'fd' }, [h('label', {}, 'Período · área técnica (identificação do book)'), h('div', { class: 'inp', style: { opacity: '.8' }, title: 'Para outro período ou área, crie um novo book (⧉ próximo mês)' }, `${months[Number(m.mes) - 1] || '—'}/${m.ano || '—'} · ${m.area || '—'}`)]),
           field('Responsável', 'responsavel', { placeholder: 'ex.: Luiz Silva — Tech Lead' }),
           field('Time', 'time', { placeholder: 'ex.: infraCloud' }),

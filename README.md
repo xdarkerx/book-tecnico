@@ -307,6 +307,7 @@ calculou a pontuação da tenancy). O resto entra normalmente.
 | Backups feitos no mês | backups de boot/block volume | jobs do AWS Backup e snapshots EBS | jobs do Azure Backup | snapshots |
 | Políticas de backup | políticas de volume | planos do AWS Backup e DLM | políticas dos cofres | agendamentos de snapshot |
 | Segurança | Cloud Guard (pontuação, recomendações, problemas) | Security Hub (pontuação, controles reprovados, findings) | Defender (Secure Score, recomendações, alertas) | Security Command Center (achados e ameaças; sem pontuação nativa) |
+| Vulnerabilidades (CVEs), opcional | Vulnerability Scanning (`read vss-family`) | Amazon Inspector (`inspector2:ListFindings`) | Defender for Cloud / Defender for Servers (Reader) | Security Command Center (`findingsViewer`) |
 
 #### Zabbix e GLPI (monitoramento e chamados)
 Configure-os nas mesmas **Conexões** do cliente. A sincronização usa o **período do book** (do primeiro ao
@@ -319,10 +320,32 @@ Configure-os nas mesmas **Conexões** do cliente. A sincronização usa o **per�
 
 Na sincronização do Zabbix dá para escolher as **severidades** que entram (Desastre, Alta, Média, Atenção,
 Informação, Não classificado). Também dá para **incluir ou não os servidores sem nenhum alerta** no período (planilha de Monitoramento).
+As **recomendações** só aparecem para servidores com alerta no período: se o cliente pediu para não alertar um
+servidor, ele não entra, mesmo com uso alto.
 
 Os limites que geram recomendações (padrão CPU 80%, memória 80%, disco 85%) são configuráveis. A classificação
 dos triggers é a mesma do book original: falha de coleta, swap, latência de I/O, serviços parados e jobs de
 backup não contam como consumo. Sincronizar de novo **atualiza** os blocos, sem duplicar.
+
+#### Vulnerabilidades (CVEs): clouds, Wazuh e Microsoft Defender
+A seção **Operações › Vulnerabilidades** recebe uma linha por **CVE**, com severidade, CVSS, servidores afetados,
+ação sugerida e a fonte, mais indicadores e um gráfico por severidade. As fontes podem ser usadas juntas:
+
+| Fonte | Como ligar |
+|---|---|
+| **Clouds** (OCI, AWS, Azure, GCP) | Na sincronização, marque **🐞 Vulnerabilidades (CVEs)**. Usa o serviço de segurança de cada cloud (tabela acima). Vem desmarcado. |
+| **Wazuh** | Conexão **🐺 Wazuh**: URL da API do manager (porta 55000), usuário e senha. No **Wazuh 4.8 ou mais novo**, informe também o **indexer** (porta 9200), onde ficam os CVEs. Opcional: grupo de agentes. |
+| **Microsoft Defender for Endpoint** | Conexão **🛡️ Defender**: App Registration com a permissão de **aplicativo** `Vulnerability.Read.All` (API WindowsDefenderATP), com consentimento de administrador. Opcional: grupo de dispositivos. |
+
+Na sincronização, escolha as **severidades** que entram no book (padrão: Crítica e Alta). O book automático usa a
+mesma escolha.
+
+#### Função dos servidores
+A coluna **Função** é preenchida pelo nome do servidor, com siglas e produtos conhecidos: ZBX (Zabbix), NDD
+(Print Server), Jira, Confluence, Jenkins, GitLab, SonarQube, GLPI, Wazuh/SIEM, SAP, TOTVS/Protheus, Exchange,
+vCenter/ESXi, Citrix/VDI/RDSH, WSUS/SCCM, Kafka/RabbitMQ, Elastic/Graylog e outros, além das regras gerais
+(firewall, AD, banco, web, aplicação, backup…). **DR** é um complemento: `SQL-DR01` vira "Banco de Dados (DR)" e só
+`SRV-DR` vira "Disaster Recovery". Sem pista no nome, fica em branco.
 
 #### Importar chaves
 Em **Conexões › 📥 Importar chaves**, envie os arquivos de credencial e o formulário é preenchido sozinho:

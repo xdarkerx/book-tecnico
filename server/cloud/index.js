@@ -1,16 +1,18 @@
 /* ═══ Registro dos conectores de cloud ═══
  * Cada conector exporta: { label, test(cfg) → {ok,message}, pull(cfg, kinds) → [sheet] }
- * kinds: 'servers' | 'storage' | 'network' | 'baseline' | 'backup' (só os do período) | 'tenant' | 'score'
+ * kinds: 'servers' | 'storage' | 'network' | 'baseline' | 'backup' (só os do período) | 'tenant' | 'score' | 'vulns'
  * opts: { from, to } período do book; newOnly = servidores/storage/redes só os criados no período (coluna "Criado em")
  * Os resultados têm colunas com os mesmos nomes dos exports das consoles,
  * então os mapeadores do front (js/import/mappers) funcionam igual a um CSV.
  */
-const connectors = { oci: require('./oci'), aws: require('./aws'), azure: require('./azure'), gcp: require('./gcp'), zabbix: require('./zabbix'), glpi: require('./glpi') };
-const TOOLS = ['zabbix', 'glpi']; // monitoramento / chamados: um único "tipo" de dado, com período
-const ALL = ['servers', 'storage', 'network', 'baseline', 'backup', 'tenant', 'score'];
+const connectors = { oci: require('./oci'), aws: require('./aws'), azure: require('./azure'), gcp: require('./gcp'), zabbix: require('./zabbix'), glpi: require('./glpi'), wazuh: require('./wazuh'), defender: require('./defender') };
+// monitoramento / chamados / vulnerabilidades: um único "tipo" de dado, com período
+const TOOLS = ['zabbix', 'glpi', 'wazuh', 'defender'];
+const ALL = ['servers', 'storage', 'network', 'baseline', 'backup', 'tenant', 'score', 'vulns'];
 const NEW_ONLY = ['servers', 'storage', 'network']; // dá para trazer só o que foi criado no mês
 // tenant = dados da conta/tenancy/assinatura; score = Cloud Security Score (Cloud Guard, Security Hub, Defender)
-const EXTRA = { tenant: 'tenant', score: 'score' };
+// vulns = CVEs do serviço de segurança de cada cloud (VSS, Inspector, Defender for Cloud, SCC)
+const EXTRA = { tenant: 'tenant', score: 'score', vulns: 'vulns' };
 
 module.exports = {
   list: () => Object.keys(connectors),

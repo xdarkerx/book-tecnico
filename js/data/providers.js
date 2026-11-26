@@ -9,9 +9,12 @@
     generic: { key: 'generic', label: 'Genérico',   display: 'On-Premise / Outros',         icon: '🏢', group: 'Grupo',          color: '#5E3FE1' },
     // ferramentas (não são clouds): monitoramento e chamados
     zabbix:  { key: 'zabbix',  label: 'Zabbix',     display: 'Zabbix (monitoramento)',      icon: '📡', group: 'Host group',     color: '#d40000', tool: true },
-    glpi:    { key: 'glpi',    label: 'GLPI',       display: 'GLPI (chamados)',             icon: '🎫', group: 'Entidade',       color: '#f0b429', tool: true }
+    glpi:    { key: 'glpi',    label: 'GLPI',       display: 'GLPI (chamados)',             icon: '🎫', group: 'Entidade',       color: '#f0b429', tool: true },
+    // vulnerabilidades (CVEs) dos servidores
+    wazuh:   { key: 'wazuh',   label: 'Wazuh',      display: 'Wazuh (vulnerabilidades)',    icon: '🐺', group: 'Grupo de agentes', color: '#3595f2', tool: true },
+    defender: { key: 'defender', label: 'Defender', display: 'Microsoft Defender for Endpoint (vulnerabilidades)', icon: '🛡️', group: 'Grupo de dispositivos', color: '#0078d4', tool: true }
   };
-  BT.data.toolList = ['zabbix', 'glpi'];
+  BT.data.toolList = ['zabbix', 'glpi', 'wazuh', 'defender'];
   BT.data.providerList = ['oci', 'aws', 'azure', 'gcp', 'vmware', 'generic'];
   BT.data.ICONS = ['📄','📋','👥','🔧','🌐','🖥️','🔒','💾','📦','🗄️','⚠️','📡','🚀','📌','☁️','🔶','⚡','🏢','📊','📈','🧩','🛡️','🔑','🧪','🗂️','📁','🧭','🕒','✅','❗','💡','🛠️','🔗','🧱','📝','🏷️'];
 })(window.BT);

@@ -52,7 +52,7 @@ const ocid = 'ocid1.tenancy.oc1..aaaaaaaao4am5ubi7rjjmlfoa5mlyll3nidj6pikuygvil6
 assert.ok(B.wordText(ocid).includes('&#8203;') && B.wordText(ocid).replace(/&#8203;/g, '') === ocid); ok('Word: OCID ganha pontos de quebra invisíveis (o texto continua igual)');
 assert.strictEqual(B.wordText('Servidor de banco de dados'), 'Servidor de banco de dados'); assert.strictEqual(B.wordText('<b>x</b>'), '&lt;b&gt;x&lt;/b&gt;'); ok('Word: texto normal não muda e continua escapado');
 
-assert.strictEqual(B.cellText(ocid), `<span class="blong">${ocid}</span>`); assert.strictEqual(B.cellText('caedu'), 'caedu'); ok('HTML/PDF: só textos longos sem espaço podem quebrar (palavras normais ficam inteiras)');
+assert.strictEqual(B.cellText(ocid), `<span class="blong">${ocid}</span>`); assert.strictEqual(B.cellText('acme'), 'acme'); ok('HTML/PDF: só textos longos sem espaço podem quebrar (palavras normais ficam inteiras)');
 
 // importação: escolher os riscos de recomendações/alertas que entram no book
 const sd = Object.assign({ title: 'Cloud Security Score', items: [], note: '' }, B.scoreTables('oci'));
@@ -97,10 +97,12 @@ assert.strictEqual(defs.score.isEmpty({ data: Object.assign({}, cg, { items: [] 
 BT.importer = { mappers: {} }; BT.data = BT.data || { providers: {} };
 for (const f of ['common', 'network', 'servers']) vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'import', 'mappers', f + '.js'), 'utf8'), { window: { BT } });
 const M = BT.importer.mappers;
-assert.strictEqual(M.network.map({ fields: ['VCN Name', 'CIDRs', 'compartment_path'], rows: [{ 'VCN Name': 'VCN_JUMP', CIDRs: '10.0.0.0/16', compartment_path: 'CAEDU_JUMP' }] }, 'oci')[0].cidr, '10.0.0.0/16'); ok('rede: CIDR da OCI (coluna "CIDRs") preenche a planilha');
+assert.strictEqual(M.network.map({ fields: ['VCN Name', 'CIDRs', 'compartment_path'], rows: [{ 'VCN Name': 'VCN_JUMP', CIDRs: '10.0.0.0/16', compartment_path: 'ACME_JUMP' }] }, 'oci')[0].cidr, '10.0.0.0/16'); ok('rede: CIDR da OCI (coluna "CIDRs") preenche a planilha');
 assert.deepStrictEqual(['CIDRs', 'IPAddress', 'privateIpAddress'].map(M._common.normKey), ['cidrs', 'ip address', 'private ip address']); ok('nomes de coluna: plural de sigla ("CIDRs") não é quebrado; camelCase continua');
-const roles = M.servers.map({ fields: ['Display Name'], rows: ['CAEDU-FW-AD1', 'SRV-DC-01', 'SRV-AD-01', 'CAEDU-WK-005', 'CAEDU-ACCESS-OKE', 'CAEDU-PROD-MYSQL', 'CAEDU-IPO-003'].map((n) => ({ 'Display Name': n })) }, 'oci').map((r) => r.role);
+const roles = M.servers.map({ fields: ['Display Name'], rows: ['ACME-FW-AD1', 'SRV-DC-01', 'SRV-AD-01', 'ACME-WK-005', 'ACME-ACCESS-OKE', 'ACME-PROD-MYSQL', 'ACME-IPO-003'].map((n) => ({ 'Display Name': n })) }, 'oci').map((r) => r.role);
 assert.deepStrictEqual(JSON.parse(JSON.stringify(roles)), ['Firewall', 'Active Directory', 'Active Directory', 'Kubernetes', 'Kubernetes', 'Banco de Dados', '']); ok('função: FW com "AD" no nome é Firewall; workers/OKE são Kubernetes; sem pista fica em branco (não "Genérico")');
+const roles2 = M.servers.map({ fields: ['Display Name'], rows: ['SRV-ZBX-01', 'ZBX-PROXY-02', 'SRV-NDD-01', 'JIRA-PRD', 'JENKINS01', 'SQL-DR-01', 'SRV-DR'].map((n) => ({ 'Display Name': n })) }, 'oci').map((r) => r.role);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(roles2)), ['Zabbix', 'Zabbix', 'Print Server (NDD)', 'Jira', 'Jenkins', 'Banco de Dados (DR)', 'Disaster Recovery']); ok('função: siglas conhecidas (ZBX, NDD, Jira, Jenkins) e DR como complemento');
 
 // planilhas: colunas sem nenhum dado saem do book; linhas com listra
 assert.deepStrictEqual(JSON.parse(JSON.stringify(B.filledColumns([['a', '', '—', 'x'], ['b', '-', ' ', '']], 4))), [0, 3]); ok('colunas só com "", "—" ou "-" saem do book (ex.: Utilizado, Teste Restore)');
@@ -116,7 +118,7 @@ assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state
   const books = { '2026-10': { groups: [{ sections: [{ blocks: [{ type: 'score', data: { items: [{ label: 'OCI · Tenancy', value: '80' }, { label: 'Outro', value: '10' }] } }] }] }] }, '2026-09': { groups: [{ sections: [{ blocks: [{ type: 'score', data: { items: [{ label: 'OCI · Tenancy', value: '' }] } }] }] }] } };
   BT.api = { getBook: async (k) => books[`${k.ano}-${k.mes}`] || null };
   const d = { items: [{ label: 'OCI · Tenancy', value: '89' }] };
-  await B.loadScoreHistory(d, { cliente: 'caedu', ano: '2026', mes: '11', area: 'infracloud' });
+  await B.loadScoreHistory(d, { cliente: 'acme', ano: '2026', mes: '11', area: 'infracloud' });
   assert.deepStrictEqual(JSON.parse(JSON.stringify([d.month, d.history])), ['2026-11', [{ label: 'OCI · Tenancy', mes: '2026-10', value: '80' }]]); ok('comparativo: busca a pontuação de outubro no book de outubro (ignora vazio e outros itens)');
   console.log(`\n${passed} testes do front ok`);
 })().catch((e) => { console.error(e); process.exit(1); });

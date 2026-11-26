@@ -205,6 +205,7 @@ async function pull(cfg, kind, opts = {}) {
   const prio = (val, count) => ((count >= 100 || (val != null && val >= 90)) ? 'Alta' : (count >= 20 || (val != null && val >= 75)) ? 'Média' : 'Baixa');
   const recs = []; const seen = new Set();
   const rec = (host, key, label, val, count, extra = '') => {
+    if (!count) return; // sem alerta no período (às vezes o cliente pediu para não alertar): não recomenda
     const k = host + '|' + key + '|' + extra; if (seen.has(k)) return; seen.add(k);
     recs.push({ 'Servidor': host, 'Recurso': label, 'Situação': `${val != null ? val.toFixed(1) + '% ' + (key === 'disk' ? 'usado' : 'médio') + ' · ' : ''}${count} alerta${count !== 1 ? 's' : ''} no período${extra ? ' (' + extra + ')' : ''}`, 'Ação sugerida': ACAO[key], 'Prioridade': prio(val, count) });
   };
