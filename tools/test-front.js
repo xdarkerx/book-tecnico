@@ -126,6 +126,9 @@ assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state
   const s = T.svg(d);
   assert.ok(/vpc-prd/.test(s) && /vpc-hml/.test(s) && /TRANSIT GATEWAY/.test(s) && />Internet</.test(s) && /On-premises/.test(s) && /VPN · matriz/.test(s));
   assert.ok(T.isEmpty({ data: { model: { networks: [] } } }) && !T.isEmpty({ data: d }));
+  const many = JSON.parse(JSON.stringify(d)); for (let i = 0; i < 9; i++) many.model.links.push({ a: 'tgw', b: 'onprem', type: 'vpn', label: 'IPSec · t' + i });
+  const sm = T.svg(many);
+  assert.ok(/VPN ×10/.test(sm) && !/IPSec · t3/.test(sm)); ok('topologia detalhada: vários túneis do mesmo hub viram uma linha "VPN ×10"');
   const s2 = T.svg(Object.assign({}, d, { hidden: ['b'] }));
   assert.ok(!/vpc-hml/.test(s2) && !/TRANSIT GATEWAY/.test(s2)); ok('topologia: desenha redes, hub, internet e on-prem; rede oculta (e o hub só dela) sai do desenho');
 }

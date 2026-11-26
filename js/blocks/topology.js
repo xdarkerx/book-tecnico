@@ -26,7 +26,18 @@
     const ids = new Set(nets.map((n) => n.id));
     // hub (DRG, Transit Gateway) só aparece se alguma rede do desenho estiver ligada a ele
     const hubIds = new Set((m.hubs || []).filter((hb) => (m.links || []).some((l) => (l.a === hb.id && ids.has(l.b)) || (l.b === hb.id && ids.has(l.a)))).map((hb) => hb.id));
-    const links = (m.links || []).filter((l) => [l.a, l.b].every((x) => ids.has(x) || hubIds.has(x) || x === 'internet' || x === 'onprem'));
+    // vários links do mesmo tipo entre os mesmos pontos (ex.: 9 túneis IPSec do DRG) viram UMA linha "VPN ×9"
+    const grouped = new Map();
+    (m.links || []).filter((l) => [l.a, l.b].every((x) => ids.has(x) || hubIds.has(x) || x === 'internet' || x === 'onprem')).forEach((l) => {
+      const k = l.type + '|' + [l.a, l.b].sort().join('|');
+      const g = grouped.get(k);
+      if (g) g.n++; else grouped.set(k, Object.assign({}, l, { n: 1 }));
+    });
+    const links = [...grouped.values()].map((l) => {
+      if (l.n === 1) return l;
+      const base = l.type === 'vpn' ? 'VPN' : l.type === 'peering' ? 'Peering' : String(l.label || '').split(' · ')[0];
+      return Object.assign({}, l, { label: base ? `${base} ×${l.n}` : `×${l.n}` });
+    });
     const used = new Set(links.flatMap((l) => [l.a, l.b]));
     const hubs = (m.hubs || []).filter((hb) => used.has(hb.id));
     if (!nets.length) return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="60" viewBox="0 0 ${W} 60"><text x="${W / 2}" y="34" font-size="12" text-anchor="middle" fill="#9098b8" font-family="${FONT}">Sem redes para desenhar — sincronize "Redes" desta cloud</text></svg>`;
@@ -127,14 +138,16 @@
     links.forEach((l, li) => {
       if (!pos[l.a] || !pos[l.b]) return;
       const [color, dash] = LINK[l.type] || LINK.attach;
-      const off = ((pair[[l.a, l.b].sort().join('|')] = (pair[[l.a, l.b].sort().join('|')] || 0) + 1) - 1) * 4 + (li % 3) * 3;
+      const pk = [l.a, l.b].sort().join('|'); const pi = (pair[pk] = (pair[pk] || 0) + 1) - 1; // nº da ligação entre o mesmo par
+      const off = pi * 4 + (li % 3) * 3;
       let d = ''; let lx, lyy;
       if (above(l.a) && above(l.b)) {
         // externo ↔ hub: curva entre as duas caixas
         const [U1, D1] = pos[l.a].y < pos[l.b].y ? [l.a, l.b] : [l.b, l.a];
         const x1 = portOf(U1, li), y1 = pos[U1].y + pos[U1].h, x2 = portOf(D1, li), y2 = pos[D1].y;
         d = `M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`;
-        lx = (x1 + x2) / 2 + off * 2; lyy = (y1 + y2) / 2 - 3 + off * 2.5;
+        // rótulo logo acima do hub (cada hub tem o seu lugar; VPN e link dedicado do mesmo hub ficam empilhados)
+        lx = x2; lyy = y2 - 5 - pi * 11;
       } else {
         const [S, T] = isCard(l.a) && !isCard(l.b) ? [l.b, l.a] : [l.a, l.b];
         const t = pos[T]; const tx = portOf(T, li); const ty = t.y; const ch = (p) => p.y - 11 - off;
