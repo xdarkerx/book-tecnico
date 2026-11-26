@@ -339,7 +339,8 @@ desenhado a partir da API, no lugar da imagem vazia de topologia:
 | GCP | Redes VPC e subnets por região, Cloud NAT, Cloud VPN, Interconnect, peerings e saída para a internet |
 
 Dois estilos: **Compacto** (padrão: um cartão pequeno por rede, com etiquetas de Internet, DRG/Transit Gateway, peering,
-VPN e gateways; só as linhas entre o hub e o on-premises) e **Detalhado** (subnets e linhas até cada rede). No editor
+VPN e gateways; os DRGs/Transit Gateways aparecem em cartões com as redes anexadas e as ligações com o on-premises,
+como "VPN ×6" e "FastConnect") e **Detalhado** (subnets e linhas até cada rede). No editor
 dá para trocar o estilo, esconder redes e ligar/desligar subnets e gateways. Essas escolhas continuam na próxima
 sincronização. O desenho sai igual no HTML e no PDF, e como imagem no Word.
 
