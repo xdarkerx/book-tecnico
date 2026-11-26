@@ -76,6 +76,7 @@ const period = (opts = {}) => ({ from: opts.from ? new Date(opts.from + 'T00:00:
 const inPeriod = (d, p) => { const t = new Date(d); return t >= p.from && t <= p.to; };
 async function pull(cfg, kind, opts = {}) {
   const rows = [];
+  const topo = require('./topology').model();
   const per = period(opts);
   for (const p of await projectsOf(cfg)) {
     if (kind === 'backup') {
@@ -106,14 +107,29 @@ async function pull(cfg, kind, opts = {}) {
     }
     if (kind === 'network' || kind === 'baseline') {
       const subnets = aggregated(await get(cfg, `${C}${p}/aggregated/subnetworks`), 'subnetworks');
+      const opt = async (url, key) => { try { return aggregated(await get(cfg, url), key); } catch (e) { return []; } };
+      const [routers, vpngw, tunnels, attach] = kind === 'network' ? await Promise.all([opt(`${C}${p}/aggregated/routers`, 'routers'), opt(`${C}${p}/aggregated/vpnGateways`, 'vpnGateways'), opt(`${C}${p}/aggregated/vpnTunnels`, 'vpnTunnels'), opt(`${C}${p}/aggregated/interconnectAttachments`, 'interconnectAttachments')]) : [[], [], [], []];
+      let routes = [];
+      if (kind === 'network') try { routes = (await get(cfg, `${C}${p}/global/routes`)).flatMap((x) => x.items || []); } catch (e) { /* sem rotas */ }
       for (const n of (await get(cfg, `${C}${p}/global/networks`)).flatMap((x) => x.items || [])) {
         if (kind === 'baseline') { rows.push({ resource_type: 'VPC Network', project: p }); continue; }
         const subs = subnets.filter((s) => s.network === n.selfLink);
         rows.push({ 'Network Name': n.name, 'IP range': subs.map((s) => s.ipCidrRange).join(', ') || n.IPv4Range || '', 'Project': p, 'Subnets': subs.map((s) => `${s.name} (${U.last(s.region)} ${s.ipCidrRange})`).join('; '), 'Criado em': String(n.creationTimestamp || '').slice(0, 10) });
+        // topologia: Cloud NAT, Cloud VPN, Interconnect, peerings e rota padrão para a internet
+        const myRouters = routers.filter((r) => r.network === n.selfLink);
+        const myVpn = vpngw.filter((g) => g.network === n.selfLink);
+        topo.networks.push({ id: n.selfLink, name: n.name, cidr: subs.length > 3 ? `${subs.length} subnets` : subs.map((s) => s.ipCidrRange).join(', '), group: p, region: [...new Set(subs.map((s) => U.last(s.region)))].slice(0, 3).join(', '),
+          subnets: subs.map((s) => ({ name: `${s.name} · ${U.last(s.region)}`, cidr: s.ipCidrRange, public: null })),
+          gateways: [...myRouters.filter((r) => (r.nats || []).length).map((r) => ({ type: 'Cloud NAT', name: r.name })), ...myVpn.map((g) => ({ type: 'Cloud VPN', name: g.name }))] });
+        if (routes.some((r) => r.network === n.selfLink && r.destRange === '0.0.0.0/0' && /default-internet-gateway/.test(r.nextHopGateway || ''))) topo.link(n.selfLink, 'internet', 'internet');
+        for (const pr of n.peerings || []) if (pr.state === 'ACTIVE') topo.link(n.selfLink, pr.network, 'peering', 'Peering');
+        for (const t of tunnels) if (myVpn.some((g) => g.selfLink === t.vpnGateway) || myRouters.some((r) => r.selfLink === t.router)) topo.link(n.selfLink, 'onprem', 'vpn', 'VPN · ' + t.name);
+        for (const a of attach) if (myRouters.some((r) => r.selfLink === a.router)) topo.link(n.selfLink, 'onprem', 'dedicated', 'Interconnect · ' + a.name);
       }
     }
   }
   const names = { servers: 'Instâncias GCP (API)', storage: 'Discos + Buckets GCP (API)', network: 'Redes VPC GCP (API)', baseline: 'Recursos GCP (API)', backup: 'Snapshots GCP do período (API)' };
+  if (kind === 'network') return [U.sheet(kind, names[kind], rows), require('./topology').sheet('Topologia GCP (API)', topo)];
   return [U.sheet(kind, names[kind], rows)];
 }
 

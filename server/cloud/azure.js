@@ -49,6 +49,7 @@ const period = (opts = {}) => ({ from: opts.from ? new Date(opts.from + 'T00:00:
 const inPeriod = (d, p) => { const t = new Date(d); return t >= p.from && t <= p.to; };
 async function pull(cfg, kind, opts = {}) {
   const rows = [];
+  const topo = require('./topology').model();
   const p = period(opts);
   for (const sub of await subscriptions(cfg)) {
     const S = `/subscriptions/${sub}`;
@@ -83,9 +84,20 @@ async function pull(cfg, kind, opts = {}) {
         rows.push({ 'Name': d.name, 'Kind': 'Disco ' + (d.sku?.name || ''), 'Capacity': (d.properties?.diskSizeGB ?? '') + ' GiB', 'Location': d.location, 'Resource Group': rg(d.id), 'Status': d.properties?.diskState || '', 'Criado em': String(d.properties?.timeCreated || '').slice(0, 10) });
     }
     if (kind === 'network') {
-      for (const n of await arm(cfg, `${S}/providers/Microsoft.Network/virtualNetworks?api-version=2023-09-01`))
+      const SPECIAL = { gatewaysubnet: 'VPN / ExpressRoute GW', azurefirewallsubnet: 'Azure Firewall', azurebastionsubnet: 'Bastion', routeserversubnet: 'Route Server' };
+      for (const n of await arm(cfg, `${S}/providers/Microsoft.Network/virtualNetworks?api-version=2023-09-01`)) {
+        const subs = n.properties?.subnets || [];
+        const pfx = (s) => s.properties?.addressPrefix || (s.properties?.addressPrefixes || []).join(',');
         rows.push({ 'VNet Name': n.name, 'Address Space': (n.properties?.addressSpace?.addressPrefixes || []).join(', '), 'Resource Group': rg(n.id), 'Location': n.location,
-          'Subnets': (n.properties?.subnets || []).map((s) => `${s.name} (${s.properties?.addressPrefix || (s.properties?.addressPrefixes || []).join(',')})`).join('; ') });
+          'Subnets': subs.map((s) => `${s.name} (${pfx(s)})`).join('; ') });
+        // topologia: subnets especiais viram gateways; NAT por subnet; peerings entre VNets
+        const id = String(n.id).toLowerCase();
+        topo.networks.push({ id, name: n.name, cidr: (n.properties?.addressSpace?.addressPrefixes || []).join(', '), group: rg(n.id), region: n.location,
+          subnets: subs.filter((s) => !SPECIAL[s.name.toLowerCase()]).map((s) => ({ name: s.name, cidr: pfx(s), public: null })),
+          gateways: [...subs.filter((s) => SPECIAL[s.name.toLowerCase()]).map((s) => ({ type: SPECIAL[s.name.toLowerCase()], name: '' })), ...(subs.some((s) => s.properties?.natGateway) ? [{ type: 'NAT GW', name: '' }] : [])] });
+        for (const p of n.properties?.virtualNetworkPeerings || [])
+          if (/connected/i.test(p.properties?.peeringState || '')) topo.link(id, String(p.properties?.remoteVirtualNetwork?.id || '').toLowerCase(), 'peering', 'Peering');
+      }
     }
     if (kind === 'baseline') {
       for (const r of await arm(cfg, `${S}/resources?api-version=2021-04-01`))
@@ -93,6 +105,21 @@ async function pull(cfg, kind, opts = {}) {
     }
   }
   const names = { servers: 'VMs Azure (API)', storage: 'Storage Azure (API)', network: 'VNets Azure (API)', baseline: 'Recursos Azure (API)', backup: 'Jobs do Azure Backup no período (API)' };
+  if (kind === 'network') {
+    // conexões dos gateways (VPN site-to-site, ExpressRoute, VNet-to-VNet) pelo Resource Graph; sem permissão, segue sem elas
+    try {
+      const res = await graph(cfg, await subscriptions(cfg), `resources | where type =~ 'microsoft.network/virtualnetworkgateways' or type =~ 'microsoft.network/connections' | project id, name, type, properties`);
+      const gwVnet = {};
+      res.filter((x) => /virtualnetworkgateways/i.test(x.type)).forEach((g) => { const sid = String((((g.properties || {}).ipConfigurations || [])[0] || {}).properties?.subnet?.id || '').toLowerCase(); gwVnet[String(g.id).toLowerCase()] = sid.replace(/\/subnets\/.*$/, ''); });
+      res.filter((x) => /connections$/i.test(x.type)).forEach((cn) => {
+        const p = cn.properties || {}; const a = gwVnet[String(p.virtualNetworkGateway1?.id || '').toLowerCase()];
+        if (!a) return;
+        if (/vnet2vnet/i.test(p.connectionType)) { const b = gwVnet[String(p.virtualNetworkGateway2?.id || '').toLowerCase()]; if (b) topo.link(a, b, 'vpn', 'VNet-to-VNet'); }
+        else topo.link(a, 'onprem', /expressroute/i.test(p.connectionType) ? 'dedicated' : 'vpn', (/expressroute/i.test(p.connectionType) ? 'ExpressRoute · ' : 'VPN · ') + cn.name);
+      });
+    } catch (e) { /* sem Resource Graph */ }
+    return [U.sheet(kind, names[kind], rows), require('./topology').sheet('Topologia Azure (API)', topo)];
+  }
   return [U.sheet(kind, names[kind], rows)];
 }
 

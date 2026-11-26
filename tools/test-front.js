@@ -20,6 +20,7 @@ const register = B.register; B.register = (t, d) => { defs[t] = d; register(t, d
 load('charts.js', 'core'); BT.core = { utils: { debounce: (f) => f } }; BT.on = () => () => {};
 load('chart.js'); // gráficos do comparativo e dos riscos
 load('score.js');
+load('topology.js');
 
 // pontuação: aceita %, vírgula e coluna Máximo
 const items = B.scoreItemsFromSheet({ fields: ['Conta', 'Pontuação', 'Máximo', 'Fonte'], rows: [{ Conta: 'Produção', 'Pontuação': '28', 'Máximo': '45', Fonte: 'Defender' }, { Conta: 'HML', 'Pontuação': '72,5%', 'Máximo': '', Fonte: 'X' }, { Conta: 'Vazio', 'Pontuação': '', Fonte: 'X' }] }, 'Azure');
@@ -112,6 +113,18 @@ sec2.data.recs.rows = [['S3.1', 'Bloquear acesso', 'Alta', '', '—'], ['EC2.8',
 const h2 = defs.score.render(sec2, { target: 'web', state: {} });
 assert.ok(!/Recursos reprovados|>Região</.test(h2) && /Controle/.test(h2)); ok('Segurança: colunas vazias também saem das recomendações');
 assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state: {} }))); ok('Word: linhas alternadas com a cor da listra');
+
+// topologia de rede: redes, hub, internet e on-prem no SVG; vazio some do book; redes ocultas saem do desenho
+{
+  const T = BT.blocks.get('topology');
+  const d = { title: 'Topologia', provider: 'aws', model: { networks: [{ id: 'a', name: 'vpc-prd', cidr: '10.0.0.0/16', subnets: [{ name: 'pub', cidr: '10.0.1.0/24', public: true }], gateways: [{ type: 'Internet GW', name: '' }] }, { id: 'b', name: 'vpc-hml', cidr: '10.1.0.0/16', subnets: [], gateways: [] }],
+    hubs: [{ id: 'tgw', type: 'Transit Gateway', name: 'tgw-core' }], links: [{ a: 'a', b: 'internet', type: 'internet' }, { a: 'b', b: 'tgw', type: 'attach' }, { a: 'tgw', b: 'onprem', type: 'vpn', label: 'VPN · matriz' }] } };
+  const s = T.svg(d);
+  assert.ok(/vpc-prd/.test(s) && /vpc-hml/.test(s) && /TRANSIT GATEWAY/.test(s) && />Internet</.test(s) && /On-premises/.test(s) && /VPN · matriz/.test(s));
+  assert.ok(T.isEmpty({ data: { model: { networks: [] } } }) && !T.isEmpty({ data: d }));
+  const s2 = T.svg(Object.assign({}, d, { hidden: ['b'] }));
+  assert.ok(!/vpc-hml/.test(s2) && !/TRANSIT GATEWAY/.test(s2)); ok('topologia: desenha redes, hub, internet e on-prem; rede oculta (e o hub só dela) sai do desenho');
+}
 
 // comparativo: busca a pontuação nos books dos meses anteriores
 (async () => {

@@ -682,6 +682,39 @@ async function main() {
   });
   const ov = (await cloudIdx.pull('oci', ocfg, ['vulns'])).results[0];
   assert.deepStrictEqual(ov.rows.map((r) => [r.CVE, r.Severidade, r['Sistemas afetados'], r['Ação sugerida']]), [['CVE-2024-5535', 'Alta', '1 — vm-oci', 'Atualizar o openssl']]); ok('OCI: CVEs do último scan de cada instância (Vulnerability Scanning)');
+  // ── Topologia de rede (sincronização de Redes) ──
+  const nm = (k, v) => `<tagSet><item><key>${k}</key><value>${v}</value></item></tagSet>`;
+  mock((url, o) => {
+    const b = String(o.body || '');
+    if (b.includes('DescribeVpcs')) return `<R><vpcSet><item><vpcId>vpc-a</vpcId><cidrBlock>10.0.0.0/16</cidrBlock>${nm('Name', 'prd')}</item><item><vpcId>vpc-b</vpcId><cidrBlock>10.1.0.0/16</cidrBlock>${nm('Name', 'hml')}</item></vpcSet></R>`;
+    if (b.includes('DescribeSubnets')) return `<R><subnetSet><item><subnetId>s1</subnetId><vpcId>vpc-a</vpcId><cidrBlock>10.0.1.0/24</cidrBlock><mapPublicIpOnLaunch>true</mapPublicIpOnLaunch>${nm('Name', 'pub')}</item></subnetSet></R>`;
+    if (b.includes('DescribeInternetGateways')) return `<R><internetGatewaySet><item><internetGatewayId>igw-1</internetGatewayId><attachmentSet><item><vpcId>vpc-a</vpcId><state>available</state></item></attachmentSet></item></internetGatewaySet></R>`;
+    if (b.includes('DescribeNatGateways')) return `<R><natGatewaySet><item><natGatewayId>nat-1</natGatewayId><vpcId>vpc-a</vpcId><state>available</state></item></natGatewaySet></R>`;
+    if (b.includes('DescribeVpcPeeringConnections')) return `<R><vpcPeeringConnectionSet><item><requesterVpcInfo><vpcId>vpc-a</vpcId></requesterVpcInfo><accepterVpcInfo><vpcId>vpc-b</vpcId></accepterVpcInfo><status><code>active</code></status></item></vpcPeeringConnectionSet></R>`;
+    if (b.includes('DescribeTransitGateways')) return `<R><transitGatewaySet><item><transitGatewayId>tgw-1</transitGatewayId>${nm('Name', 'tgw-core')}</item></transitGatewaySet></R>`;
+    if (b.includes('DescribeTransitGatewayAttachments')) return `<R><transitGatewayAttachments><item><transitGatewayId>tgw-1</transitGatewayId><resourceType>vpc</resourceType><resourceId>vpc-b</resourceId><state>available</state></item></transitGatewayAttachments></R>`;
+    if (b.includes('DescribeVpnConnections')) return `<R><vpnConnectionSet><item><vpnConnectionId>vpn-1</vpnConnectionId><transitGatewayId>tgw-1</transitGatewayId><state>available</state>${nm('Name', 'matriz')}</item></vpnConnectionSet></R>`;
+    return '<x/>';
+  });
+  const anet = (await cloudIdx.pull('aws', { accessKeyId: 'AK', secretAccessKey: 'S', regions: 'sa-east-1' }, ['network'])).results;
+  const at = anet.find((s) => s.kind === 'topology').topology;
+  assert.deepStrictEqual([at.networks.length, at.networks[0].gateways.map((g) => g.type).join(','), at.networks[0].subnets[0].public, at.hubs[0].name], [2, 'Internet GW,NAT GW', true, 'tgw-core']);
+  assert.deepStrictEqual(at.links.map((l) => `${l.type}:${l.a}>${l.b}`).sort(), ['attach:vpc-b>tgw-1', 'internet:vpc-a>internet', 'peering:vpc-a>vpc-b', 'vpn:tgw-1>onprem']); ok('AWS: topologia com gateways, peering, Transit Gateway e VPN');
+  assert.strictEqual(anet.find((s) => s.kind === 'network').rows.length, 2); ok('AWS: a planilha de VPCs continua igual ao lado da topologia');
+  mock((url) => {
+    if (url.includes('oauth2')) return { access_token: 'T', expires_in: 3600 };
+    if (url.includes('/subscriptions?')) return { value: [{ subscriptionId: 'sub-1' }] };
+    if (url.includes('virtualNetworks')) return { value: [
+      { id: '/subscriptions/sub-1/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-hub', name: 'vnet-hub', location: 'brazilsouth', properties: { addressSpace: { addressPrefixes: ['10.10.0.0/16'] }, subnets: [{ name: 'GatewaySubnet', properties: { addressPrefix: '10.10.0.0/27' } }, { name: 'snet-app', properties: { addressPrefix: '10.10.1.0/24', natGateway: { id: 'x' } } }],
+        virtualNetworkPeerings: [{ properties: { peeringState: 'Connected', remoteVirtualNetwork: { id: '/subscriptions/sub-1/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-spoke' } } }] } },
+      { id: '/subscriptions/sub-1/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-spoke', name: 'vnet-spoke', location: 'brazilsouth', properties: { addressSpace: { addressPrefixes: ['10.20.0.0/16'] }, subnets: [] } }] };
+    if (url.includes('Microsoft.ResourceGraph')) return { data: [
+      { id: '/subscriptions/sub-1/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworkGateways/vgw', type: 'microsoft.network/virtualnetworkgateways', properties: { ipConfigurations: [{ properties: { subnet: { id: '/subscriptions/sub-1/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-hub/subnets/GatewaySubnet' } } }] } },
+      { id: 'c1', name: 'vpn-matriz', type: 'microsoft.network/connections', properties: { connectionType: 'IPsec', virtualNetworkGateway1: { id: '/subscriptions/sub-1/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworkGateways/vgw' } } }] };
+    return { value: [] };
+  });
+  const zt = (await cloudIdx.pull('azure', { tenantId: 't3', clientId: 'c', clientSecret: 's' }, ['network'])).results.find((s) => s.kind === 'topology').topology;
+  assert.deepStrictEqual([zt.networks[0].gateways.map((g) => g.type).join(','), zt.networks[0].subnets.map((s) => s.name).join(','), zt.links.map((l) => l.type).sort().join(',')], ['VPN / ExpressRoute GW,NAT GW', 'snet-app', 'peering,vpn']); ok('Azure: topologia com GatewaySubnet como gateway, NAT, peering e VPN do gateway');
   global.fetch = realFetch;
   console.log(`\n${passed} testes ok`);
 }

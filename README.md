@@ -327,6 +327,20 @@ Os limites que geram recomendações (padrão CPU 80%, memória 80%, disco 85%) 
 dos triggers é a mesma do book original: falha de coleta, swap, latência de I/O, serviços parados e jobs de
 backup não contam como consumo. Sincronizar de novo **atualiza** os blocos, sem duplicar.
 
+#### Topologia de rede (desenho automático)
+Ao sincronizar **🌐 Redes**, cada cloud (e cada conta) ganha no seu **Networking** um bloco **🗺️ Topologia de rede**
+desenhado a partir da API, no lugar da imagem vazia de topologia:
+
+| Cloud | O que aparece |
+|---|---|
+| OCI | VCNs e subnets (pública/privada), Internet/NAT/Service Gateway, LPG (peering local), **DRG** com os anexos, IPSec e FastConnect |
+| AWS | VPCs e subnets, Internet/NAT/VPN Gateway, peerings, **Transit Gateway** com os anexos, VPN e Direct Connect |
+| Azure | VNets e subnets, gateway de VPN/ExpressRoute, Azure Firewall, Bastion, NAT, peerings e conexões VPN/ExpressRoute |
+| GCP | Redes VPC e subnets por região, Cloud NAT, Cloud VPN, Interconnect, peerings e saída para a internet |
+
+No editor dá para esconder redes do desenho e ligar/desligar subnets e gateways. Essas escolhas continuam na próxima
+sincronização. O desenho sai igual no HTML e no PDF, e como imagem no Word.
+
 #### Vulnerabilidades (CVEs): clouds, Wazuh e Microsoft Defender
 A seção **Operações › Vulnerabilidades** recebe uma linha por **CVE**, com severidade, CVSS, servidores afetados,
 ação sugerida e a fonte, mais indicadores e um gráfico por severidade. As fontes podem ser usadas juntas:

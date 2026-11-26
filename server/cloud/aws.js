@@ -137,15 +137,44 @@ async function pull(cfg, kind, opts = {}) {
   }
   if (kind === 'network') {
     const rows = [];
+    const topo = require('./topology').model();
+    const items = async (action, set, params = { MaxResults: '1000' }) => { try { return (await query(creds, 'ec2', r_, action, params)).flatMap((p) => U.find(p, set).flatMap((x) => U.all(x, 'item'))); } catch (e) { return []; } };
+    let r_ = '';
     for (const r of regs) {
-      const subnets = {};
+      r_ = r;
+      const subnets = {}; const subs = {};
       for (const page of await query(creds, 'ec2', r, 'DescribeSubnets', { MaxResults: '1000' }))
-        for (const s of U.find(page, 'subnetSet').flatMap((x) => U.all(x, 'item'))) (subnets[U.text(s, 'vpcId')] = subnets[U.text(s, 'vpcId')] || []).push(`${tag(s, 'Name') || U.text(s, 'subnetId')} (${U.text(s, 'cidrBlock')})`);
+        for (const s of U.find(page, 'subnetSet').flatMap((x) => U.all(x, 'item'))) {
+          const vpc = U.text(s, 'vpcId');
+          (subnets[vpc] = subnets[vpc] || []).push(`${tag(s, 'Name') || U.text(s, 'subnetId')} (${U.text(s, 'cidrBlock')})`);
+          (subs[vpc] = subs[vpc] || []).push({ name: tag(s, 'Name') || U.text(s, 'subnetId'), cidr: U.text(s, 'cidrBlock'), public: U.text(s, 'mapPublicIpOnLaunch') === 'true' });
+        }
+      // topologia: Internet/NAT/VPN gateways, peerings e Transit Gateways
+      const igw = await items('DescribeInternetGateways', 'internetGatewaySet');
+      const nat = (await items('DescribeNatGateways', 'natGatewaySet')).filter((g) => !/deleted|failed/.test(U.text(g, 'state')));
+      const vgw = await items('DescribeVpnGateways', 'vpnGatewaySet', {});
+      const vpn = (await items('DescribeVpnConnections', 'vpnConnectionSet', {})).filter((v) => !/deleted/.test(U.text(v, 'state')));
+      const pcx = (await items('DescribeVpcPeeringConnections', 'vpcPeeringConnectionSet')).filter((p) => U.text(p, 'status/code') === 'active');
+      const tgw = await items('DescribeTransitGateways', 'transitGatewaySet');
+      const tga = (await items('DescribeTransitGatewayAttachments', 'transitGatewayAttachments')).filter((a) => !/deleted|failed/.test(U.text(a, 'state')));
+      tgw.forEach((t) => topo.hub(U.text(t, 'transitGatewayId'), 'Transit Gateway', tag(t, 'Name') || U.text(t, 'transitGatewayId'), r));
       for (const page of await query(creds, 'ec2', r, 'DescribeVpcs', { MaxResults: '1000' }))
-        for (const v of U.find(page, 'vpcSet').flatMap((x) => U.all(x, 'item')))
-          rows.push({ 'VPC Name': tag(v, 'Name') || U.text(v, 'vpcId'), 'CIDR Block': U.text(v, 'cidrBlock'), 'Account ID': U.text(v, 'ownerId'), 'Region': r, 'Subnets': (subnets[U.text(v, 'vpcId')] || []).join('; ') });
+        for (const v of U.find(page, 'vpcSet').flatMap((x) => U.all(x, 'item'))) {
+          const id = U.text(v, 'vpcId');
+          rows.push({ 'VPC Name': tag(v, 'Name') || id, 'CIDR Block': U.text(v, 'cidrBlock'), 'Account ID': U.text(v, 'ownerId'), 'Region': r, 'Subnets': (subnets[id] || []).join('; ') });
+          const myIgw = igw.filter((g) => U.all(g, 'attachmentSet/item').some((a) => U.text(a, 'vpcId') === id));
+          const myVgw = vgw.filter((g) => U.all(g, 'attachments/item').some((a) => U.text(a, 'vpcId') === id && U.text(a, 'state') === 'attached'));
+          topo.networks.push({ id, name: tag(v, 'Name') || id, cidr: U.text(v, 'cidrBlock'), group: U.text(v, 'isDefault') === 'true' ? 'VPC padrão' : '', region: r, subnets: subs[id] || [],
+            gateways: [...myIgw.map((g) => ({ type: 'Internet GW', name: tag(g, 'Name') })), ...nat.filter((g) => U.text(g, 'vpcId') === id).map((g) => ({ type: 'NAT GW', name: tag(g, 'Name') })), ...myVgw.map((g) => ({ type: 'VPN GW', name: tag(g, 'Name') }))] });
+          if (myIgw.length) topo.link(id, 'internet', 'internet');
+          myVgw.forEach((g) => vpn.filter((c) => U.text(c, 'vpnGatewayId') === U.text(g, 'vpnGatewayId')).forEach((c) => topo.link(id, 'onprem', 'vpn', 'VPN · ' + (tag(c, 'Name') || U.text(c, 'vpnConnectionId')))));
+        }
+      tga.filter((a) => U.text(a, 'resourceType') === 'vpc').forEach((a) => topo.link(U.text(a, 'resourceId'), U.text(a, 'transitGatewayId'), 'attach'));
+      vpn.filter((c) => U.text(c, 'transitGatewayId')).forEach((c) => topo.link(U.text(c, 'transitGatewayId'), 'onprem', 'vpn', 'VPN · ' + (tag(c, 'Name') || U.text(c, 'vpnConnectionId'))));
+      tga.filter((a) => U.text(a, 'resourceType') === 'direct-connect-gateway').forEach((a) => topo.link(U.text(a, 'transitGatewayId'), 'onprem', 'dedicated', 'Direct Connect'));
+      pcx.forEach((p) => topo.link(U.text(p, 'requesterVpcInfo/vpcId'), U.text(p, 'accepterVpcInfo/vpcId'), 'peering', 'Peering'));
     }
-    return [U.sheet('network', 'VPCs (API)', rows)];
+    return [U.sheet('network', 'VPCs (API)', rows), require('./topology').sheet('Topologia AWS (API)', topo)];
   }
   if (kind === 'baseline') {
     const rows = [];

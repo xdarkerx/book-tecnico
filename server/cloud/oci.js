@@ -90,6 +90,7 @@ async function pull(cfg, kind, opts = {}) {
   c.regionList = await regionsOf(c, cfg);
   const comps = await compartments(c);
   const rows = [];
+  const topo = require('./topology').model();
   if (kind === 'backup') return [U.sheet('backup', 'Backups OCI do período (API)', await backups(c, comps, opts))];
 
   if (kind === 'baseline') {
@@ -144,16 +145,41 @@ async function pull(cfg, kind, opts = {}) {
       });
     }
     if (kind === 'network') {
+      // topologia: gateways de cada VCN, LPGs (peering local), DRGs (anexos, IPSec e FastConnect)
+      const opt = (url) => listAll(c, url).catch(() => []);
+      const lpgs = []; const drgAtt = []; const ipsec = []; const vcs = [];
       await U.pool(comps, 4, async (comp) => {
-        const vcns = await listAll(c, `${iaas(r)}/vcns?compartmentId=${comp.id}&limit=1000`);
+        const q = `compartmentId=${comp.id}&limit=1000`;
+        for (const d of await opt(`${iaas(r)}/drgs?${q}`)) topo.hub(d.id, 'DRG', d.displayName, r);
+        drgAtt.push(...await opt(`${iaas(r)}/drgAttachments?${q}`));
+        ipsec.push(...await opt(`${iaas(r)}/ipsecConnections?${q}`));
+        vcs.push(...await opt(`${iaas(r)}/virtualCircuits?${q}`));
+        const vcns = await listAll(c, `${iaas(r)}/vcns?${q}`);
         if (!vcns.length) return;
-        const subnets = await listAll(c, `${iaas(r)}/subnets?compartmentId=${comp.id}&limit=1000`);
+        const subnets = await listAll(c, `${iaas(r)}/subnets?${q}`);
         for (const v of vcns) rows.push({ 'VCN Name': v.displayName, 'CIDRs': (v.cidrBlocks || [v.cidrBlock]).filter(Boolean).join(', '), 'compartment_path': comp.path, 'Region': r,
           'Subnets': subnets.filter((s) => s.vcnId === v.id).map((s) => `${s.displayName} (${s.cidrBlock})`).join('; '), 'Criado em': day(v.timeCreated) });
+        const [igw, nat, sgw, lpg] = await Promise.all(['internetGateways', 'natGateways', 'serviceGateways', 'localPeeringGateways'].map((t) => opt(`${iaas(r)}/${t}?${q}`)));
+        lpgs.push(...lpg);
+        for (const v of vcns) {
+          const gws = [...igw.filter((g) => g.vcnId === v.id).map((g) => ({ type: 'Internet GW', name: g.displayName })), ...nat.filter((g) => g.vcnId === v.id).map((g) => ({ type: 'NAT GW', name: g.displayName })),
+            ...sgw.filter((g) => g.vcnId === v.id).map((g) => ({ type: 'Service GW', name: g.displayName })), ...lpg.filter((g) => g.vcnId === v.id).map((g) => ({ type: 'LPG', name: g.displayName }))];
+          topo.networks.push({ id: v.id, name: v.displayName, cidr: (v.cidrBlocks || [v.cidrBlock]).filter(Boolean).join(', '), group: comp.path, region: r,
+            subnets: subnets.filter((s) => s.vcnId === v.id).map((s) => ({ name: s.displayName, cidr: s.cidrBlock, public: s.prohibitPublicIpOnVnic === false })), gateways: gws });
+          if (igw.some((g) => g.vcnId === v.id && g.isEnabled !== false)) topo.link(v.id, 'internet', 'internet');
+        }
       });
+      for (const a of drgAtt.filter((x) => x.lifecycleState !== 'DETACHED')) {
+        const vcn = a.vcnId || (a.networkDetails && /VCN/i.test(a.networkDetails.type || '') ? a.networkDetails.id : '');
+        if (vcn) topo.link(vcn, a.drgId, 'attach');
+      }
+      for (const p of lpgs) { const peer = lpgs.find((x) => x.id === p.peerId); if (peer) topo.link(p.vcnId, peer.vcnId, 'peering', 'LPG'); }
+      for (const x of ipsec) topo.link(x.drgId, 'onprem', 'vpn', 'IPSec · ' + (x.displayName || ''));
+      for (const v of vcs) if (v.gatewayId) topo.link(v.gatewayId, 'onprem', 'dedicated', 'FastConnect' + (v.bandwidthShapeName ? ' ' + v.bandwidthShapeName : ''));
     }
   }
   const names = { servers: 'Instâncias OCI (API)', storage: 'Volumes + Buckets OCI (API)', network: 'VCNs OCI (API)' };
+  if (kind === 'network') return [U.sheet(kind, names[kind], rows), require('./topology').sheet('Topologia OCI (API)', topo)];
   return [U.sheet(kind, names[kind], rows)];
 }
 

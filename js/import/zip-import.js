@@ -323,12 +323,15 @@
             // score: ZIP e API se substituem (origens "score-…"); um bloco feito à mão (sem origem) fica
             const same = (b) => b.data && b.data.origin && (b.data.origin === it.origin || (/^score-/.test(it.origin) && b.type === 'score' && /^score-/.test(b.data.origin)));
             let at = sec.blocks.findIndex(same);
+            const prev = at >= 0 ? sec.blocks[at] : null;
             sec.blocks = sec.blocks.filter((b) => !same(b) && !(it.replaceEmptyType && b.type === it.replaceEmptyType && BT.blocks.isEmpty(b)));
             if (at < 0 || at > sec.blocks.length) at = 0;
             const fresh = it.blocks.map((b) => Object.assign(BT.core.utils.clone(b), { id: BT.uid('blk'), include: true }));
             // só os riscos escolhidos na revisão (linhas sem risco reconhecido sempre entram)
             fresh.forEach((b) => { if (b.type === 'score') b.data = BT.blocks.filterRisks(b.data, [...riskSel]); });
             fresh.forEach((b) => (b.data.origin = it.origin));
+            // topologia: mantém o que foi ajustado no mês anterior (título, redes ocultas, subnets/gateways)
+            fresh.forEach((b) => { if (b.type === 'topology' && prev && prev.type === 'topology') ['title', 'hidden', 'showSubnets', 'showGateways'].forEach((k) => { if (prev.data[k] !== undefined) b.data[k] = prev.data[k]; }); });
             sec.blocks.splice(at, 0, ...fresh);
           }
           if (it.kind === 'image') {
