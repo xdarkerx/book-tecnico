@@ -310,7 +310,14 @@ async function vulns(cfg) {
       } catch (e) { errs.push(e.message); }
     });
   }
-  if (!ok) throw new Error('Vulnerability Scanning indisponível (habilite o serviço e a política "read vss-family"). ' + (errs[0] || ''));
+  if (!ok) {
+    const denied = errs.length && errs.every((m) => /404|NotAuthorizedOrNotFound/.test(m));
+    throw new Error(denied
+      ? `Vulnerability Scanning sem acesso ou sem uso na tenancy (a OCI responde 404 nos dois casos; regiões: ${regs.join(', ')}). ` +
+        'Para usar: crie uma receita e um alvo de scan (Identity & Security › Scanning) e dê ao grupo do usuário da API a política ' +
+        '"allow group <grupo> to read vss-family in tenancy". Sem o serviço da OCI, use as conexões Wazuh ou Defender para os CVEs.'
+      : 'Vulnerability Scanning indisponível: ' + (errs[0] || 'sem resposta'));
+  }
   const list = [];
   await U.pool([...latest.values()], 4, async ({ s, r, VSS }) => {
     let host = s.instanceName || s.instanceId;

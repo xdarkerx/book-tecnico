@@ -228,9 +228,21 @@
     let m = Number(b.mes) + 1, a = Number(b.ano); if (m > 12) { m = 1; a++; }
     const target = { cliente: b.cliente, ano: String(a), mes: String(m).padStart(2, '0'), area: b.area };
     if (await BT.api.getBook(target)) return BT.ui.toast(`Já existe ${b.area} em ${MONTHS()[m - 1]}/${a}.`, { type: 'err' });
-    if (!(await BT.ui.modal.confirm(`Criar ${b.cliente} · ${MONTHS()[m - 1]}/${a} · ${b.area} copiando estrutura e textos deste book? Planilhas, imagens e KPIs começam vazios.`, { okText: 'Criar próximo mês' }))) return;
+    // padrão = copiar tudo, igual ao book automático (a sincronização do mês substitui o que vem das clouds/ferramentas);
+    // "só estrutura" deixa planilhas, imagens e KPIs vazios
+    const mode = await new Promise((resolve) => {
+      const md = BT.ui.modal.open({
+        title: '⧉ Criar o próximo mês', size: 'sm',
+        body: [h('p', {}, `Criar ${b.cliente} · ${MONTHS()[m - 1]}/${a} · ${b.area} a partir deste book.`),
+          h('div', { class: 'cx-help' }, 'Copiar tudo: mantém equipe, ferramentas, escopo, planilhas e imagens; ao sincronizar, os dados das clouds e ferramentas são substituídos pelos do novo mês (é o que o book automático faz). Só estrutura e textos: planilhas, imagens e KPIs começam vazios.')],
+        footer: [h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { md.close(); resolve(null); } }, 'Cancelar'), h('span', { class: 'spacer' }),
+          h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { md.close(); resolve('structure'); } }, 'Só estrutura e textos'),
+          h('button', { class: 'btn btn-primary btn-sm', onclick: () => { md.close(); resolve('all'); } }, 'Copiar tudo')]
+      });
+    });
+    if (!mode) return;
     const src = await SS().get(b.key);
-    const { id, state } = await SS().create(target, SS().copyState(src, 'structure'), src.template);
+    const { id, state } = await SS().create(target, SS().copyState(src, mode), src.template);
     openLoaded(id, state);
   }
 
