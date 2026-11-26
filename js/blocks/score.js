@@ -56,12 +56,37 @@
   }
 
   // ── o que mostrar no book (data.show) ──
-  const SHOW_DEF = { recs: true, alerts: true, charts: false };
+  const SHOW_DEF = { recs: true, alerts: true, charts: false, compare: true, evolution: false };
   const show = (d) => Object.assign({}, SHOW_DEF, d.show || {});
+
+  // ── comparativo: pontuação dos books dos meses anteriores (data.history = [{ label, mes: 'AAAA-MM', value }], data.month = mês do book) ──
+  const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const mesLabel = (m) => { const [y, mo] = String(m).split('-'); return `${MES[Number(mo) - 1] || mo}/${String(y).slice(2)}`; };
+  const prevMonth = (m) => { const [y, mo] = String(m).split('-').map(Number); const d = new Date(y, mo - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+  const hist = (d, label) => (d.history || []).filter((x) => x.label === label && d.month && x.mes < d.month && num(x.value) != null);
+  /** Pontuação do mês imediatamente anterior e a variação ("▲ +7 pts"). */
+  function compare(d, i) {
+    if (!show(d).compare || !d.month) return null;
+    const prev = hist(d, i.label).find((x) => x.mes === prevMonth(d.month)); const n = num(i.value);
+    if (!prev || n == null) return null;
+    const p = num(prev.value); const diff = Math.round((n - p) * 10) / 10;
+    const arrow = diff > 0 ? `▲ +${fmtN(diff)} pts` : diff < 0 ? `▼ ${fmtN(diff)} pts` : '= sem variação';
+    return { text: `${mesLabel(prev.mes)}: ${fmt(p)} · ${arrow}`, color: diff > 0 ? '#00a37a' : diff < 0 ? '#d64545' : '#9098b8' };
+  }
+  const fmtN = (n) => String(n).replace('.', ',');
+  const cmp = (d, i) => { const c = compare(d, i); return c ? `<div class="bscore-cmp" style="color:${c.color}">${BT.esc(c.text)}</div>` : ''; };
   const chart = (data, ctx) => BT.blocks.renderBook({ type: 'chart', include: true, data: Object.assign({ source: 'manual', table: {}, showValues: true, legend: true, height: 220, unit: '' }, data) }, ctx);
-  /** Gráficos de risco (rosca/colunas). */
+  /** Gráfico de evolução (opcional) e gráficos de risco (rosca/colunas). */
   function extras(b, ctx) {
     const d = b.data; const sh = show(d); let out = '';
+    if (sh.evolution && d.month) {
+      const items = filled(b).filter((i) => hist(d, i.label).length);
+      if (items.length) {
+        const months = [...new Set(items.flatMap((i) => hist(d, i.label).map((x) => x.mes)))].sort().slice(-5).concat(d.month);
+        const series = items.map((i) => ({ name: i.label || 'Score', values: months.map((m) => (m === d.month ? num(i.value) : (hist(d, i.label).find((x) => x.mes === m) || {}).value ?? '')) }));
+        out += chart({ title: 'Evolução da pontuação', kind: 'line', labels: months.map(mesLabel), series, unit: '%', legend: series.length > 1, height: 200 }, ctx);
+      }
+    }
     if (sh.charts) {
       const by = (t) => { const c = {}; const si = t ? t.columns.findIndex(isSevCol) : -1; if (si >= 0) rowsOf(t).forEach((r) => { const l = levelOf(r[si]); if (l) c[l] = (c[l] || 0) + 1; }); return LEVELS.filter(([k]) => c[k]).map(([k, l]) => [l, c[k]]); };
       const f = fmtOf(d.provider);
@@ -140,8 +165,20 @@
       const sh = show(d);
       const toggle = (k, label) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: sh[k], onchange: (e) => { d.show = Object.assign(show(d), { [k]: e.target.checked }); ctx.save(); } }), label]);
       const showRow = h('div', { class: 'score-show' }, [h('span', { class: 'lbl' }, 'Mostrar no book'), h('div', { class: 'cprow' }, [
-        toggle('recs', '💡 Recomendações'), toggle('alerts', '🚨 Problemas / alertas'), toggle('charts', '📊 Gráficos de risco')])]);
-      return h('div', {}, [BT.blocks.titleInput(block, ctx), list, showRow,
+        toggle('recs', '💡 Recomendações'), toggle('alerts', '🚨 Problemas / alertas'), toggle('charts', '📊 Gráficos de risco'),
+        toggle('compare', '↔️ Comparativo com o mês passado'), toggle('evolution', '📈 Gráfico de evolução')])]);
+      const histInfo = h('div', { class: 'set-help', style: { margin: '4px 0 0', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } });
+      const drawHist = () => {
+        const ms = [...new Set((d.history || []).filter((x) => !d.month || x.mes < d.month).map((x) => x.mes))].sort();
+        histInfo.innerHTML = '';
+        histInfo.append(ms.length ? `Meses anteriores com pontuação: ${ms.map(mesLabel).join(', ')}.` : 'Sem pontuação de meses anteriores ainda (vem dos books dos meses passados deste cliente).',
+          h('button', { class: 'btn btn-ghost btn-xs', type: 'button', onclick: async () => {
+            const key = BT.store.sessionId && BT.api.keyOf(BT.store.sessionId); if (!key) return;
+            await loadHistory(d, key); ctx.save(); drawHist(); BT.ui.toast('Comparativo atualizado ✓', { type: 'ok' });
+          } }, '🔄 Buscar meses anteriores'));
+      };
+      drawHist();
+      return h('div', {}, [BT.blocks.titleInput(block, ctx), list, showRow, histInfo,
         h('div', { class: 'score-fmt' }, [h('span', { class: 'lbl' }, 'Formato de recomendações e alertas'), format]), grids,
         h('input', { class: 'inp', style: { marginTop: '8px' }, value: d.note || '', placeholder: 'Observação (opcional)', oninput: (e) => { d.note = e.target.value; ctx.save(); } })]);
     },
@@ -152,7 +189,8 @@
         return `<div class="bsc_ bscore"><div class="bsv" style="color:${lv.c}">${fmt(n)}</div>
           <div class="bscore-bar"><span style="width:${n}%;background:${lv.c}"></span></div>
           <div class="bsl">${BT.esc(i.label || 'Score')}</div>
-          ${i.source || i.detail ? `<div class="bscore-src">${BT.esc([i.source, i.detail].filter(Boolean).join(' · '))}</div>` : ''}</div>`;
+          ${i.source || i.detail ? `<div class="bscore-src">${BT.esc([i.source, i.detail].filter(Boolean).join(' · '))}</div>` : ''}
+          ${cmp(d, i)}</div>`;
       }).join('');
       return BT.blocks.titleHtml(b, ctx) + (cards ? `<div class="bsg">${cards}</div>` : '') + extras(b, ctx)
         + (sh.recs ? tableHtml(d.recs, f.recsTitle, ctx) : '') + (sh.alerts ? tableHtml(d.alerts, f.alertsTitle, ctx) : '')
@@ -164,7 +202,7 @@
         const n = num(i.value); const lv = level(n);
         return `<tr><td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:9pt">${BT.esc(i.label || 'Score')}</td>
           <td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:14pt;font-weight:bold;color:${lv.c};text-align:center">${fmt(n)}</td>
-          <td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:9pt;color:${lv.c}">${lv.t}</td>
+          <td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:9pt;color:${lv.c}">${lv.t}${(() => { const c = compare(d, i); return c ? `<br><span style="font-size:7.5pt;color:${c.color}">${BT.esc(c.text)}</span>` : ''; })()}</td>
           <td style="border:1px solid #e8e6f8;padding:6pt;font-family:Arial;font-size:8pt;color:#666">${BT.esc([i.source, i.detail].filter(Boolean).join(' · '))}</td></tr>`;
       }).join('');
       return BT.blocks.titleHtml(b, ctx) + (rows ? `<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:6pt 0">${rows}</table>` : '') + extras(b, ctx)
@@ -198,5 +236,23 @@
     });
     return d;
   }
-  Object.assign(BT.blocks, { scoreItemsFromSheet, scoreFromSheets, scoreTables, SCORE_FORMATS: FORMATS, RISK_LEVELS: LEVELS, riskLevelOf: levelOf, filterRisks, riskCounts });
+  /** Busca a pontuação dos books dos 5 meses anteriores (mesmo cliente e área) e guarda em data.history. */
+  async function loadHistory(d, key) {
+    const out = [];
+    const labels = (d.items || []).map((i) => i.label);
+    for (let back = 1; back <= 5; back++) {
+      const dt = new Date(Number(key.ano), Number(key.mes) - 1 - back, 1);
+      const mes = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+      let st = null;
+      try { st = await BT.api.getBook({ cliente: key.cliente, ano: String(dt.getFullYear()), mes: mes.slice(5), area: key.area }); } catch (e) { /* sem book naquele mês */ }
+      for (const g of (st && st.groups) || []) for (const s2 of g.sections || []) for (const b of s2.blocks || []) {
+        if (b.type !== 'score') continue;
+        for (const it of (b.data && b.data.items) || []) if (labels.includes(it.label) && num(it.value) != null && !out.some((x) => x.label === it.label && x.mes === mes)) out.push({ label: it.label, mes, value: String(it.value) });
+      }
+    }
+    d.history = out.sort((a2, b2) => a2.mes.localeCompare(b2.mes));
+    d.month = `${key.ano}-${String(key.mes).padStart(2, '0')}`;
+    return d;
+  }
+  Object.assign(BT.blocks, { scoreItemsFromSheet, scoreFromSheets, scoreTables, SCORE_FORMATS: FORMATS, RISK_LEVELS: LEVELS, riskLevelOf: levelOf, filterRisks, riskCounts, loadScoreHistory: loadHistory });
 })(window.BT);

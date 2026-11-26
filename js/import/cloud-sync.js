@@ -290,6 +290,7 @@
             const scoreSheets = r.results.filter((sh) => /^score/.test(sh.kind));
             if (scoreSheets.length) {
               const data = BT.blocks.scoreFromSheets(p, scoreSheets, label);
+              await BT.blocks.loadScoreHistory(data, key); // comparativo com o mês passado (books anteriores)
               items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, primary, path: `${label} · Cloud Security Score`, destTitle: 'Segurança', origin: 'score-' + k, replaceEmptyType: 'score', entry: { name: 'Security Score' },
                 blocks: [{ type: 'score', data }], dest: '', newTitle: '', how: 'new', note: '' });
             }

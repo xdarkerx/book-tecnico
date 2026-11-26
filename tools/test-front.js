@@ -73,7 +73,16 @@ const cg = B.scoreFromSheets('oci', [
   { kind: 'score_recs', fields: ['Recomendação', 'Risco', 'Problemas', 'Compartimento'], rows: [{ 'Recomendação': 'MFA', Risco: 'Crítica', Problemas: '2', Compartimento: '(raiz)' }, { 'Recomendação': 'Keys', Risco: 'Baixa', Problemas: '9', Compartimento: '(raiz)' }] },
   { kind: 'score_alerts', fields: ['Problema', 'Risco', 'Recurso', 'Tipo', 'Compartimento', 'Detectado em'], rows: [{ Problema: 'BUCKET_PUBLIC', Risco: 'Alta', Recurso: 'b', Tipo: 'Bucket', Compartimento: 'p', 'Detectado em': '2026-11-01' }] }], 'OCI');
 let cgHtml = defs.score.render({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-10', value: '65' }], month: '2026-11' }) }, { target: 'web', state: {} });
-assert.ok(!cg.history && !/pts vs|Comparativo mensal/.test(cgHtml) && cgHtml.includes('72%')); ok('Cloud Guard: só a pontuação atual (sem comparativo, mesmo com histórico antigo salvo no book)');
+assert.ok(!cg.history && cgHtml.includes('72%')); ok('Cloud Guard: a API não traz mais histórico (o comparativo vem dos books anteriores)');
+assert.ok(/out\/26: 65% · ▲ \+7 pts/.test(cgHtml) && /bscore-cmp/.test(cgHtml)); ok('comparativo: "out/26: 65% · ▲ +7 pts" no cartão (mês passado)');
+assert.ok(!/Evolução da pontuação/.test(cgHtml)); ok('gráfico de evolução: desligado por padrão');
+const evo = defs.score.render({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-08', value: '60' }, { label: 'OCI · Tenancy', mes: '2026-10', value: '65' }], month: '2026-11', show: { evolution: true } }) }, { target: 'web', state: {} });
+assert.ok(/Evolução da pontuação/.test(evo) && /<svg/.test(evo)); ok('gráfico de evolução: aparece quando ligado');
+const noPrev = defs.score.render({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-08', value: '60' }], month: '2026-11' }) }, { target: 'web', state: {} });
+assert.ok(!/bscore-cmp/.test(noPrev)); ok('comparativo: só com o mês imediatamente anterior (agosto não conta para novembro)');
+const off = defs.score.render({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-10', value: '65' }], month: '2026-11', show: { compare: false } }) }, { target: 'web', state: {} });
+assert.ok(!/bscore-cmp/.test(off)); ok('comparativo: pode ser desligado');
+assert.ok(/out\/26: 65%/.test(defs.score.word({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-10', value: '65' }], month: '2026-11' }) }, { target: 'word', state: {} }))); ok('Word: comparativo com o mês passado');
 assert.ok(!/por risco/.test(cgHtml)); ok('gráficos de risco: desligados por padrão');
 cg.show = { charts: true };
 cgHtml = defs.score.render({ data: cg }, { target: 'web', state: {} });
@@ -102,4 +111,12 @@ const h2 = defs.score.render(sec2, { target: 'web', state: {} });
 assert.ok(!/Recursos reprovados|>Região</.test(h2) && /Controle/.test(h2)); ok('Segurança: colunas vazias também saem das recomendações');
 assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state: {} }))); ok('Word: linhas alternadas com a cor da listra');
 
-console.log(`\n${passed} testes do front ok`);
+// comparativo: busca a pontuação nos books dos meses anteriores
+(async () => {
+  const books = { '2026-10': { groups: [{ sections: [{ blocks: [{ type: 'score', data: { items: [{ label: 'OCI · Tenancy', value: '80' }, { label: 'Outro', value: '10' }] } }] }] }] }, '2026-09': { groups: [{ sections: [{ blocks: [{ type: 'score', data: { items: [{ label: 'OCI · Tenancy', value: '' }] } }] }] }] } };
+  BT.api = { getBook: async (k) => books[`${k.ano}-${k.mes}`] || null };
+  const d = { items: [{ label: 'OCI · Tenancy', value: '89' }] };
+  await B.loadScoreHistory(d, { cliente: 'caedu', ano: '2026', mes: '11', area: 'infracloud' });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify([d.month, d.history])), ['2026-11', [{ label: 'OCI · Tenancy', mes: '2026-10', value: '80' }]]); ok('comparativo: busca a pontuação de outubro no book de outubro (ignora vazio e outros itens)');
+  console.log(`\n${passed} testes do front ok`);
+})().catch((e) => { console.error(e); process.exit(1); });
