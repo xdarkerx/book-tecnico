@@ -286,9 +286,10 @@ com o seu padrão (Importação padrão). Itens sem risco informado sempre entra
 - **💡 Recomendações** e **🚨 Problemas / alertas:** ligue ou desligue cada parte. Quando desligada, a parte some do
   book, mas os dados continuam no bloco.
 - **📊 Gráficos de risco:** rosca com as recomendações por risco e colunas com os problemas/alertas por risco.
-- **↔️ Comparativo com o mês passado** (ligado por padrão): cada pontuação mostra a do mês anterior e a variação, por
-  exemplo "out/26: 82% · ▲ +7 pts". O valor vem da pontuação salva no **book do mês anterior** do mesmo cliente e área.
-  Vale para todas as clouds, e o botão **🔄 Buscar meses anteriores** no editor atualiza.
+- **↔️ Comparativo com o mês passado**: cada pontuação mostra a de um mês anterior e a variação, por exemplo
+  "out/26: 82% · ▲ +7 pts". A pontuação vem dos **books dos meses anteriores** do mesmo cliente e área e é buscada
+  sozinha ao sincronizar e ao abrir o bloco. Por padrão compara com o **mês anterior mais recente** que tiver
+  pontuação; no editor dá para escolher outro mês. Sem nenhum mês anterior, o comparativo fica desligado.
 - **📈 Gráfico de evolução** (desligado por padrão): linha com a pontuação dos últimos meses que tiverem book.
 
 Se a sincronização trouxer as recomendações mas não a pontuação, a tela avisa o motivo (ex.: o Cloud Guard ainda não

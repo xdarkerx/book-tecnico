@@ -64,10 +64,15 @@
   const mesLabel = (m) => { const [y, mo] = String(m).split('-'); return `${MES[Number(mo) - 1] || mo}/${String(y).slice(2)}`; };
   const prevMonth = (m) => { const [y, mo] = String(m).split('-').map(Number); const d = new Date(y, mo - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
   const hist = (d, label) => (d.history || []).filter((x) => x.label === label && d.month && x.mes < d.month && num(x.value) != null);
-  /** Pontuação do mês imediatamente anterior e a variação ("▲ +7 pts"). */
+  /** Meses anteriores com pontuação guardada (do mais antigo ao mais recente). */
+  const prevMonths = (d) => [...new Set((d.history || []).filter((x) => d.month && x.mes < d.month && num(x.value) != null).map((x) => x.mes))].sort();
+  /** Mês usado no comparativo: o escolhido no editor ou, por padrão, o mais recente que tiver pontuação. */
+  const compareMonth = (d) => { const ms = prevMonths(d); return ms.includes(d.compareWith) ? d.compareWith : ms[ms.length - 1] || ''; };
+  /** Pontuação do mês de comparação e a variação ("▲ +7 pts"). Sem mês anterior, não mostra nada. */
   function compare(d, i) {
     if (!show(d).compare || !d.month) return null;
-    const prev = hist(d, i.label).find((x) => x.mes === prevMonth(d.month)); const n = num(i.value);
+    const cm = compareMonth(d); if (!cm) return null;
+    const prev = hist(d, i.label).find((x) => x.mes === cm); const n = num(i.value);
     if (!prev || n == null) return null;
     const p = num(prev.value); const diff = Math.round((n - p) * 10) / 10;
     const arrow = diff > 0 ? `▲ +${fmtN(diff)} pts` : diff < 0 ? `▼ ${fmtN(diff)} pts` : '= sem variação';
@@ -163,21 +168,33 @@
         Object.assign(d, scoreTables(p)); ctx.save(); drawGrids();
       } }, [['oci', 'OCI'], ['aws', 'AWS'], ['azure', 'Azure'], ['gcp', 'GCP'], ['generic', 'Genérico']].map(([v, l]) => h('option', { value: v, selected: v === (d.provider || 'generic') }, l)));
       const sh = show(d);
-      const toggle = (k, label) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: sh[k], onchange: (e) => { d.show = Object.assign(show(d), { [k]: e.target.checked }); ctx.save(); } }), label]);
+      // comparativo e evolução só ficam disponíveis quando há mês anterior com pontuação
+      const needsHist = { compare: true, evolution: true };
+      const boxes = {};
+      const toggle = (k, label) => h('label', { class: 'cp' }, [boxes[k] = h('input', { type: 'checkbox', checked: sh[k], onchange: (e) => { d.show = Object.assign(show(d), { [k]: e.target.checked }); ctx.save(); drawHist(); } }), label]);
       const showRow = h('div', { class: 'score-show' }, [h('span', { class: 'lbl' }, 'Mostrar no book'), h('div', { class: 'cprow' }, [
         toggle('recs', '💡 Recomendações'), toggle('alerts', '🚨 Problemas / alertas'), toggle('charts', '📊 Gráficos de risco'),
         toggle('compare', '↔️ Comparativo com o mês passado'), toggle('evolution', '📈 Gráfico de evolução')])]);
       const histInfo = h('div', { class: 'set-help', style: { margin: '4px 0 0', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } });
       const drawHist = () => {
-        const ms = [...new Set((d.history || []).filter((x) => !d.month || x.mes < d.month).map((x) => x.mes))].sort();
+        const ms = prevMonths(d);
+        Object.keys(needsHist).forEach((k) => { if (!boxes[k]) return; boxes[k].disabled = !ms.length; boxes[k].checked = !!ms.length && show(d)[k]; boxes[k].parentNode.title = ms.length ? '' : 'Sem pontuação em meses anteriores deste cliente'; });
         histInfo.innerHTML = '';
-        histInfo.append(ms.length ? `Meses anteriores com pontuação: ${ms.map(mesLabel).join(', ')}.` : 'Sem pontuação de meses anteriores ainda (vem dos books dos meses passados deste cliente).',
-          h('button', { class: 'btn btn-ghost btn-xs', type: 'button', onclick: async () => {
-            const key = BT.store.sessionId && BT.api.keyOf(BT.store.sessionId); if (!key) return;
-            await loadHistory(d, key); ctx.save(); drawHist(); BT.ui.toast('Comparativo atualizado ✓', { type: 'ok' });
-          } }, '🔄 Buscar meses anteriores'));
+        if (!ms.length) { histInfo.append('Sem pontuação em meses anteriores deste cliente: o comparativo e o gráfico de evolução ficam desligados.'); return; }
+        // mês do comparativo: o mais recente por padrão, ou o escolhido aqui
+        const sel = h('select', { class: 'inp inp-sm', style: { width: 'auto' }, disabled: !show(d).compare, onchange: (e) => { d.compareWith = e.target.value; ctx.save(); } },
+          [h('option', { value: '', selected: !ms.includes(d.compareWith) }, `Mais recente (${mesLabel(ms[ms.length - 1])})`), ...ms.slice().reverse().map((m) => h('option', { value: m, selected: d.compareWith === m }, mesLabel(m)))]);
+        histInfo.append(h('span', {}, 'Comparar com:'), sel, h('span', { class: 'muted' }, `Meses com pontuação: ${ms.map(mesLabel).join(', ')}`));
       };
       drawHist();
+      // busca sozinha a pontuação dos meses anteriores ao abrir o bloco (sem precisar clicar)
+      (async () => {
+        const key = BT.store.sessionId && BT.api.keyOf(BT.store.sessionId); if (!key) return;
+        const before = JSON.stringify([d.history, d.month]);
+        try { await loadHistory(d, key); } catch (e) { return; }
+        if (JSON.stringify([d.history, d.month]) !== before) ctx.save();
+        if (document.body.contains(histInfo)) drawHist();
+      })();
       return h('div', {}, [BT.blocks.titleInput(block, ctx), list, showRow, histInfo,
         h('div', { class: 'score-fmt' }, [h('span', { class: 'lbl' }, 'Formato de recomendações e alertas'), format]), grids,
         h('input', { class: 'inp', style: { marginTop: '8px' }, value: d.note || '', placeholder: 'Observação (opcional)', oninput: (e) => { d.note = e.target.value; ctx.save(); } })]);

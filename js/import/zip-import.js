@@ -331,6 +331,8 @@
             fresh.forEach((b) => { if (b.type === 'score') b.data = BT.blocks.filterRisks(b.data, [...riskSel]); });
             fresh.forEach((b) => (b.data.origin = it.origin));
             // topologia: mantém o que foi ajustado no mês anterior (título, redes ocultas, subnets/gateways)
+            // score: mantém o que mostrar no book e o mês escolhido para o comparativo
+            fresh.forEach((b) => { if (b.type === 'score' && prev && prev.type === 'score') ['show', 'compareWith', 'note'].forEach((k) => { if (prev.data[k] !== undefined) b.data[k] = prev.data[k]; }); });
             fresh.forEach((b) => { if (b.type === 'topology' && prev && prev.type === 'topology') ['title', 'hidden', ...(prev.data.style ? ['style', 'showSubnets', 'showGateways'] : [])].forEach((k) => { if (prev.data[k] !== undefined) b.data[k] = prev.data[k]; }); });
             sec.blocks.splice(at, 0, ...fresh);
           }

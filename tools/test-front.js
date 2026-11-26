@@ -80,7 +80,11 @@ assert.ok(!/Evolução da pontuação/.test(cgHtml)); ok('gráfico de evolução
 const evo = defs.score.render({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-08', value: '60' }, { label: 'OCI · Tenancy', mes: '2026-10', value: '65' }], month: '2026-11', show: { evolution: true } }) }, { target: 'web', state: {} });
 assert.ok(/Evolução da pontuação/.test(evo) && /<svg/.test(evo)); ok('gráfico de evolução: aparece quando ligado');
 const noPrev = defs.score.render({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-08', value: '60' }], month: '2026-11' }) }, { target: 'web', state: {} });
-assert.ok(!/bscore-cmp/.test(noPrev)); ok('comparativo: só com o mês imediatamente anterior (agosto não conta para novembro)');
+assert.ok(/ago\/26: 60%/.test(noPrev)); ok('comparativo: usa o mês anterior mais recente que tiver pontuação (agosto, sem setembro/outubro)');
+const pick = defs.score.render({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-08', value: '60' }, { label: 'OCI · Tenancy', mes: '2026-10', value: '65' }], month: '2026-11', compareWith: '2026-08' }) }, { target: 'web', state: {} });
+assert.ok(/ago\/26: 60%/.test(pick) && !/out\/26/.test(pick)); ok('comparativo: dá para escolher o mês (agosto em vez de outubro)');
+const none = defs.score.render({ data: Object.assign({}, cg, { history: [], month: '2026-11', show: { evolution: true } }) }, { target: 'web', state: {} });
+assert.ok(!/bscore-cmp/.test(none) && !/Evolução da pontuação/.test(none)); ok('comparativo e evolução: sem mês anterior, não aparecem');
 const off = defs.score.render({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-10', value: '65' }], month: '2026-11', show: { compare: false } }) }, { target: 'web', state: {} });
 assert.ok(!/bscore-cmp/.test(off)); ok('comparativo: pode ser desligado');
 assert.ok(/out\/26: 65%/.test(defs.score.word({ data: Object.assign({}, cg, { history: [{ label: 'OCI · Tenancy', mes: '2026-10', value: '65' }], month: '2026-11' }) }, { target: 'word', state: {} }))); ok('Word: comparativo com o mês passado');
