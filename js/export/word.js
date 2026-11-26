@@ -120,7 +120,8 @@
     return { html: tpl.innerHTML, parts };
   }
 
-  BT.exporters.word = async function (state, selection) {
+  /** Documento Word (.doc em HTML) como texto. Usado pelo download e pela geração automática. */
+  async function wordDoc(state, selection) {
     const built = buildHtml(state, selection);
     const M = built.M;
     // converte imagens só no corpo (o <template> descartaria <html>/<head>)
@@ -139,6 +140,12 @@ a{color:#5E3FE1}
 h3{font-family:Arial;font-size:12pt;color:#171C37;margin:10pt 0 4pt}
 </style></head>
 <body><div class="WordSection1">${body}</div></body></html>`;
+    return { doc, M };
+  }
+  BT.exporters.wordString = async (state, selection) => '\uFEFF' + (await wordDoc(state, selection)).doc;
+
+  BT.exporters.word = async function (state, selection) {
+    const { doc, M } = await wordDoc(state, selection);
     U.download(new Blob(['\uFEFF' + doc], { type: 'application/msword;charset=utf-8' }), `book-tecnico-${U.slug(M.nome)}-${U.slug(M.mesRef)}.doc`);
   };
   BT.exporters._wordHtml = buildHtml; // útil para testes

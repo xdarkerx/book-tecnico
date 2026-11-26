@@ -226,17 +226,134 @@
     return review(items, ctx, T, `📦 Importar ZIP — ${file.name}`);
   }
 
-  /** Tela de revisão + aplicação. Usada pelo ZIP e pela sincronização com a cloud (API). */
-  function review(items, ctx, T, title) {
-    T = T || (ctx ? BT.store.migrate(ctx.base || BT.data.defaultTemplate()) : BT.store.state);
+  /** Planeja destino/mapeador de cada item; vários arquivos para a mesma planilha → o 2º em diante acrescenta. */
+  function prepare(items, T) {
     items.forEach((it) => plan(it, T));
-    // vários arquivos para a mesma planilha (ex.: baseline de várias clouds) → o 2º em diante acrescenta
     const seenDest = new Set();
     items.filter((it) => it.kind === 'data' && it.include).forEach((it) => {
       const k = it.dest + '|' + it.mapper;
       if (seenDest.has(k) && it.how === 'replace') it.how = 'append';
       seenDest.add(k);
     });
+    return items;
+  }
+
+  /** Aplica os itens no book T (sem tela). Usada pela revisão e pela geração automática no servidor.
+   *  o: { opts: {kpi, charts, note, applyManifest}, risks: ['critica',…], manifest, meta, ctx } → devolve as seções alteradas. */
+  async function applyItems(T, items, o = {}) {
+    const opts = Object.assign({ kpi: true, charts: true, note: true, applyManifest: true }, o.opts || {});
+    const manifest = o.manifest || null, meta = o.meta || {}, ctx = o.ctx || null;
+    const riskSel = new Set(o.risks || (BT.blocks.RISK_LEVELS || []).map((x) => x[0]));
+      const touched = new Set();
+      const filledTables = new Set();
+      const newSections = {};
+      const zipImageBlock = new Map(); // seção → bloco de imagem usado nesta importação
+      const today = U.today();
+
+      const sectionFor = (it) => {
+        if (it.dest !== '__new__') return findSec(T, it.dest).section;
+        const key = (it.provider || '') + '|' + (it.account || '') + '|' + it.newTitle;
+        if (newSections[key]) return newSections[key];
+        const cloudP = it.provider && !it.global && it.provider !== 'generic' && !BT.data.providers[it.provider]?.tool;
+        let g = cloudP ? accountGroups(T, it)[0] || null : null;
+        if (!g && it.groupHint) g = T.groups.find((x) => norm(x.title).includes(norm(it.groupHint)));
+        if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: p.label + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true });
+          // fica logo depois do último menu da mesma cloud (ex.: AWS · HML depois de AWS · PRD)
+          const last = T.groups.map((x) => x.provider).lastIndexOf(it.provider);
+          if (last >= 0) T.groups.splice(last + 1, 0, g); else T.groups.push(g);
+        }
+        if (!g) g = T.groups[T.groups.length - 1] || (T.groups.push(BT.store.makeGroup({ title: 'Book', icon: '📄' })), T.groups[0]);
+        const s = BT.store.makeSection({ title: it.newTitle || 'Importados', icon: it.kind === 'image' ? '🖼️' : '📄' });
+        // menu de cloud: mantém a ordem padrão (Geral, Servidores, Networking, Segurança, Storage, Backup)
+        const RANK = ['geral', 'servidores', 'networking', 'seguranca', 'storage', 'backup'];
+        const rank = (t) => { const i = RANK.indexOf(norm(t)); return i < 0 ? RANK.length : i; };
+        if (it.first) g.sections.unshift(s);
+        else if (g.provider) { const at = g.sections.findIndex((x) => rank(x.title) > rank(s.title)); if (at < 0) g.sections.push(s); else g.sections.splice(at, 0, s); }
+        else g.sections.push(s);
+        g.collapsed = false;
+        return (newSections[key] = s);
+      };
+
+        const useManifest = manifest && manifest.include && (ctx || opts.applyManifest);
+        if (ctx || useManifest) Object.assign(T.meta, meta);
+        if (useManifest) {
+          const mf = manifest.manifest || {};
+          if (mf.governanca) T.meta.governanca = Object.assign({}, T.meta.governanca, mf.governanca);
+          if (mf.textos && typeof mf.textos === 'object') {
+            Object.entries(mf.textos).forEach(([name, text]) => {
+              const { hit } = matchSection(T, tokensOf(name), providerFrom(tokensOf(name)));
+              if (hit) { fillText(hit.section, /<\/?[a-z][\s\S]*>/i.test(text) ? BT.core.sanitizeHtml(text) : BT.core.textToHtml(text)); touched.add(hit.section.id); }
+            });
+          }
+        }
+
+        // 1ª conta de cada cloud assume o menu existente sem conta (vira "AWS · PRD")
+        for (const it of items.filter((i) => i.include && i.account && i.primary)) {
+          if (T.groups.some((g) => g.provider === it.provider && g.account === it.account)) continue;
+          const g = T.groups.find((x) => x.provider === it.provider && !x.account);
+          if (g) { g.account = it.account; g.title = (BT.data.providers[it.provider]?.label || g.title) + ' · ' + it.account; }
+        }
+        for (const it of items.filter((i) => i.include)) {
+          if (it.kind === 'logo') { T.meta.logoCliente = await U.compressImage(await U.readAsDataURL(await it.entry.file()), 600); continue; }
+          if (it.kind === 'data') {
+            const sec = sectionFor(it); touched.add(sec.id);
+            const cols = it.columns.filter((c) => c.on);
+            const list = it.items.filter((_, i) => it.selected.has(i));
+            const rows = list.map((x) => cols.map((c) => String(x[c.key] ?? '')));
+            const columns = cols.map((c) => ({ name: c.name, badge: !!c.badge }));
+            const note = opts.note ? (it.api ? `Fonte: ${BT.data.providers[it.provider].tool ? '' : 'API '}${BT.data.providers[it.provider].label}${it.account ? ' · ' + it.account : ''}${it.periodLabel ? ' · ' + it.periodLabel : ''} · sincronizado em ${today}` : `Fonte: ${it.path} · ${BT.data.providers[it.provider || 'generic'].label} · importado em ${today}`) : '';
+            let table = null;
+            if (it.how !== 'new') table = sec.blocks.find((b) => b.type === 'table' && !filledTables.has(b.id));
+            if (table) BT.importer._applyToTable(table, it.how, columns, rows, note);
+            else { table = BT.importer._tableBlock('', columns, rows, note); sec.blocks.push(table); }
+            filledTables.add(table.id);
+            if (opts.charts && it.how !== 'append') BT.importer.insertCharts(sec, table, BT.importer.distCharts(it.mapper, table.id, cols));
+            if (opts.kpi && it.mapper !== 'raw' && it.how !== 'append') {
+              const m2 = BT.importer.mappers[it.mapper];
+              const kdata = { title: '', items: m2.summary(list) };
+              const ti = sec.blocks.indexOf(table);
+              const prev = sec.blocks[ti - 1];
+              if (prev && prev.type === 'kpi' && (BT.blocks.isEmpty(prev) || it.how === 'replace')) prev.data = kdata;
+              else sec.blocks.splice(ti, 0, { id: BT.uid('blk'), type: 'kpi', include: true, data: kdata });
+            }
+          }
+          if (it.kind === 'blocks') {
+            // substitui os blocos da mesma origem (ex.: sincronização anterior do Zabbix) na mesma posição
+            const sec = sectionFor(it); touched.add(sec.id);
+            // score: ZIP e API se substituem (origens "score-…"); um bloco feito à mão (sem origem) fica
+            const same = (b) => b.data && b.data.origin && (b.data.origin === it.origin || (/^score-/.test(it.origin) && b.type === 'score' && /^score-/.test(b.data.origin)));
+            let at = sec.blocks.findIndex(same);
+            sec.blocks = sec.blocks.filter((b) => !same(b) && !(it.replaceEmptyType && b.type === it.replaceEmptyType && BT.blocks.isEmpty(b)));
+            if (at < 0 || at > sec.blocks.length) at = 0;
+            const fresh = it.blocks.map((b) => Object.assign(BT.core.utils.clone(b), { id: BT.uid('blk'), include: true }));
+            // só os riscos escolhidos na revisão (linhas sem risco reconhecido sempre entram)
+            fresh.forEach((b) => { if (b.type === 'score') b.data = BT.blocks.filterRisks(b.data, [...riskSel]); });
+            fresh.forEach((b) => (b.data.origin = it.origin));
+            sec.blocks.splice(at, 0, ...fresh);
+          }
+          if (it.kind === 'image') {
+            const sec = sectionFor(it); touched.add(sec.id);
+            const src = await U.compressImage(await U.readAsDataURL(await it.entry.file()));
+            let blk = zipImageBlock.get(sec.id) || sec.blocks.find((b) => b.type === 'image' && BT.blocks.isEmpty(b));
+            if (!blk) { blk = { id: BT.uid('blk'), type: 'image', include: true, data: { title: '', images: [], layout: 'grid2' } }; sec.blocks.push(blk); }
+            zipImageBlock.set(sec.id, blk);
+            blk.data.images.push({ src, caption: prettify(it.entry.name), name: it.entry.name });
+            blk.data.layout = blk.data.images.length === 1 ? 'full' : blk.data.layout || 'grid2';
+          }
+          if (it.kind === 'text') {
+            const sec = sectionFor(it); touched.add(sec.id);
+            const raw = new TextDecoder().decode(await it.entry.read()).replace(/^﻿/, '');
+            const html = /\.html?$/i.test(it.entry.name) ? BT.core.sanitizeHtml(raw) : /\.md$/i.test(it.entry.name) ? mdToHtml(raw) : BT.core.textToHtml(raw);
+            fillText(sec, html);
+          }
+        }
+    return touched;
+  }
+
+  /** Tela de revisão + aplicação. Usada pelo ZIP e pela sincronização com a cloud (API). */
+  function review(items, ctx, T, title, hooks = {}) {
+    T = T || (ctx ? BT.store.migrate(ctx.base || BT.data.defaultTemplate()) : BT.store.state);
+    prepare(items, T);
 
     const manifest = items.find((i) => i.kind === 'manifest');
     const meta = Object.assign({}, ctx ? ctx.meta : {}, {});
@@ -357,111 +474,9 @@
     // ── Aplicar ─────────────────────────────────────────────
     async function apply() {
       applyBtn.disabled = true; applyBtn.textContent = 'Aplicando…';
-      const touched = new Set();
-      const filledTables = new Set();
-      const newSections = {};
-      const zipImageBlock = new Map(); // seção → bloco de imagem usado nesta importação
-      const today = U.today();
-
-      const sectionFor = (it) => {
-        if (it.dest !== '__new__') return findSec(T, it.dest).section;
-        const key = (it.provider || '') + '|' + (it.account || '') + '|' + it.newTitle;
-        if (newSections[key]) return newSections[key];
-        const cloudP = it.provider && !it.global && it.provider !== 'generic' && !BT.data.providers[it.provider]?.tool;
-        let g = cloudP ? accountGroups(T, it)[0] || null : null;
-        if (!g && it.groupHint) g = T.groups.find((x) => norm(x.title).includes(norm(it.groupHint)));
-        if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: p.label + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true });
-          // fica logo depois do último menu da mesma cloud (ex.: AWS · HML depois de AWS · PRD)
-          const last = T.groups.map((x) => x.provider).lastIndexOf(it.provider);
-          if (last >= 0) T.groups.splice(last + 1, 0, g); else T.groups.push(g);
-        }
-        if (!g) g = T.groups[T.groups.length - 1] || (T.groups.push(BT.store.makeGroup({ title: 'Book', icon: '📄' })), T.groups[0]);
-        const s = BT.store.makeSection({ title: it.newTitle || 'Importados', icon: it.kind === 'image' ? '🖼️' : '📄' });
-        // menu de cloud: mantém a ordem padrão (Geral, Servidores, Networking, Segurança, Storage, Backup)
-        const RANK = ['geral', 'servidores', 'networking', 'seguranca', 'storage', 'backup'];
-        const rank = (t) => { const i = RANK.indexOf(norm(t)); return i < 0 ? RANK.length : i; };
-        if (it.first) g.sections.unshift(s);
-        else if (g.provider) { const at = g.sections.findIndex((x) => rank(x.title) > rank(s.title)); if (at < 0) g.sections.push(s); else g.sections.splice(at, 0, s); }
-        else g.sections.push(s);
-        g.collapsed = false;
-        return (newSections[key] = s);
-      };
-
-      try {
-        const useManifest = manifest && manifest.include && (ctx || opts.applyManifest);
-        if (ctx || useManifest) Object.assign(T.meta, meta);
-        if (useManifest) {
-          const mf = manifest.manifest || {};
-          if (mf.governanca) T.meta.governanca = Object.assign({}, T.meta.governanca, mf.governanca);
-          if (mf.textos && typeof mf.textos === 'object') {
-            Object.entries(mf.textos).forEach(([name, text]) => {
-              const { hit } = matchSection(T, tokensOf(name), providerFrom(tokensOf(name)));
-              if (hit) { fillText(hit.section, /<\/?[a-z][\s\S]*>/i.test(text) ? BT.core.sanitizeHtml(text) : BT.core.textToHtml(text)); touched.add(hit.section.id); }
-            });
-          }
-        }
-
-        // 1ª conta de cada cloud assume o menu existente sem conta (vira "AWS · PRD")
-        for (const it of items.filter((i) => i.include && i.account && i.primary)) {
-          if (T.groups.some((g) => g.provider === it.provider && g.account === it.account)) continue;
-          const g = T.groups.find((x) => x.provider === it.provider && !x.account);
-          if (g) { g.account = it.account; g.title = (BT.data.providers[it.provider]?.label || g.title) + ' · ' + it.account; }
-        }
-        for (const it of items.filter((i) => i.include)) {
-          if (it.kind === 'logo') { T.meta.logoCliente = await U.compressImage(await U.readAsDataURL(await it.entry.file()), 600); continue; }
-          if (it.kind === 'data') {
-            const sec = sectionFor(it); touched.add(sec.id);
-            const cols = it.columns.filter((c) => c.on);
-            const list = it.items.filter((_, i) => it.selected.has(i));
-            const rows = list.map((x) => cols.map((c) => String(x[c.key] ?? '')));
-            const columns = cols.map((c) => ({ name: c.name, badge: !!c.badge }));
-            const note = opts.note ? (it.api ? `Fonte: ${BT.data.providers[it.provider].tool ? '' : 'API '}${BT.data.providers[it.provider].label}${it.account ? ' · ' + it.account : ''}${it.periodLabel ? ' · ' + it.periodLabel : ''} · sincronizado em ${today}` : `Fonte: ${it.path} · ${BT.data.providers[it.provider || 'generic'].label} · importado em ${today}`) : '';
-            let table = null;
-            if (it.how !== 'new') table = sec.blocks.find((b) => b.type === 'table' && !filledTables.has(b.id));
-            if (table) BT.importer._applyToTable(table, it.how, columns, rows, note);
-            else { table = BT.importer._tableBlock('', columns, rows, note); sec.blocks.push(table); }
-            filledTables.add(table.id);
-            if (opts.charts && it.how !== 'append') BT.importer.insertCharts(sec, table, BT.importer.distCharts(it.mapper, table.id, cols));
-            if (opts.kpi && it.mapper !== 'raw' && it.how !== 'append') {
-              const m2 = BT.importer.mappers[it.mapper];
-              const kdata = { title: '', items: m2.summary(list) };
-              const ti = sec.blocks.indexOf(table);
-              const prev = sec.blocks[ti - 1];
-              if (prev && prev.type === 'kpi' && (BT.blocks.isEmpty(prev) || it.how === 'replace')) prev.data = kdata;
-              else sec.blocks.splice(ti, 0, { id: BT.uid('blk'), type: 'kpi', include: true, data: kdata });
-            }
-          }
-          if (it.kind === 'blocks') {
-            // substitui os blocos da mesma origem (ex.: sincronização anterior do Zabbix) na mesma posição
-            const sec = sectionFor(it); touched.add(sec.id);
-            // score: ZIP e API se substituem (origens "score-…"); um bloco feito à mão (sem origem) fica
-            const same = (b) => b.data && b.data.origin && (b.data.origin === it.origin || (/^score-/.test(it.origin) && b.type === 'score' && /^score-/.test(b.data.origin)));
-            let at = sec.blocks.findIndex(same);
-            sec.blocks = sec.blocks.filter((b) => !same(b) && !(it.replaceEmptyType && b.type === it.replaceEmptyType && BT.blocks.isEmpty(b)));
-            if (at < 0 || at > sec.blocks.length) at = 0;
-            const fresh = it.blocks.map((b) => Object.assign(BT.core.utils.clone(b), { id: BT.uid('blk'), include: true }));
-            // só os riscos escolhidos na revisão (linhas sem risco reconhecido sempre entram)
-            fresh.forEach((b) => { if (b.type === 'score') b.data = BT.blocks.filterRisks(b.data, [...riskSel]); });
-            fresh.forEach((b) => (b.data.origin = it.origin));
-            sec.blocks.splice(at, 0, ...fresh);
-          }
-          if (it.kind === 'image') {
-            const sec = sectionFor(it); touched.add(sec.id);
-            const src = await U.compressImage(await U.readAsDataURL(await it.entry.file()));
-            let blk = zipImageBlock.get(sec.id) || sec.blocks.find((b) => b.type === 'image' && BT.blocks.isEmpty(b));
-            if (!blk) { blk = { id: BT.uid('blk'), type: 'image', include: true, data: { title: '', images: [], layout: 'grid2' } }; sec.blocks.push(blk); }
-            zipImageBlock.set(sec.id, blk);
-            blk.data.images.push({ src, caption: prettify(it.entry.name), name: it.entry.name });
-            blk.data.layout = blk.data.images.length === 1 ? 'full' : blk.data.layout || 'grid2';
-          }
-          if (it.kind === 'text') {
-            const sec = sectionFor(it); touched.add(sec.id);
-            const raw = new TextDecoder().decode(await it.entry.read()).replace(/^﻿/, '');
-            const html = /\.html?$/i.test(it.entry.name) ? BT.core.sanitizeHtml(raw) : /\.md$/i.test(it.entry.name) ? mdToHtml(raw) : BT.core.textToHtml(raw);
-            fillText(sec, html);
-          }
-        }
-      } catch (err) {
+      let touched;
+      try { touched = await applyItems(T, items, { opts, risks: [...riskSel], manifest, meta, ctx }); }
+      catch (err) {
         console.error(err);
         applyBtn.disabled = false; updCount();
         return BT.ui.toast('Falha ao aplicar: ' + err.message, { type: 'err', ms: 8000 });
@@ -477,6 +492,7 @@
         BT.store.commit(null, 'zip-import');
         if (firstSec) BT.editor.router.go(firstSec);
       }
+      if (hooks.onApplied) { try { hooks.onApplied({ risks: [...riskSel] }); } catch (e) { console.warn(e); } }
       BT.ui.toast(`✓ ${items.some((i) => i.api) ? 'Dados da cloud aplicados' : 'ZIP aplicado'}: ${items.filter((i) => i.include).length} item(ns) em ${touched.size} seção(ões)`, { type: 'ok', ms: 6000 });
     }
   }
@@ -577,5 +593,5 @@
     U.download(BT.core.zip.write(files), 'modelo-book-tecnico.zip', 'application/zip');
   }
 
-  BT.importer.zip = { open, review, pick, downloadTemplate, _analyze: analyze, _matchSection: matchSection };
+  BT.importer.zip = { open, review, pick, downloadTemplate, prepare, applyItems, _analyze: analyze, _matchSection: matchSection };
 })(window.BT);

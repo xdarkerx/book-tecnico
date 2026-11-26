@@ -192,6 +192,82 @@ async function main() {
   assert.deepStrictEqual(pr, { zabbixSeverities: [5, 4], risks: ['critica', 'alta'], newOnly: true, zabbixAllHosts: false }); ok('importação padrão: salva no usuário só valores válidos (severidade 9 e risco "xpto" descartados)');
   assert.ok(!(await call('GET', '/api/auth/me', undefined, { cookie: adm })).data.user.prefs.importDefaults); ok('importação padrão: é de cada usuário (o admin não herda a da Bia)');
 
+  // ── e-mail e book automático ────────────────────────────
+  assert.strictEqual((await call('PUT', '/api/mail/config', { method: 'smtp', from: 'nao-e-email' }, { cookie: adm })).status, 400); ok('e-mail: remetente inválido → 400');
+  assert.strictEqual((await call('PUT', '/api/mail/config', { method: 'smtp', from: 'x@y.com' }, { cookie: bia })).status, 403); ok('e-mail: só administrador configura');
+  // servidor SMTP falso (aceita e guarda a mensagem; nada sai da máquina)
+  const net = require('net'); let smtpMsg = '';
+  const sink = net.createServer((sk) => { let data = false, buf = ''; const w = (l) => sk.write(l + '\r\n'); w('220 sink');
+    sk.on('data', (d) => { buf += d.toString('latin1'); let i; while ((i = buf.indexOf('\r\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (data) { if (line === '.') { data = false; w('250 OK'); } else smtpMsg += line + '\n'; continue; }
+      const c = line.slice(0, 4).toUpperCase(); if (c === 'EHLO') { w('250-sink'); w('250 8BITMIME'); } else if (c === 'DATA') { data = true; w('354 go'); } else if (c === 'QUIT') { w('221 bye'); sk.end(); } else w('250 OK'); } }); sk.on('error', () => {}); });
+  await new Promise((r) => sink.listen(0, '127.0.0.1', r));
+  const mc = (await call('PUT', '/api/mail/config', { method: 'smtp', from: 'books@empresa.com', smtp: { host: '127.0.0.1', port: sink.address().port, secure: false, user: 'u', pass: 'segredo-smtp' } }, { cookie: adm })).data;
+  assert.deepStrictEqual([mc.configured, mc.smtp.pass], [true, '••••••••']); ok('e-mail: senha do SMTP mascarada na tela');
+  assert.strictEqual((await call('POST', '/api/mail/test', { to: 'destino@cliente.com' }, { cookie: adm })).status, 200);
+  assert.ok(/To: destino@cliente\.com/.test(smtpMsg) && /teste/i.test(smtpMsg)); ok('e-mail: teste enviado por SMTP');
+  smtpMsg = '';
+  await require('../server/mail').send({ to: 'a@x.com, b@y.com', subject: 'Book', html: '<p>oi</p>', attachments: [{ filename: 'Book Técnico - X.zip', content: Buffer.alloc(50000, 7) }] });
+  assert.ok(/To: a@x\.com, b@y\.com/.test(smtpMsg) && /Content-Disposition: attachment/i.test(smtpMsg) && /filename/.test(smtpMsg)); ok('e-mail: vários destinatários e anexo (SMTP)');
+  sink.close();
+  // Microsoft 365: anexo grande vai por sessão de upload (rascunho → upload em partes → enviar)
+  const graphCalls = []; const realF = global.fetch;
+  global.fetch = async (url, o = {}) => {
+    graphCalls.push(`${o.method || 'GET'} ${String(url).replace(/^https:\/\/graph\.microsoft\.com\/v1\.0/, '')}`);
+    const J = (x) => new Response(JSON.stringify(x), { status: 200 });
+    if (/oauth2\/v2\.0\/token/.test(url)) return J({ access_token: 'GT' });
+    if (/\/messages$/.test(url)) return J({ id: 'm1' });
+    if (/createUploadSession/.test(url)) return J({ uploadUrl: 'https://upload.local/s1' });
+    if (/upload\.local/.test(url)) return new Response('', { status: 200 });
+    return new Response('', { status: 202 });
+  };
+  await require('../server/mail')._sendGraph({ from: 'books@empresa.com', graph: { tenantId: 't', clientId: 'c', clientSecret: 's' } }, { to: ['a@x.com'], subject: 'Book', html: '<p>oi</p>', attachments: [{ filename: 'book.pdf', content: Buffer.alloc(5 * 1024 * 1024) }] });
+  global.fetch = realF;
+  assert.deepStrictEqual(graphCalls.map((c) => c.replace(/\/users\/[^/]+/, '/users/U')), ['POST https://login.microsoftonline.com/t/oauth2/v2.0/token', 'POST /users/U/messages', 'POST /users/U/messages/m1/attachments/createUploadSession', 'PUT https://upload.local/s1', 'PUT https://upload.local/s1', 'POST /users/U/messages/m1/send']); ok('Microsoft 365: anexo de 5 MB vai por sessão de upload em partes (limite de 3 MB no envio direto)');
+  // configuração do book automático
+  for (const bad of [{ day: 31 }, { hour: 24 }, { formats: [] }, { emails: 'a@x.com, invalido' }, { folder: '../../etc' }])
+    assert.strictEqual((await call('PUT', '/api/automation?cliente=conc', bad, { cookie: adm })).status, 400);
+  ok('book automático: dia, hora, formatos, e-mails e pasta inválidos → 400');
+  assert.strictEqual((await call('PUT', '/api/automation?cliente=conc', { enabled: true }, { cookie: bia })).status, 403); ok('book automático: só administrador liga e configura');
+  const ac2 = (await call('PUT', '/api/automation?cliente=conc', { enabled: true, day: 3, hour: 7, formats: ['pdf', 'word'], emails: 'ti@conc.com', folder: '/tmp/books-conc' }, { cookie: adm })).data;
+  assert.deepStrictEqual([ac2.enabled, ac2.formats, ac2.day], [true, ['pdf', 'word'], 3]); ok('book automático: configuração salva por cliente');
+  await call('PUT', '/api/automation/profile?cliente=conc', { sources: ['oci'], kinds: ['servers', 'score'], backupMode: 'policies', risks: ['critica', 'alta', 'xpto'], zabbix: { severities: [5, 4] } }, { cookie: bia });
+  const prof = (await call('GET', '/api/automation?cliente=conc', undefined, { cookie: bia })).data.profile;
+  assert.deepStrictEqual([prof.sources, prof.backupMode, prof.risks, prof.zabbix.severities], [['oci'], 'policies', ['critica', 'alta'], [5, 4]]); ok('book automático: guarda as escolhas da última sincronização manual (quem sincronizou pode salvar)');
+  const A = require('../server/automation');
+  assert.deepStrictEqual([A.targetMonth(new Date(2026, 0, 10)), A.targetMonth(new Date(2026, 10, 26))], [{ ano: '2025', mes: '12' }, { ano: '2026', mes: '10' }]); ok('book automático: gera o mês anterior (janeiro → dezembro do ano anterior)');
+  // book do mês criado a partir do último book (novo GUID, mesmos menus)
+  await call('PUT', '/api/book' + bk('auto', 2026, 9, 'infra'), st('Auto SA', 'infra', { groups: [{ title: 'OCI', sections: [{ title: 'Servidores', blocks: [] }] }] }), { cookie: adm });
+  const eb = await A._ensureBook({ cliente: 'auto', area: '' }, { ano: '2026', mes: '10' });
+  const novo = (await call('GET', '/api/book' + bk('auto', 2026, 10, 'infra'), undefined, { cookie: adm })).data;
+  const velho = (await call('GET', '/api/book' + bk('auto', 2026, 9, 'infra'), undefined, { cookie: adm })).data;
+  assert.deepStrictEqual([eb.created, novo.meta.mes, novo.groups[0].sections[0].title, novo.guid !== velho.guid && !!novo.guid], [true, '10', 'Servidores', true]); ok('book automático: cria o book do mês a partir do anterior (mesmos menus, GUID novo)');
+  assert.strictEqual((await A._ensureBook({ cliente: 'auto', area: '' }, { ano: '2026', mes: '10' })).created, false); ok('book automático: se o book do mês já existe, usa ele (não duplica)');
+  await assert.rejects(A._ensureBook({ cliente: 'sem-book', area: '' }, { ano: '2026', mes: '10' }), /book anterior/); ok('book automático: sem book anterior → erro explicativo');
+  // agendamento: no dia/hora e só uma vez por mês (falhou → até 3 tentativas, uma por hora)
+  await call('PUT', '/api/automation?cliente=auto', { enabled: true, day: 3, hour: 7 }, { cookie: adm });
+  assert.ok(!(await A.tick(new Date(2026, 10, 3, 6, 0), { dry: true })).includes('auto')); ok('agendamento: antes da hora não gera');
+  assert.ok((await A.tick(new Date(2026, 10, 3, 7, 5), { dry: true })).includes('auto')); ok('agendamento: no dia e hora gera o mês anterior');
+  await storage.api.kvSet('automation', 'auto', Object.assign(await A.get('auto'), { last: { month: '2026-10', ok: true, at: Date.now() } }));
+  assert.ok(!(await A.tick(new Date(2026, 10, 20, 9, 0), { dry: true })).includes('auto')); ok('agendamento: já gerado no mês → não repete');
+  await storage.api.kvSet('automation', 'auto', Object.assign(await A.get('auto'), { last: { month: '2026-10', ok: false, tries: 3, at: Date.now() - 7200000 } }));
+  assert.ok(!(await A.tick(new Date(2026, 10, 20, 9, 0), { dry: true })).includes('auto')); ok('agendamento: depois de 3 falhas para de tentar (fica o erro na tela)');
+  await call('PUT', '/api/book' + bk('novato', 2026, 11, 'infra'), st('Novato SA', 'infra'), { cookie: adm });
+  await call('PUT', '/api/automation?cliente=novato', { enabled: true, day: 3, hour: 7 }, { cookie: adm });
+  assert.ok(!(await A.tick(new Date(2026, 10, 26, 9, 0), { dry: true })).includes('novato')); ok('agendamento: cliente que começou depois do mês alvo (só tem novembro) não gera outubro nem acusa falha');
+  // token do navegador da automação: só o certo, só da própria máquina, e nunca vale como senha/cookie de usuário
+  const autoTok = require('../server/auth').automationToken();
+  assert.strictEqual((await call('GET', '/api/users', undefined, { cookie: 'bt_auto=' + autoTok })).status, 200); ok('automação: o navegador da automação entra com o token (cookie bt_auto) a partir da própria máquina');
+  assert.strictEqual((await call('GET', '/api/users', undefined, { cookie: 'bt_auto=' + 'f'.repeat(autoTok.length) })).status, 401);
+  assert.strictEqual((await call('GET', '/api/users', undefined, { cookie: 'bt_auth=' + autoTok })).status, 401); ok('automação: token errado (ou usado como sessão de usuário) → 401');
+  assert.notStrictEqual(autoTok, require('crypto').randomBytes(32).toString('hex')); assert.strictEqual(autoTok.length, 64); ok('automação: token aleatório de 256 bits, novo a cada vez que o servidor sobe');
+
+  // ZIP com mais de um formato
+  const zlib = require('zlib'); const { zip } = require('../server/zipfile');
+  const zb = zip([{ name: 'Book Técnico.pdf', data: Buffer.from('%PDF-teste') }, { name: 'Book Técnico.doc', data: '<html>olá</html>' }]);
+  const nameLen = zb.readUInt16LE(26), compLen = zb.readUInt32LE(18);
+  assert.deepStrictEqual([zb.readUInt32LE(0), zb.slice(30, 30 + nameLen).toString('utf8'), zlib.inflateRawSync(zb.slice(30 + nameLen, 30 + nameLen + compLen)).toString(), zb.readUInt16LE(zb.length - 12)], [0x04034b50, 'Book Técnico.pdf', '%PDF-teste', 2]); ok('ZIP: dois arquivos, nome com acento (UTF-8) e conteúdo íntegro');
+
   // ── logs ────────────────────────────────────────────────
   await require('../server/logs').flush();
   const lg = (await call('GET', '/api/logs?kind=audit&limit=99999', undefined, { cookie: adm })).data;

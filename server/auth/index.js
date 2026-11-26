@@ -123,9 +123,22 @@ async function createSession(req, res, user) {
   return s;
 }
 /** Sessão + usuário da requisição (ou null). Renova lastSeen no máximo 1x por minuto. */
+// ── automação (geração automática do book) ────────────────
+// O servidor abre o app num Chromium sem janela; ele entra com este token (cookie bt_auto, só em 127.0.0.1),
+// que muda a cada vez que o servidor sobe e só é aceito em conexões da própria máquina.
+const AUTOMATION_TOKEN = crypto.randomBytes(32).toString('hex');
+const AUTOMATION_USER = { id: 'automacao', username: 'automacao', name: 'Automação', email: '', role: 'admin', provider: 'system', prefs: {} };
+const isLoopback = (req) => /^(::1|127\.\d+\.\d+\.\d+|::ffff:127\.\d+\.\d+\.\d+)$/.test(String((req.socket && req.socket.remoteAddress) || ''));
+function isAutomation(req) {
+  const t = parseCookies(req).bt_auto;
+  if (!t || t.length !== AUTOMATION_TOKEN.length || !isLoopback(req)) return false;
+  return crypto.timingSafeEqual(Buffer.from(t), Buffer.from(AUTOMATION_TOKEN));
+}
+
 async function current(req) {
   if (req._auth !== undefined) return req._auth;
   req._auth = null;
+  if (isAutomation(req)) return (req._auth = { session: { id: 'automacao' }, user: AUTOMATION_USER });
   const token = parseCookies(req)[COOKIE];
   if (!token) return null;
   const s = await db().kvGet('auth_sessions', sha(token));
@@ -394,6 +407,7 @@ module.exports = {
   COOKIE, config, enabled, publicConfig, saveConfig, current, login, logout, setup, me,
   listUsers: async () => { const seen = await lastSeenByUser(); return (await listUsers()).map((u) => Object.assign(publicUser(u), seen[u.id] || { lastSeen: null, sessions: 0 })); },
   saveUser, deleteUser, endUserSessions, endSession,
+  automationToken: () => AUTOMATION_TOKEN, AUTOMATION_USER,
   samlLoginUrl, samlAcs, samlMetadata, baseUrl, graphSync, graphTest, startGraphScheduler, savePrefs,
   _hashPassword: hashPassword
 };

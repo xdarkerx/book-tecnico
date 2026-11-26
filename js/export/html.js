@@ -11,7 +11,8 @@
     return css || BT.book.STYLES || '';
   }
 
-  BT.exporters.html = async function (state, selection) {
+  /** HTML completo do book (texto). Usado pelo download e pela geração automática. */
+  function build(state, selection) {
     const M = BT.book.meta(state, BT.book.collect(state, selection));
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Book Técnico — ${BT.esc(M.nome)} — ${BT.esc(M.mesRef)}</title>
@@ -20,6 +21,12 @@
 body{margin:0;background:#e9e8f3;padding:30px 12px}.book{max-width:860px;margin:0 auto}
 @media print{body{background:#fff;padding:0}#print-root{display:block}}</style></head>
 <body><div id="print-root" style="display:block">${BT.book.render(state, { selection })}</div></body></html>`;
+    return { html, M };
+  }
+  BT.exporters.htmlString = (state, selection) => build(state, selection).html;
+
+  BT.exporters.html = async function (state, selection) {
+    const { html, M } = build(state, selection);
     BT.core.utils.download(html, `book-tecnico-${BT.core.utils.slug(M.nome)}-${BT.core.utils.slug(M.mesRef)}.html`, 'text/html;charset=utf-8');
   };
 })(window.BT);

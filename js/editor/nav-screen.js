@@ -216,6 +216,7 @@
         avatar(client.nome, true),
         h('div', { style: { flex: 1, minWidth: '180px' } }, [h('h1', { class: 'st-title' }, client.nome), h('div', { class: 'st-sub' }, `${all.length} book${all.length === 1 ? '' : 's'} técnico${all.length === 1 ? '' : 's'}${client.areas && client.areas.length ? ' · ' + client.areas.join(', ') : ''}`), client.guid ? h('div', { class: 'nv-guid mono', title: 'Identificador único do cliente' }, 'GUID ' + client.guid) : null]),
         BT.api.mode === 'server' ? h('button', { class: 'btn btn-sec btn-sm', onclick: () => BT.importer.cloud.connections(client.slug, client.nome) }, '🔑 Conexões (clouds · Zabbix · GLPI)') : null,
+        BT.api.mode === 'server' ? h('button', { class: 'btn btn-sec btn-sm', title: 'Gerar o book todo mês, salvar na pasta da rede e enviar por e-mail', onclick: () => BT.editor.automation.open(client) }, '🤖 Book automático') : null,
         h('button', { class: 'btn btn-ghost btn-sm nv-danger', title: 'Excluir o cliente com todos os anos e books', onclick: () => deleteClient(Object.assign({}, client, { books: all.length, anos: [...new Set(all.map((b) => b.ano))] })) }, '🗑 Excluir cliente'),
         h('button', { class: 'btn btn-primary btn-sm', onclick: () => newBook({ cliente: client.nome, ano }, all) }, '＋ Novo book')
       ]),

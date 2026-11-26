@@ -89,6 +89,16 @@
     deleteYear: (c, ano) => http('DELETE', `/api/year?cliente=${encodeURIComponent(slug(c))}&ano=${encodeURIComponent(ano)}`),
     getSession: (sid) => http('GET', '/api/session?sid=' + encodeURIComponent(sid)),
     saveSession: (sid, data) => http('PUT', '/api/session?sid=' + encodeURIComponent(sid), data),
+    // e-mail e geração automática do book
+    mailConfig: () => http('GET', '/api/mail/config'),
+    saveMailConfig: (c) => http('PUT', '/api/mail/config', c),
+    mailTest: (to) => http('POST', '/api/mail/test', { to }),
+    automationBase: () => http('GET', '/api/automation/base'),
+    saveAutomationBase: (b) => http('PUT', '/api/automation/base', b),
+    automation: (c) => http('GET', '/api/automation?cliente=' + encodeURIComponent(slug(c))),
+    saveAutomation: (c, b) => http('PUT', '/api/automation?cliente=' + encodeURIComponent(slug(c)), b),
+    runAutomation: (c, month) => http('POST', '/api/automation/run?cliente=' + encodeURIComponent(slug(c)), month || {}),
+    saveSyncProfile: (c, p) => http('PUT', '/api/automation/profile?cliente=' + encodeURIComponent(slug(c)), p),
     cloudPull: (c, provider, kinds, extra = {}) => http('POST', '/api/cloud/pull?cliente=' + encodeURIComponent(slug(c)), Object.assign({ provider, kinds }, extra))
   };
 

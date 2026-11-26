@@ -24,6 +24,8 @@ const locks = require('./auth/locks');
 const logs = require('./logs');
 const trash = require('./trash');
 const backup = require('./backup');
+const mail = require('./mail');
+const automation = require('./automation');
 
 const PORT = Number(process.env.PORT) || 5173;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -131,7 +133,7 @@ const ADMIN_API = new Set(['POST /api/settings/storage', 'PUT /api/settings/mong
   'GET /api/users', 'PUT /api/users', 'DELETE /api/users', 'DELETE /api/users/sessions', 'GET /api/auth/config', 'PUT /api/auth/config',
   'POST /api/auth/graph/sync', 'POST /api/auth/graph/test',
   'GET /api/trash', 'POST /api/trash/restore', 'DELETE /api/trash', 'PUT /api/trash/settings',
-  'GET /api/logs', 'GET /api/backup/config', 'PUT /api/backup/config', 'POST /api/backup/run', 'POST /api/backup/test', 'GET /api/backup/download', 'POST /api/backup/restore']);
+  'GET /api/logs', 'GET /api/mail/config', 'PUT /api/mail/config', 'POST /api/mail/test', 'GET /api/automation/base', 'PUT /api/automation/base', 'PUT /api/automation', 'POST /api/automation/run', 'GET /api/backup/config', 'PUT /api/backup/config', 'POST /api/backup/run', 'POST /api/backup/test', 'GET /api/backup/download', 'POST /api/backup/restore']);
 async function guard(req, route) {
   const a = await auth.current(req);
   if (!auth.enabled()) return a; // login desligado: tudo liberado (como antes) — inclusive cadastrar os usuários antes de ligar
@@ -160,6 +162,23 @@ async function api(req, res, url) {
     // logs (admin)
     case 'GET /api/logs': return send(res, 200, await logs.query(q.kind, q));
     // backup (admin)
+    // e-mail (admin)
+    case 'GET /api/mail/config': return send(res, 200, mail.publicConfig());
+    case 'PUT /api/mail/config': return send(res, 200, mail.saveConfig(await readBody(req)));
+    case 'POST /api/mail/test': return send(res, 200, await mail.test((await readBody(req)).to));
+    // geração automática do book (configuração: admin; perfil da última sincronização: quem sincronizou)
+    case 'GET /api/automation/base': return send(res, 200, automation.base());
+    case 'PUT /api/automation/base': return send(res, 200, automation.saveBase(await readBody(req)));
+    case 'GET /api/automation': return send(res, 200, Object.assign(await automation.get(q.cliente), { running: automation.isRunning(q.cliente), mailConfigured: mail.configured(), baseFolder: automation.base().baseFolder || process.env.BOOK_EXPORT_BASE || '' }));
+    case 'PUT /api/automation': return send(res, 200, await automation.save(q.cliente, await readBody(req)));
+    case 'PUT /api/automation/profile': return send(res, 200, await automation.saveProfile(q.cliente, await readBody(req)));
+    case 'POST /api/automation/run': {
+      const b = await readBody(req);
+      const month = b.ano && b.mes ? { ano: String(b.ano), mes: String(b.mes).padStart(2, '0') } : undefined;
+      if (!/^\d{4}$/.test(month ? month.ano : '2000') || !/^(0[1-9]|1[0-2])$/.test(month ? month.mes : '01')) throw httpError(400, 'Mês inválido.');
+      automation.enqueue(q.cliente, { month, by: me && me.user ? { name: me.user.name || me.user.username } : null, send: b.send !== false }); // roda em segundo plano; a tela acompanha
+      return send(res, 202, { queued: true });
+    }
     case 'GET /api/backup/config': return send(res, 200, backup.publicConfig());
     case 'PUT /api/backup/config': return send(res, 200, backup.saveConfig(await readBody(req)));
     case 'POST /api/backup/run': return send(res, 200, await backup.run('manual'));
@@ -297,6 +316,7 @@ if (require.main === module) {
   storage.bootstrap().then((m) => { if (m) console.log(`  📥 Dados antigos de data/ importados para ${storage.info().label}: ${m.books} book(s), ${m.templates} template(s), ${m.connections} conexão(ões)`); })
     .catch((e) => console.error('  ⚠ Armazenamento indisponível: ' + e.message));
   backup.startScheduler();
+  automation.start(() => server.address().port); // geração automática dos books (agenda por cliente)
   auth.startGraphScheduler();
   const housekeeping = () => { trash.purgeExpired().then((n) => n && logs.app('info', `Lixeira: ${n} item(ns) apagado(s) por prazo`)).catch(() => {}); logs.prune().catch(() => {}); };
   setTimeout(housekeeping, 30000).unref(); setInterval(housekeeping, 6 * 3600000).unref();

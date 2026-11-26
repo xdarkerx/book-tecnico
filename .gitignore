@@ -10,3 +10,4 @@
 # configurações locais do editor/Claude
 .claude/
 /desktop/node_modules/
+/books-gerados/

@@ -18,11 +18,18 @@
   }
   BT.exporters.pdfFrame = frame;
 
-  BT.exporters.pdf = function (state, selection) {
+  /** Monta o book em #print-root pronto para imprimir (a geração automática imprime em PDF pelo Chromium). */
+  function prepare(state, selection) {
     const root = document.getElementById('print-root');
     root.innerHTML = BT.book.render(state, { selection });
     root.querySelector('.book').classList.add('printing');
     frame(root.querySelector('.book'));
+    return root;
+  }
+  BT.exporters.pdfPrepare = prepare;
+
+  BT.exporters.pdf = function (state, selection) {
+    const root = prepare(state, selection);
     const prevTitle = document.title;
     document.title = 'Book Técnico - ' + (state.meta.cliente || 'cliente') + ' - ' + BT.core.utils.monthLabel(state.meta.mes, state.meta.ano);
     const cleanup = () => { root.innerHTML = ''; document.title = prevTitle; window.removeEventListener('afterprint', cleanup); };

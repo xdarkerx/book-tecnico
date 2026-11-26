@@ -16,9 +16,9 @@
   // ── Menus: Usuário (todos) e Administrador ─────────────
   const PANELS = [
     { group: 'Usuário', items: [['prefs', '🎨', 'Preferências'], ['book', '🧭', 'Opções de book'], ['import', '📥', 'Importação padrão']] },
-    { group: 'Administrador', admin: true, items: [['db', '💾', 'Banco de dados'], ['access', '🔐', 'Login e acesso'], ['lock', '🔒', 'Edição simultânea'], ['backup', '🗄️', 'Backup'], ['trash', '🗑️', 'Lixeira'], ['logs', '📜', 'Logs e auditoria']] }
+    { group: 'Administrador', admin: true, items: [['mail', '✉️', 'E-mail e automação'], ['db', '💾', 'Banco de dados'], ['access', '🔐', 'Login e acesso'], ['lock', '🔒', 'Edição simultânea'], ['backup', '🗄️', 'Backup'], ['trash', '🗑️', 'Lixeira'], ['logs', '📜', 'Logs e auditoria']] }
   ];
-  const ADMIN_RENDER = { import: () => BT.editor.importDefaults.render(), access: () => BT.editor.access.render(), lock: () => BT.editor.access.render(), backup: () => BT.editor.backup.render(), trash: () => BT.editor.trash.render(), logs: () => BT.editor.logs.render(), db: () => { drawStorage(); BT.editor.backup.renderDbDelete(); } };
+  const ADMIN_RENDER = { mail: () => BT.editor.automation.renderAdmin(), import: () => BT.editor.importDefaults.render(), access: () => BT.editor.access.render(), lock: () => BT.editor.access.render(), backup: () => BT.editor.backup.render(), trash: () => BT.editor.trash.render(), logs: () => BT.editor.logs.render(), db: () => { drawStorage(); BT.editor.backup.renderDbDelete(); } };
   let panel = null;
   const isAdmin = () => BT.auth.isAdmin && BT.api.mode === 'server';
 

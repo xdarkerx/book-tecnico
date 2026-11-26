@@ -227,6 +227,64 @@
     return items;
   }
 
+  const ALL_KINDS = ['servers', 'storage', 'network', 'backup', 'baseline', 'tenant', 'score'];
+  /** Busca os dados das conexões do cliente e monta os itens da revisão (sem tela). Usada pela janela de sincronização
+   *  e pela geração automática no servidor. pf (perfil): { sources: ['oci','aws~hml'…] (vazio = todas), kinds, newOnly,
+   *  backupMode, zabbix: { severities, onlyWithAlerts }, period: { from, to } (padrão = mês do book) } → { items, errors } */
+  async function collect(key, pf = {}, onStatus = () => {}) {
+    const conns = await BT.api.getConnections(key.cliente);
+    const provs = conns.providers || {};
+    const configured = ORDER.flatMap((p) => accountsOf(provs, p)).filter((k) => isOn(provs[k]));
+    const multiOf = (p) => configured.filter((k) => typeOf(k) === p).length > 1;
+    const labelOf = (k) => P()[typeOf(k)].label + (multiOf(typeOf(k)) ? ' · ' + accName(provs, k) : '');
+    const y = Number(key.ano), mo = Number(key.mes);
+    const pad = (n) => String(n).padStart(2, '0');
+    const per = pf.period || { from: `${y}-${pad(mo)}-01`, to: `${y}-${pad(mo)}-${pad(new Date(y, mo, 0).getDate())}` };
+      const items = []; const errors = [];
+      for (const k of configured.filter((x) => !pf.sources || !pf.sources.length || pf.sources.includes(x) || pf.sources.includes(typeOf(x)))) {
+        const p = typeOf(k); const label = labelOf(k);
+        const account = multiOf(p) ? accName(provs, k) : '';
+        const primary = k === p; // a 1ª conta assume o menu da cloud que já existe no book
+        onStatus(`Consultando ${P()[p].display}${account ? ' · ' + account : ''}…`);
+        try {
+          const extra = p === 'zabbix' ? Object.assign({}, per, { severities: (pf.zabbix && pf.zabbix.severities) || [0, 1, 2, 3, 4, 5], onlyWithAlerts: !!(pf.zabbix && pf.zabbix.onlyWithAlerts) }) : Object.assign({}, per, { newOnly: !!pf.newOnly, backupMode: pf.backupMode || 'both' });
+          const r = await BT.api.cloudPull(key.cliente, k, pf.kinds && pf.kinds.length ? pf.kinds : ALL_KINDS, extra);
+          r.errors.forEach((e) => errors.push(`${label}${e.kind !== p ? '/' + e.kind : ''}: ${e.message}`));
+          if (P()[p].tool) r.results.forEach((res) => items.push(...toolItems(p, res).map((it) => (account ? Object.assign(it, { path: it.path.replace(P()[p].label, label) }) : it))));
+          else {
+            // score + recomendações + alertas da mesma conta viram UM bloco Cloud Security Score
+            const scoreSheets = r.results.filter((sh) => /^score/.test(sh.kind));
+            if (scoreSheets.length) {
+              const data = BT.blocks.scoreFromSheets(p, scoreSheets, label);
+              await BT.blocks.loadScoreHistory(data, key); // comparativo com o mês passado (books anteriores)
+              items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, primary, path: `${label} · Cloud Security Score`, destTitle: 'Segurança', origin: 'score-' + k, replaceEmptyType: 'score', entry: { name: 'Security Score' },
+                blocks: [{ type: 'score', data }], dest: '', newTitle: '', how: 'new', note: '' });
+            }
+          }
+          if (!P()[p].tool) r.results.filter((sh) => !/^score/.test(sh.kind)).forEach((sh) => {
+            if (sh.kind === 'tenant') {
+              // Geral › Tenant da própria cloud/conta (primeira seção do menu)
+              items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, 'geral'], entry: { name: 'Geral', path: '' },
+                destTitle: 'Geral', newTitleHint: 'Geral', forceMapper: 'raw', first: true,
+                parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
+              return;
+            }
+            if (sh.kind === 'backup') {
+              // Backup do mês na seção Backup da própria cloud/conta
+              items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, 'backup'], entry: { name: 'Backup', path: '' },
+                destTitle: 'Backup', newTitleHint: 'Backup', forceMapper: 'raw',
+                parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
+              return;
+            }
+            const kind = KINDS.find((x) => x[0] === sh.kind) || [sh.kind, sh.name, sh.kind];
+            items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, kind[2]], entry: { name: kind[1].replace(/^\S+\s/, ''), path: '' },
+              parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
+          });
+        } catch (e) { errors.push(`${label}: ${e.message}`); }
+      }
+    return { items, errors, configured };
+  }
+
   /** Puxa dados das conexões configuradas e abre a revisão (mesma do ZIP). */
   async function sync(opts = {}) {
     if (BT.api.mode !== 'server') return BT.ui.toast('Sincronizar exige o servidor: rode "npm run dev".', { type: 'err', ms: 6000 });
@@ -274,52 +332,14 @@
     const go = async () => {
       if (!zbxBox.hidden && !zbxSev.size) return BT.ui.toast('Escolha ao menos uma severidade do Zabbix.', { type: 'err' });
       btn.disabled = true;
-      const items = []; const errors = [];
-      for (const k of configured.filter((x) => selP.has(x))) {
-        const p = typeOf(k); const label = labelOf(k);
-        const account = multiOf(p) ? accName(provs, k) : '';
-        const primary = k === p; // a 1ª conta assume o menu da cloud que já existe no book
-        status.textContent = `Consultando ${P()[p].display}${account ? ' · ' + account : ''}…`;
-        try {
-          const extra = p === 'zabbix' ? Object.assign({}, per, { severities: [...zbxSev].map(Number), onlyWithAlerts: !zbxAll.checked }) : Object.assign({}, per, { newOnly, backupMode });
-          const r = await BT.api.cloudPull(key.cliente, k, [...selK], extra);
-          r.errors.forEach((e) => errors.push(`${label}${e.kind !== p ? '/' + e.kind : ''}: ${e.message}`));
-          if (P()[p].tool) r.results.forEach((res) => items.push(...toolItems(p, res).map((it) => (account ? Object.assign(it, { path: it.path.replace(P()[p].label, label) }) : it))));
-          else {
-            // score + recomendações + alertas da mesma conta viram UM bloco Cloud Security Score
-            const scoreSheets = r.results.filter((sh) => /^score/.test(sh.kind));
-            if (scoreSheets.length) {
-              const data = BT.blocks.scoreFromSheets(p, scoreSheets, label);
-              await BT.blocks.loadScoreHistory(data, key); // comparativo com o mês passado (books anteriores)
-              items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, primary, path: `${label} · Cloud Security Score`, destTitle: 'Segurança', origin: 'score-' + k, replaceEmptyType: 'score', entry: { name: 'Security Score' },
-                blocks: [{ type: 'score', data }], dest: '', newTitle: '', how: 'new', note: '' });
-            }
-          }
-          if (!P()[p].tool) r.results.filter((sh) => !/^score/.test(sh.kind)).forEach((sh) => {
-            if (sh.kind === 'tenant') {
-              // Geral › Tenant da própria cloud/conta (primeira seção do menu)
-              items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, 'geral'], entry: { name: 'Geral', path: '' },
-                destTitle: 'Geral', newTitleHint: 'Geral', forceMapper: 'raw', first: true,
-                parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
-              return;
-            }
-            if (sh.kind === 'backup') {
-              // Backup do mês na seção Backup da própria cloud/conta
-              items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, 'backup'], entry: { name: 'Backup', path: '' },
-                destTitle: 'Backup', newTitleHint: 'Backup', forceMapper: 'raw',
-                parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
-              return;
-            }
-            const kind = KINDS.find((x) => x[0] === sh.kind) || [sh.kind, sh.name, sh.kind];
-            items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, kind[2]], entry: { name: kind[1].replace(/^\S+\s/, ''), path: '' },
-              parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
-          });
-        } catch (e) { errors.push(`${label}: ${e.message}`); }
-      }
+      const pf = { sources: [...selP], kinds: [...selK], newOnly, backupMode, zabbix: { severities: [...zbxSev].map(Number), onlyWithAlerts: !zbxAll.checked }, period: per };
+      const { items, errors } = await collect(key, pf, (t) => (status.textContent = t));
       m.close();
       if (errors.length) BT.ui.toast('Alguns itens falharam: ' + errors.join(' | '), { type: 'err', ms: 14000 });
       if (!items.length) return;
-      BT.importer.zip.review(items, null, null, '🔄 Sincronizar — revisar e escolher itens');
+      // guarda as escolhas desta sincronização: a geração automática do book do próximo mês usa as mesmas
+      const saveProfile = ({ risks }) => { const prof = Object.assign({}, pf, { risks, area: key.area }); delete prof.period; BT.api.saveSyncProfile && BT.api.saveSyncProfile(key.cliente, prof).catch(() => {}); };
+      BT.importer.zip.review(items, null, null, '🔄 Sincronizar — revisar e escolher itens', { onApplied: saveProfile });
     };
     const btn = h('button', { class: 'btn btn-primary btn-sm', onclick: go }, '🔄 Buscar dados');
     kindsBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'O que buscar nas clouds'), h('div', { class: 'cprow' }, KINDS.map(([k, l]) => chk(selK, k, l))),
@@ -341,5 +361,5 @@
     });
   }
 
-  BT.importer.cloud = { connections, sync, parseKeyFile, toolItems };
+  BT.importer.cloud = { connections, sync, collect, parseKeyFile, toolItems };
 })(window.BT);

@@ -22,6 +22,9 @@ services:
       TZ: ${TZ:-America/Sao_Paulo}
     volumes:
       - book-data:/data                 # settings.json, logs, backups locais e (se usado) o banco SQLite
+      # Books automáticos: pasta da máquina (ou compartilhamento já montado nela) onde os arquivos são salvos.
+      # No app, a pasta base padrão é /exports (cada cliente numa subpasta com o nome dele).
+      - ${BOOK_EXPORT_DIR:-./books-gerados}:/exports
       # Backup em caminho de rede: monte o compartilhamento e use /backup-rede em ⚙️ › Backup
       # - /mnt/compartilhamento/book-tecnico:/backup-rede
       # Credenciais de cloud lidas pelo servidor (somente leitura)
