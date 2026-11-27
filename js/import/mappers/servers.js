@@ -173,6 +173,26 @@
     return 'Produção';
   }
 
+  // Ciclo de vida do SO (fabricante): EOL = fim do suporte padrão; EOS = fim do suporte estendido / de segurança (MM/AAAA)
+  const LIFECYCLE = [
+    [/windows server 2012/i, '10/2018', '10/2023'], [/windows server 2016/i, '01/2022', '01/2027'], [/windows server 2019/i, '01/2024', '01/2029'],
+    [/windows server 2022/i, '10/2026', '10/2031'], [/windows server 2025/i, '11/2029', '11/2034'], [/windows server 2008/i, '01/2015', '01/2020'],
+    [/(red hat|rhel|oracle linux|rocky|alma).*\b7\b|\b(rhel|ol)7\b/i, '06/2024', '06/2028'], [/(red hat|rhel|oracle linux|rocky|alma).*\b8\b|\b(rhel|ol)8\b/i, '05/2029', '05/2032'],
+    [/(red hat|rhel|oracle linux|rocky|alma).*\b9\b|\b(rhel|ol)9\b/i, '05/2032', '05/2035'], [/centos.*\b7\b/i, '06/2024', '06/2024'], [/centos.*\b8\b/i, '12/2021', '12/2021'],
+    [/ubuntu.*18\.04/i, '05/2023', '04/2028'], [/ubuntu.*20\.04/i, '05/2025', '04/2030'], [/ubuntu.*22\.04/i, '06/2027', '04/2032'], [/ubuntu.*24\.04/i, '06/2029', '04/2034'],
+    [/debian.*\b10\b/i, '06/2022', '06/2024'], [/debian.*\b11\b/i, '08/2024', '08/2026'], [/debian.*\b12\b/i, '06/2026', '06/2028'],
+    [/(suse|sles).*\b12\b/i, '10/2024', '10/2027'], [/(suse|sles).*\b15\b/i, '07/2028', '07/2031'],
+    [/amazon linux 2023/i, '03/2027', '03/2029'], [/amazon linux 2\b/i, '06/2026', '06/2026']
+  ];
+  const lifecycle = (os) => { for (const [re, eol, eos] of LIFECYCLE) if (re.test(os || '')) return { eol, eos }; return { eol: '', eos: '' }; };
+  /** Situação do suporte: OK, Atenção (acaba em até 12 meses) ou Sem suporte. */
+  function supportOf(eos, now = new Date()) {
+    const m = String(eos || '').match(/^(\d{2})\/(\d{4})$/); if (!m) return '';
+    const end = new Date(Number(m[2]), Number(m[1]), 0);
+    const months = (end - now) / (30.4 * 86400000);
+    return months < 0 ? 'Sem suporte' : months <= 12 ? 'Atenção' : 'OK';
+  }
+
   BT.importer.mappers.servers = {
     key: 'servers', label: 'Servidores / VMs', icon: '🖥️', order: 1,
     desc: 'Hostname, IP, SO, localização, função e status normalizados',
@@ -180,7 +200,9 @@
     columns: [
       { key: 'hostname', name: 'Hostname', on: true }, { key: 'ip', name: 'IP', on: true }, { key: 'os', name: 'SO', on: true },
       { key: 'location', name: 'Localização', on: true }, { key: 'role', name: 'Função', on: true }, { key: 'status', name: 'Status', on: true, badge: true },
-      { key: 'specs', name: 'Specs', on: false }, { key: 'env', name: 'Ambiente', on: false }, { key: 'group', name: 'Grupo', on: false }
+      { key: 'specs', name: 'Specs', on: false }, { key: 'env', name: 'Ambiente', on: false }, { key: 'group', name: 'Grupo', on: false },
+      // ciclo de vida do SO (desligado por padrão: ligue na revisão da importação)
+      { key: 'eol', name: 'EOL', on: false }, { key: 'eos', name: 'EOS', on: false }, { key: 'suporte', name: 'Suporte do SO', on: false, badge: true }
     ],
     /** RVTools: usa a aba vInfo quando existir. */
     pickSheet(sheets) { return sheets.findIndex((s) => /^vinfo$/i.test(s.name)); },
@@ -202,7 +224,8 @@
           hostname, ip: R.get(row, 'ip').split(/[,;\s]+/)[0], os: normalizeOS(R.get(row, 'os'), provider),
           location: normalizeLocation(loc, provider), role: inferRole(`${hostname} ${envRaw}`),
           status: normalizeStatus(R.get(row, 'status')), specs: specs.join(' / '),
-          env: inferEnv(`${hostname} ${envRaw} ${group}`), group
+          env: inferEnv(`${hostname} ${envRaw} ${group}`), group,
+          ...(() => { const lc = lifecycle(normalizeOS(R.get(row, 'os'), provider) || R.get(row, 'os')); return { eol: lc.eol, eos: lc.eos, suporte: supportOf(lc.eos) }; })()
         };
       }).filter((r) => r.hostname);
     },
@@ -212,6 +235,6 @@
       const lin = items.filter((i) => i.os && !/windows/i.test(i.os)).length;
       return [{ label: 'Servidores', value: String(items.length) }, { label: 'Ativos', value: String(ativos) }, { label: 'Desligados', value: String(items.length - ativos) }, { label: 'Windows', value: String(win) }, { label: 'Linux / outros', value: String(lin) }];
     },
-    FIELD_MAP
+    FIELD_MAP, lifecycle, supportOf
   };
 })(window.BT);

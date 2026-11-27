@@ -128,13 +128,14 @@ assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state
   const c = T.svg(Object.assign({}, d, { style: 'compact', styleByUser: true })); // compacto, escolhido no editor
   assert.ok(/vpc-prd/.test(c) && /TRANSIT GATEWAY/.test(c) && /1 rede anexada · on-premises:/.test(c) && />VPN</.test(c) && !/ON-PREMISES/.test(c) && />TGW</.test(c) && />Internet</.test(c) && />NAT</.test(c) === false && !/10\.0\.1\.0\/24/.test(c) && /1 subnet \(1 púb\.\)/.test(c));
   assert.ok(/10\.0\.1\.0\/24/.test(T.svg(Object.assign({}, d, { style: 'compact', styleByUser: true, showSubnets: true })))); ok('topologia compacta: cartões com etiquetas (Internet, TGW), hub com redes anexadas, subnets só se pedir');
-  d.style = 'detailed'; d.styleByUser = true;
+  d.style = 'tree'; d.styleByUser = true;
   const s = T.svg(d);
-  assert.ok(/vpc-prd/.test(s) && /vpc-hml/.test(s) && /TRANSIT GATEWAY/.test(s) && />Internet</.test(s) && /On-premises/.test(s) && /VPN · matriz/.test(s));
   assert.ok(T.isEmpty({ data: { model: { networks: [] } } }) && !T.isEmpty({ data: d }));
+  assert.strictEqual(T.svg(Object.assign({}, d, { style: 'detailed' })), s); ok('topologia: "detalhado" gravado por versões anteriores vira o detalhado de hoje (árvore)');
   const many = JSON.parse(JSON.stringify(d)); for (let i = 0; i < 9; i++) many.model.links.push({ a: 'tgw', b: 'onprem', type: 'vpn', label: 'IPSec · t' + i });
-  const sm = T.svg(many);
-  assert.ok(/VPN ×10/.test(sm) && !/IPSec · t3/.test(sm)); ok('topologia detalhada: vários túneis do mesmo hub viram uma linha "VPN ×10"');
+  assert.ok(/on-premises: VPN \(10\)/.test(T.svg(many))); ok('topologia detalhada: vários túneis do mesmo hub viram "VPN (10)" embaixo do hub');
+  const ic = T.svg({ provider: 'vmware', model: { networks: [{ id: 'x', name: 'DPG-SQL-PRD', cidr: 'VLAN 20', gateways: [{ type: '7 VMs' }] }], hubs: [], links: [] } });
+  assert.ok(/<ellipse/.test(ic) && /\+2/.test(ic)); ok('topologia: ícone de TI pelo nome da rede (banco) e computadores para as VMs');
   const s2 = T.svg(Object.assign({}, d, { hidden: ['b'] }));
   assert.ok(!/vpc-hml/.test(s2) && !/TRANSIT GATEWAY/.test(s2)); ok('topologia: desenha redes, hub, internet e on-prem; rede oculta (e o hub só dela) sai do desenho');
 }
@@ -158,6 +159,12 @@ assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state
   load('sanitize.js', 'core');
   assert.deepStrictEqual(['data:image/png;base64,AA', 'https://x/a.png', 'assets/img/l.svg', 'x" onerror="alert(1)', 'javascript:alert(1)', 'data:text/html,<b>', 'data:image/png;base64,A"x'].map(BT.safeSrc),
     ['data:image/png;base64,AA', 'https://x/a.png', 'assets/img/l.svg', '', '', '', 'data:image/png;base64,A%22x']); ok('imagens: src só aceita imagem (data:, http(s), assets) e não fecha o atributo');
+}
+// ciclo de vida do SO na planilha de servidores (EOL, EOS e situação do suporte)
+{
+  const lc = M.servers.lifecycle('Windows Server 2019 Standard');
+  assert.deepStrictEqual([lc.eol, lc.eos, M.servers.lifecycle('Oracle Linux 8.9').eos, M.servers.supportOf('01/2020'), M.servers.supportOf('01/2040')], ['01/2024', '01/2029', '05/2032', 'Sem suporte', 'OK']);
+  ok('servidores: EOL/EOS do sistema operacional e situação do suporte');
 }
 // comparativo: busca a pontuação nos books dos meses anteriores
 (async () => {

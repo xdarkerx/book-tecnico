@@ -215,7 +215,7 @@
         chk(b.scoreShow, 'compare', '↔️ Comparativo com o mês passado'), chk(b.scoreShow, 'evolution', '📈 Gráfico de evolução')]),
       h('div', { class: 'set-help' }, 'Comparativo e evolução só aparecem quando há pontuação de um mês anterior.'),
       h('div', { class: 'lbl', style: { margin: '12px 0 6px' } }, '🗺️ Topologia de rede'),
-      radio(b, 'topologyStyle', 'td-topo', [['tree', '🌳 Hierárquico'], ['compact', '▦ Compacto'], ['detailed', '🗺️ Detalhado']]),
+      radio(b, 'topologyStyle', 'td-topo', [['tree', '🗺️ Detalhado'], ['compact', '▦ Compacto']]),
       h('div', { class: 'subt' }, '📥 Importação padrão da equipe'),
       h('div', { class: 'set-help' }, 'O que já vem marcado ao sincronizar e ao revisar uma importação.'),
       h('div', { class: 'lbl', style: { margin: '10px 0 6px' } }, '📡 Zabbix — severidades dos alertas'),

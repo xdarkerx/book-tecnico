@@ -1,6 +1,6 @@
 /* ═══ Bloco: Topologia de rede (desenhada a partir da sincronização) ═══
  * data = {
- *   title, provider, account, origin, style: 'tree' (hierárquico, padrão) | 'compact' | 'detailed', styleByUser (escolhido no editor), showSubnets, showGateways, hidden: [ids de redes ocultas], note,
+ *   title, provider, account, origin, style: 'tree' (detalhado: árvore com ícones, padrão) | 'compact', styleByUser (escolhido no editor), showSubnets, showGateways, hidden: [ids de redes ocultas], note,
  *   model: {
  *     networks: [{ id, name, cidr, group, region, subnets: [{ name, cidr, public }], gateways: [{ type, name }] }],
  *     hubs:     [{ id, type: 'DRG' | 'Transit Gateway' | …, name, region }],
@@ -13,170 +13,14 @@
   const h = BT.h;
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const FONT = "Inter, 'Segoe UI', Arial, sans-serif";
-  const W = 960, PAD = 20, GAP = 22, MAX_SUBNETS = 8, MAX_NETS = 36;
+  const W = 960, PAD = 20;
   const COLOR = { oci: '#c74634', aws: '#ff9900', azure: '#0078d4', gcp: '#4285f4', vmware: '#6d8aa6', ovm: '#c74634' };
-  const LINK = { attach: ['#5E3FE1', ''], peering: ['#00a383', '6 4'], internet: ['#8D92A7', '2 4'], vpn: ['#DC5282', '7 4'], dedicated: ['#b7860b', ''] };
   const cut = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
-  /** Monta o SVG. width = largura de exibição (o desenho escala pelo viewBox). */
-  function svgDetailed(d, width = W) {
-    const m = d.model || {};
-    const hidden = new Set(d.hidden || []);
-    const nets = (m.networks || []).filter((n) => !hidden.has(n.id)).slice(0, MAX_NETS);
-    const ids = new Set(nets.map((n) => n.id));
-    // hub (DRG, Transit Gateway) só aparece se alguma rede do desenho estiver ligada a ele
-    const hubIds = new Set((m.hubs || []).filter((hb) => (m.links || []).some((l) => (l.a === hb.id && ids.has(l.b)) || (l.b === hb.id && ids.has(l.a)))).map((hb) => hb.id));
-    // vários links do mesmo tipo entre os mesmos pontos (ex.: 9 túneis IPSec do DRG) viram UMA linha "VPN ×9"
-    const grouped = new Map();
-    (m.links || []).filter((l) => [l.a, l.b].every((x) => ids.has(x) || hubIds.has(x) || x === 'internet' || x === 'onprem')).forEach((l) => {
-      const k = l.type + '|' + [l.a, l.b].sort().join('|');
-      const g = grouped.get(k);
-      if (g) g.n++; else grouped.set(k, Object.assign({}, l, { n: 1 }));
-    });
-    const links = [...grouped.values()].map((l) => {
-      if (l.n === 1) return l;
-      const base = l.type === 'vpn' ? 'VPN' : l.type === 'peering' ? 'Peering' : String(l.label || '').split(' · ')[0];
-      return Object.assign({}, l, { label: base ? `${base} ×${l.n}` : `×${l.n}` });
-    });
-    const used = new Set(links.flatMap((l) => [l.a, l.b]));
-    const hubs = (m.hubs || []).filter((hb) => used.has(hb.id));
-    if (!nets.length) return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="60" viewBox="0 0 ${W} 60"><text x="${W / 2}" y="34" font-size="12" text-anchor="middle" fill="#9098b8" font-family="${FONT}">Sem redes para desenhar — sincronize "Redes" desta cloud</text></svg>`;
-    const accent = COLOR[d.provider] || '#5E3FE1';
-    const showSub = d.showSubnets !== false, showGw = d.showGateways !== false;
-    const pos = {}; const parts = []; const lines = [];
-    let y = PAD;
+  /** Sem redes para desenhar: aviso no lugar do desenho. */
+  const emptySvg = (width) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="60" viewBox="0 0 ${W} 60"><text x="${W / 2}" y="34" font-size="12" text-anchor="middle" fill="#9098b8" font-family="${FONT}">Sem redes para desenhar — sincronize "🌐 Redes" desta cloud</text></svg>`;
 
-    // 1. externos: Internet e On-premises
-    const ext = ['internet', 'onprem'].filter((x) => used.has(x));
-    if (ext.length) {
-      const bw = 170, bh = 38;
-      ext.forEach((x, i) => {
-        // com hubs no meio, Internet fica à esquerda e On-premises à direita (as linhas não cruzam os hubs)
-        const cx = hubs.length ? (x === 'internet' ? W * 0.16 : W * 0.84) : ext.length === 1 ? W / 2 : (i === 0 ? W * 0.3 : W * 0.7);
-        pos[x] = { x: cx - bw / 2, y, w: bw, h: bh };
-        const label = x === 'internet' ? 'Internet' : 'On-premises / Datacenter';
-        parts.push(`<rect x="${cx - bw / 2}" y="${y}" width="${bw}" height="${bh}" rx="19" fill="#f4f5fa" stroke="#b7bcd1"/><text x="${cx}" y="${y + 24}" font-size="12.5" font-weight="600" text-anchor="middle" fill="#3d4466">${label}</text>`);
-      });
-      y += 38 + 34;
-    }
-    // 2. hubs (DRG, Transit Gateway…)
-    if (hubs.length) {
-      const bw = Math.min(220, (W - 2 * PAD - (hubs.length - 1) * GAP) / hubs.length), bh = 44;
-      const total = hubs.length * bw + (hubs.length - 1) * GAP; let x = (W - total) / 2;
-      hubs.forEach((hb) => {
-        pos[hb.id] = { x, y, w: bw, h: bh };
-        parts.push(`<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="8" fill="#f4f2ff" stroke="#5E3FE1" stroke-width="1.4"/>
-          <text x="${x + bw / 2}" y="${y + 18}" font-size="10" font-weight="700" text-anchor="middle" fill="#5E3FE1" letter-spacing=".06em">${esc(String(hb.type).toUpperCase())}</text>
-          <text x="${x + bw / 2}" y="${y + 34}" font-size="11.5" text-anchor="middle" fill="#3d4466">${esc(cut(hb.name, 30))}</text>`);
-        x += bw + GAP;
-      });
-      y += 44 + 40;
-    }
-    // 3. redes em grade
-    const cols = nets.length <= 2 ? nets.length : nets.length === 4 ? 2 : 3;
-    const cw = (W - 2 * PAD - (cols - 1) * GAP) / cols;
-    const cardH = (n) => {
-      const subs = showSub ? Math.min((n.subnets || []).length, MAX_SUBNETS) + ((n.subnets || []).length > MAX_SUBNETS ? 1 : 0) : 0;
-      const gws = showGw && (n.gateways || []).length ? gwRows(n, cw).length * 22 + 6 : 0;
-      return 52 + (subs ? subs * 17 + 8 : 0) + gws + 8;
-    };
-    function gwRows(n, w) {
-      const rows = [[]]; let x = 12;
-      for (const g of n.gateways || []) {
-        const tw = Math.min(w - 24, 14 + String(g.name ? `${g.type} · ${g.name}` : g.type).length * 5.6);
-        if (x + tw > w - 12 && rows[rows.length - 1].length) { rows.push([]); x = 12; }
-        rows[rows.length - 1].push({ g, x, w: tw }); x += tw + 6;
-      }
-      return rows;
-    }
-    for (let i = 0; i < nets.length; i += cols) {
-      const row = nets.slice(i, i + cols);
-      const rh = Math.max(...row.map(cardH));
-      // várias linhas: alinhadas à esquerda (os corredores entre as colunas ficam no mesmo lugar)
-      const rowW = row.length * cw + (row.length - 1) * GAP; let x = nets.length > cols ? PAD : (W - rowW) / 2;
-      row.forEach((n) => {
-        pos[n.id] = { x, y, w: cw, h: rh, row: i / cols };
-        const sub = [n.cidr, n.region, n.group].filter(Boolean).join(' · ');
-        let s = `<rect x="${x}" y="${y}" width="${cw}" height="${rh}" rx="10" fill="#ffffff" stroke="#d8dbe8"/>
-          <rect x="${x}" y="${y}" width="5" height="${rh}" rx="2" fill="${accent}"/>
-          <text x="${x + 16}" y="${y + 22}" font-size="13" font-weight="700" fill="#1f2547">${esc(cut(n.name, Math.floor(cw / 7.6)))}</text>
-          <text x="${x + 16}" y="${y + 39}" font-size="10.5" fill="#6b7194">${esc(cut(sub, Math.floor(cw / 5.8)))}</text>`;
-        let yy = y + 52;
-        if (showSub && (n.subnets || []).length) {
-          s += `<line x1="${x + 12}" y1="${yy - 2}" x2="${x + cw - 12}" y2="${yy - 2}" stroke="#eef0f6"/>`;
-          yy += 6;
-          n.subnets.slice(0, MAX_SUBNETS).forEach((sb) => {
-            const dot = sb.public === true ? '#00a383' : sb.public === false ? '#8D92A7' : '#c9cde0';
-            s += `<circle cx="${x + 18}" cy="${yy + 6}" r="3.4" fill="${dot}"/><text x="${x + 28}" y="${yy + 10}" font-size="10.5" fill="#3d4466">${esc(cut(sb.name, Math.floor((cw - 130) / 5.6)))}</text><text x="${x + cw - 12}" y="${yy + 10}" font-size="10.5" text-anchor="end" fill="#6b7194" font-family="Consolas, monospace">${esc(sb.cidr || '')}</text>`;
-            yy += 17;
-          });
-          if (n.subnets.length > MAX_SUBNETS) { s += `<text x="${x + 28}" y="${yy + 10}" font-size="10.5" fill="#9098b8">+ ${n.subnets.length - MAX_SUBNETS} subnet(s)</text>`; yy += 17; }
-          yy += 2;
-        }
-        if (showGw && (n.gateways || []).length) {
-          yy += 4;
-          gwRows(n, cw).forEach((r) => {
-            r.forEach(({ g, x: gx, w: gw }) => { s += `<rect x="${x + gx}" y="${yy}" width="${gw}" height="17" rx="8.5" fill="#f4f5fa" stroke="#e1e4ef"/><text x="${x + gx + gw / 2}" y="${yy + 12}" font-size="9.5" text-anchor="middle" fill="#3d4466">${esc(cut(g.name ? `${g.type} · ${g.name}` : g.type, Math.floor(gw / 5.4)))}</text>`; });
-            yy += 22;
-          });
-        }
-        parts.push(s);
-        x += cw + GAP;
-      });
-      y += rh + GAP + 10;
-    }
-    // 4. ligações: saem por baixo do hub/externo (ou pelo topo da rede) e correm pelos corredores entre as caixas,
-    //    para nenhuma linha passar por trás de outra rede; ligações paralelas ficam deslocadas
-    const isCard = (id) => ids.has(id);
-    const gutters = [PAD / 2, ...Array.from({ length: cols - 1 }, (_, i) => PAD + (i + 1) * (cw + GAP) - GAP / 2), W - PAD / 2];
-    const nearGutter = (x1, x2) => gutters.reduce((b, g) => (Math.abs(g - (x1 + x2) / 2) < Math.abs(b - (x1 + x2) / 2) ? g : b), gutters[0]);
-    // portas: cada ligação que chega numa caixa ganha um x próprio no topo/base
-    const ports = {}; const portOf = (id, li) => { const list = ports[id] || []; const k = list.indexOf(li); const p = pos[id]; return p.x + p.w / 2 + (k - (list.length - 1) / 2) * Math.min(16, (p.w - 20) / Math.max(1, list.length)); };
-    links.forEach((l, li) => [l.a, l.b].forEach((x) => { if (pos[x]) (ports[x] = ports[x] || []).push(li); }));
-    const above = (id) => !isCard(id); // hubs e externos ficam acima das redes
-    const pair = {};
-    links.forEach((l, li) => {
-      if (!pos[l.a] || !pos[l.b]) return;
-      const [color, dash] = LINK[l.type] || LINK.attach;
-      const pk = [l.a, l.b].sort().join('|'); const pi = (pair[pk] = (pair[pk] || 0) + 1) - 1; // nº da ligação entre o mesmo par
-      const off = pi * 4 + (li % 3) * 3;
-      let d = ''; let lx, lyy;
-      if (above(l.a) && above(l.b)) {
-        // externo ↔ hub: curva entre as duas caixas
-        const [U1, D1] = pos[l.a].y < pos[l.b].y ? [l.a, l.b] : [l.b, l.a];
-        const x1 = portOf(U1, li), y1 = pos[U1].y + pos[U1].h, x2 = portOf(D1, li), y2 = pos[D1].y;
-        d = `M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`;
-        // rótulo logo acima do hub (cada hub tem o seu lugar; VPN e link dedicado do mesmo hub ficam empilhados)
-        lx = x2; lyy = y2 - 5 - pi * 11;
-      } else {
-        const [S, T] = isCard(l.a) && !isCard(l.b) ? [l.b, l.a] : [l.a, l.b];
-        const t = pos[T]; const tx = portOf(T, li); const ty = t.y; const ch = (p) => p.y - 11 - off;
-        const pts = [];
-        if (isCard(S)) { const sx = portOf(S, li); pts.push([sx, pos[S].y], [sx, ch(pos[S])]); }
-        else { const sx = portOf(S, li); pts.push([sx, pos[S].y + pos[S].h]); const first = Math.min(...[...ids].map((id) => pos[id].y)); pts.push([sx, first - 11 - off]); }
-        const cur = pts[pts.length - 1];
-        if (Math.abs(cur[1] - ch(t)) < 0.5 || (!isCard(S) && t.row === 0)) pts.push([tx, cur[1]]);
-        else { const g = nearGutter(cur[0], tx) + (off % 6) - 3; pts.push([g, cur[1]], [g, ch(t)], [tx, ch(t)]); }
-        pts.push([tx, ty]);
-        d = 'M' + pts.map((p) => p.map((v) => Math.round(v * 10) / 10).join(',')).join(' L');
-        const seg = pts.length > 3 ? [pts[pts.length - 3], pts[pts.length - 2]] : [pts[0], pts[1]];
-        lx = (seg[0][0] + seg[1][0]) / 2; lyy = (seg[0][1] + seg[1][1]) / 2 - 4;
-      }
-      lines.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" ${dash ? `stroke-dasharray="${dash}"` : ''} opacity=".9"/>`);
-      if (l.label) lines.push(`<text x="${lx}" y="${lyy}" font-size="9.5" text-anchor="middle" fill="${color}" stroke="#ffffff" stroke-width="3" paint-order="stroke">${esc(cut(l.label, 28))}</text>`);
-    });
-    // 5. legenda
-    const leg = [['attach', 'Anexo ao hub'], ['peering', 'Peering'], ['internet', 'Internet'], ['vpn', 'VPN'], ['dedicated', 'Link dedicado']].filter(([k]) => links.some((l) => l.type === k));
-    let lx = PAD; const ly = y + 4;
-    const legend = leg.map(([k, t]) => { const [c, dsh] = LINK[k]; const s = `<line x1="${lx}" y1="${ly}" x2="${lx + 26}" y2="${ly}" stroke="${c}" stroke-width="2" ${dsh ? `stroke-dasharray="${dsh}"` : ''}/><text x="${lx + 32}" y="${ly + 4}" font-size="10.5" fill="#6b7194">${t}</text>`; lx += 50 + t.length * 6; return s; }).join('');
-    const subLeg = showSub ? `<circle cx="${lx + 4}" cy="${ly}" r="3.4" fill="#00a383"/><text x="${lx + 12}" y="${ly + 4}" font-size="10.5" fill="#6b7194">Subnet pública</text><circle cx="${lx + 110}" cy="${ly}" r="3.4" fill="#8D92A7"/><text x="${lx + 118}" y="${ly + 4}" font-size="10.5" fill="#6b7194">Subnet privada</text>` : '';
-    const more = (m.networks || []).filter((n) => !hidden.has(n.id)).length - nets.length;
-    const moreTxt = more > 0 ? `<text x="${W - PAD}" y="${ly + 4}" font-size="10.5" text-anchor="end" fill="#9098b8">+ ${more} rede(s) fora do desenho</text>` : '';
-    const H = y + 18;
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${Math.round(H * width / W)}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">${parts.join('')}${lines.join('')}${legend}${subLeg}${moreTxt}</svg>`;
-  }
-
-  // ── Estilo compacto (padrão): cartões pequenos com a conectividade em etiquetas; linhas só entre hub e externos ──
+  // ── Estilo compacto: cartões pequenos com a conectividade em etiquetas; linhas só entre hub e externos ──
   const SHORT = { 'Internet GW': 'IGW', 'NAT GW': 'NAT', 'Service GW': 'SGW', 'VPN GW': 'VGW', 'VPN / ExpressRoute GW': 'VPN GW', 'Azure Firewall': 'Firewall', 'Cloud NAT': 'NAT', 'Cloud VPN': 'VPN', 'Route Server': 'Route Server', 'Bastion': 'Bastion' };
   const TAG = { internet: ['#eef0f6', '#4b5170'], hub: ['#f0ecff', '#5E3FE1'], peering: ['#e6f7f2', '#00845f'], vpn: ['#fdf0f4', '#c23b6c'], dedicated: ['#fff6e0', '#8a6408'], gw: ['#f4f5fa', '#6b7194'] };
   function compact(d, width) {
@@ -187,7 +31,7 @@
     const ids = new Set(nets.map((n) => n.id));
     const name = Object.fromEntries((m.networks || []).map((n) => [n.id, n.name]));
     const hubById = Object.fromEntries((m.hubs || []).map((x) => [x.id, x]));
-    if (!nets.length) return svgDetailed(d, width);
+    if (!nets.length) return emptySvg(width);
     const accent = COLOR[d.provider] || '#5E3FE1';
     const CW = 4, gap = 14;
     const cols = Math.min(CW, nets.length);
@@ -277,7 +121,7 @@
     const H = ly + 14;
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${Math.round(H * width / W)}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">${parts.join('')}${leg}${more > 0 ? `<text x="${W - PAD}" y="${ly + 1}" font-size="9.5" text-anchor="end" fill="#9098b8">+ ${more} rede(s) fora do desenho</text>` : ''}</svg>`;
   }
-  // ── Estilo hierárquico (padrão): árvore de cima para baixo, com ícones de equipamento e linhas em ângulo reto ──
+  // ── Estilo detalhado (padrão, hierárquico): árvore de cima para baixo, com ícones de equipamento e linhas em ângulo reto ──
   //   raiz (vCenter / a cloud) → hubs (vDS, vSwitch, DRG, Transit Gateway…) → redes (port groups, VCNs, VPCs, VNets)
   const PROV_NAME = { oci: 'Oracle Cloud', aws: 'AWS', azure: 'Microsoft Azure', gcp: 'Google Cloud', vmware: 'vCenter', ovm: 'Oracle VM' };
   // ícones desenhados em SVG (sem imagens externas: saem iguais no PDF e no Word)
@@ -299,9 +143,38 @@
     },
     // nuvem
     cloud: (x, y, w, c) => `<path d="M${x + w * 0.25},${y + w * 0.55} a${w * 0.17},${w * 0.17} 0 0 1 ${w * 0.05},-${w * 0.33} a${w * 0.22},${w * 0.22} 0 0 1 ${w * 0.4},-${w * 0.06} a${w * 0.16},${w * 0.16} 0 0 1 ${w * 0.27},${w * 0.17} a${w * 0.12},${w * 0.12} 0 0 1 -${w * 0.02},${w * 0.24} Z" fill="${c}"/>`,
+    // ícones de TI das redes (pelo nome): banco, web/DMZ, aplicação, backup, gerência, VPN, storage e estações
+    db: (x, y, s, c) => `<g fill="none" stroke="${c}" stroke-width="1.7"><ellipse cx="${x + s / 2}" cy="${y + 4}" rx="${s / 2 - 1}" ry="3.5"/><path d="M${x + 1},${y + 4} v${s - 8} a${s / 2 - 1},3.5 0 0 0 ${s - 2},0 v-${s - 8}"/><path d="M${x + 1},${y + s / 2} a${s / 2 - 1},3.5 0 0 0 ${s - 2},0"/></g>`,
+    globe: (x, y, s, c) => `<g fill="none" stroke="${c}" stroke-width="1.6"><circle cx="${x + s / 2}" cy="${y + s / 2}" r="${s / 2 - 1}"/><ellipse cx="${x + s / 2}" cy="${y + s / 2}" rx="${s / 4}" ry="${s / 2 - 1}"/><line x1="${x + 1}" y1="${y + s / 2}" x2="${x + s - 1}" y2="${y + s / 2}"/></g>`,
+    app: (x, y, s, c) => `<g fill="none" stroke="${c}" stroke-width="1.6"><rect x="${x + 1}" y="${y + 2}" width="${s - 2}" height="${s - 4}" rx="2"/><line x1="${x + 1}" y1="${y + 7}" x2="${x + s - 1}" y2="${y + 7}"/></g><g fill="${c}"><circle cx="${x + 4}" cy="${y + 4.5}" r="1"/><circle cx="${x + 7}" cy="${y + 4.5}" r="1"/><rect x="${x + 5}" y="${y + 10}" width="${s - 10}" height="2" rx="1"/><rect x="${x + 5}" y="${y + 14}" width="${s - 14}" height="2" rx="1"/></g>`,
+    backup: (x, y, s, c) => `<g fill="none" stroke="${c}" stroke-width="1.6"><rect x="${x + 1}" y="${y + 3}" width="${s - 2}" height="${s - 6}" rx="2"/><circle cx="${x + s * 0.33}" cy="${y + s / 2}" r="${s * 0.15}"/><circle cx="${x + s * 0.67}" cy="${y + s / 2}" r="${s * 0.15}"/><line x1="${x + s * 0.33}" y1="${y + s / 2 + s * 0.15}" x2="${x + s * 0.67}" y2="${y + s / 2 + s * 0.15}"/></g>`,
+    mgmt: (x, y, s, c) => `<g fill="none" stroke="${c}" stroke-width="1.6"><circle cx="${x + s / 2}" cy="${y + s / 2}" r="${s * 0.18}"/>${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => { const r1 = s * 0.3, r2 = s * 0.46, t = a * Math.PI / 180; return `<line x1="${x + s / 2 + r1 * Math.cos(t)}" y1="${y + s / 2 + r1 * Math.sin(t)}" x2="${x + s / 2 + r2 * Math.cos(t)}" y2="${y + s / 2 + r2 * Math.sin(t)}"/>`; }).join('')}</g>`,
+    lock: (x, y, s, c) => `<g fill="none" stroke="${c}" stroke-width="1.7"><rect x="${x + 2}" y="${y + s * 0.45}" width="${s - 4}" height="${s * 0.5}" rx="2"/><path d="M${x + s * 0.3},${y + s * 0.45} v-${s * 0.12} a${s * 0.2},${s * 0.2} 0 0 1 ${s * 0.4},0 v${s * 0.12}"/></g>`,
+    storage: (x, y, s, c) => `<g fill="none" stroke="${c}" stroke-width="1.6">${[0, 1, 2].map((i) => `<rect x="${x + 1}" y="${y + 1 + i * (s / 3)}" width="${s - 2}" height="${s / 3 - 2}" rx="1.5"/>`).join('')}</g><g fill="${c}">${[0, 1, 2].map((i) => `<circle cx="${x + s - 5}" cy="${y + s / 6 + i * (s / 3)}" r="1.2"/>`).join('')}</g>`,
+    desktop: (x, y, s, c) => `<g fill="none" stroke="${c}" stroke-width="1.6"><rect x="${x + 1}" y="${y + 2}" width="${s - 2}" height="${s * 0.6}" rx="1.5"/><line x1="${x + s / 2}" y1="${y + 2 + s * 0.6}" x2="${x + s / 2}" y2="${y + s - 3}"/><line x1="${x + s * 0.3}" y1="${y + s - 2}" x2="${x + s * 0.7}" y2="${y + s - 2}"/></g>`,
     // rede (três nós ligados)
     net: (x, y, s, c) => `<g stroke="${c}" stroke-width="1.6" fill="none"><line x1="${x + s / 2}" y1="${y + 3}" x2="${x + 3}" y2="${y + s - 3}"/><line x1="${x + s / 2}" y1="${y + 3}" x2="${x + s - 3}" y2="${y + s - 3}"/><line x1="${x + 3}" y1="${y + s - 3}" x2="${x + s - 3}" y2="${y + s - 3}"/></g><g fill="${c}"><circle cx="${x + s / 2}" cy="${y + 3}" r="3"/><circle cx="${x + 3}" cy="${y + s - 3}" r="3"/><circle cx="${x + s - 3}" cy="${y + s - 3}" r="3"/></g>`
   };
+  /** Ícone de TI da rede pelo nome (sem pista: o ícone de rede). */
+  function roleOf(n) {
+    const t = String(n.name || '').toLowerCase();
+    if (/(^|[^a-z])(db|bd|sql|banco|database|data|oracle|ora|mysql|postgres|mongo|redis)([^a-z]|$)/.test(t)) return 'db';
+    if (/dmz|web|www|front|public|publ|internet|wan|edge|proxy/.test(t)) return 'globe';
+    if (/backup|bkp|vault|veeam|commvault/.test(t)) return 'backup';
+    if (/mgmt|manage|gerenc|admin|oob|ilo|idrac|ipmi|vmotion|esxi|management|monitor/.test(t)) return 'mgmt';
+    if (/vpn|ipsec|tunnel|tunel/.test(t)) return 'lock';
+    if (/stor|iscsi|nfs|san|nas|vsan|smb/.test(t)) return 'storage';
+    if (/vdi|desktop|user|usuar|wifi|wi-fi|corp|office|escrit|estac|lan/.test(t)) return 'desktop';
+    if (/app|aplic|api|srv|server|prd|prod|hml|dev|test|qa/.test(t)) return 'app';
+    return 'net';
+  }
+  /** Computadores pequenos (até 5) para as VMs da rede, como no diagrama de rede. */
+  function devices(x, y, nVm, c) {
+    const k = Math.min(nVm, 5); let s = '';
+    for (let i = 0; i < k; i++) s += ICON.desktop(x + i * 13, y, 11, c);
+    if (nVm > 5) s += `<text x="${x + k * 13 + 1}" y="${y + 9}" font-size="8.5" fill="${c}">+${nVm - 5}</text>`;
+    return s;
+  }
   function shade(hex, amt) {
     const n = parseInt(String(hex).replace('#', ''), 16); if (isNaN(n)) return hex;
     const ch = (v) => Math.max(0, Math.min(255, v + amt));
@@ -312,7 +185,7 @@
     const m = d.model || {};
     const hidden = new Set(d.hidden || []);
     const nets = (m.networks || []).filter((n) => !hidden.has(n.id)).slice(0, 80);
-    if (!nets.length) return svgDetailed(d, width);
+    if (!nets.length) return emptySvg(width);
     const ids = new Set(nets.map((n) => n.id));
     const hubById = Object.fromEntries((m.hubs || []).map((x) => [x.id, x]));
     const name = Object.fromEntries((m.networks || []).map((n) => [n.id, n.name]));
@@ -359,11 +232,16 @@
       const subs = n.subnets || []; const pub = subs.filter((s) => s.public === true).length;
       const l2 = [n.cidr, subs.length ? `${subs.length} subnet${subs.length !== 1 ? 's' : ''}${pub ? ` (${pub} púb.)` : ''}` : ''].filter(Boolean).join(' · ');
       let c = `<rect x="${nx}" y="${ry}" width="${CW}" height="${CH}" rx="9" fill="#fff" stroke="#cfd5e6"/><rect x="${nx}" y="${ry}" width="${CW}" height="4" rx="2" fill="${accent}"/>`
-        + ICON.net(nx + 10, ry + 13, 20, accent)
+        + ICON[roleOf(n)](nx + 10, ry + 13, 20, accent)
         + `<text x="${nx + 38}" y="${ry + 24}" font-size="11.5" font-weight="700" fill="#1f2547">${esc(cut(n.name, 19))}</text>`
         + `<text x="${nx + 38}" y="${ry + 38}" font-size="9.5" fill="#6b7194">${esc(cut(l2, 27))}</text>`;
       let tx = nx + 8;
-      tagsOf(n).forEach(([k, t]) => { const [bg, fg] = TAG[k]; const w = 10 + t.length * 5.1; if (tx + w > nx + CW - 6) return; c += `<rect x="${tx}" y="${ry + 50}" width="${w}" height="15" rx="7.5" fill="${bg}"/><text x="${tx + w / 2}" y="${ry + 60.8}" font-size="8.8" font-weight="600" text-anchor="middle" fill="${fg}">${esc(t)}</text>`; tx += w + 4; });
+      // VMs (vCenter): computadores à direita; as etiquetas ficam no espaço que sobra
+      const vm = (n.gateways || []).map((g) => (String(g.type).match(/^(\d+) VMs?$/) || [])[1]).find(Boolean);
+      const nVm = vm ? Number(vm) : 0;
+      const devW = nVm ? Math.min(nVm, 5) * 13 + (nVm > 5 ? 16 : 0) : 0;
+      if (nVm) c += devices(nx + CW - 8 - devW, ry + 52, nVm, '#8a93b5');
+      tagsOf(n).filter(([k, t]) => !/^\d+ VMs?$/.test(t)).forEach(([k, t]) => { const [bg, fg] = TAG[k]; const w = 10 + t.length * 5.1; if (tx + w > nx + CW - 10 - devW) return; c += `<rect x="${tx}" y="${ry + 50}" width="${w}" height="15" rx="7.5" fill="${bg}"/><text x="${tx + w / 2}" y="${ry + 60.8}" font-size="8.8" font-weight="600" text-anchor="middle" fill="${fg}">${esc(t)}</text>`; tx += w + 4; });
       out.push(c);
     };
     let y = rootY + 100;
@@ -416,9 +294,10 @@
     const H = ly + 16;
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${Math.round(H * width / Wt)}" viewBox="0 0 ${Wt} ${H}" font-family="${FONT}">${lines.join('')}${out.join('')}${legend}${more > 0 ? `<text x="${Wt - PAD}" y="${ly + 1}" font-size="10" text-anchor="end" fill="#9098b8">+ ${more} rede(s) fora do desenho</text>` : ''}</svg>`;
   }
-  /** Estilo em uso: o escolhido no editor; sem escolha, o padrão da equipe (hierárquico). */
-  const styleOf = (d) => (d.styleByUser && d.style) || (BT.data && BT.data.defaults && BT.data.defaults.blocks().topologyStyle) || d.style || 'tree';
-  const svg = (d, width = W) => { const st = styleOf(d); return st === 'detailed' ? svgDetailed(d, width) : st === 'compact' ? compact(d, width) : tree(d, width); };
+  /** Estilo em uso: o escolhido no editor; sem escolha, o padrão da equipe. Dois estilos: detalhado (árvore) e compacto.
+   *  "detailed" e "tree" gravados por versões anteriores são o detalhado de hoje. */
+  const styleOf = (d) => ((d.styleByUser && d.style) || (BT.data && BT.data.defaults && BT.data.defaults.blocks().topologyStyle) || d.style) === 'compact' ? 'compact' : 'tree';
+  const svg = (d, width = W) => (styleOf(d) === 'compact' ? compact(d, width) : tree(d, width));
 
   const count = (d) => ((d.model && d.model.networks) || []).filter((n) => !(d.hidden || []).includes(n.id)).length;
 
@@ -437,10 +316,10 @@
       d.hidden = d.hidden || [];
       nets.forEach((n) => list.appendChild(h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: !d.hidden.includes(n.id), onchange: (e) => { d.hidden = e.target.checked ? d.hidden.filter((x) => x !== n.id) : [...d.hidden, n.id]; save(); } }), `${n.name}${n.cidr ? ' (' + n.cidr + ')' : ''}`])));
       // compacto (padrão): cartões com etiquetas, subnets só se pedir · detalhado: subnets e linhas até cada rede
-      const subOn = () => (styleOf(d) === 'detailed' ? d.showSubnets !== false : d.showSubnets === true && !!d.styleByUser);
+      const subOn = () => d.showSubnets === true && !!d.styleByUser;
       const subChk = h('input', { type: 'checkbox', checked: subOn(), onchange: (e) => { d.style = styleOf(d); d.styleByUser = true; d.showSubnets = e.target.checked; save(); } });
       const styleRow = h('div', { class: 'tone-row', style: { marginTop: '8px' } });
-      const drawStyle = () => { styleRow.innerHTML = ''; [['tree', '🌳 Hierárquico'], ['compact', '▦ Compacto'], ['detailed', '🗺️ Detalhado']].forEach(([k, l]) => styleRow.appendChild(h('button', { class: styleOf(d) === k ? 'on' : '', onclick: () => { d.style = k; d.styleByUser = true; subChk.checked = subOn(); drawStyle(); save(); } }, l))); };
+      const drawStyle = () => { styleRow.innerHTML = ''; [['tree', '🗺️ Detalhado'], ['compact', '▦ Compacto']].forEach(([k, l]) => styleRow.appendChild(h('button', { class: styleOf(d) === k ? 'on' : '', onclick: () => { d.style = k; d.styleByUser = true; subChk.checked = subOn(); drawStyle(); save(); } }, l))); };
       drawStyle();
       redraw();
       return h('div', {}, [

@@ -62,7 +62,10 @@
                 { type: 'kpi', data: { title: 'Servidores por ambiente', items: [{ label: 'OCI', value: '' }, { label: 'AWS', value: '' }, { label: 'Azure', value: '' }, { label: 'GCP', value: '' }, { label: 'On-Prem', value: '' }] } },
                 table(['Ambiente', 'Categoria', 'Quantidade'], [], [], 'Baseline de recursos')
               ]
-            }
+            },
+            // aplicações e serviços do cliente (o que roda em cada servidor e quem responde por ele)
+            { title: 'Aplicações', icon: '🧩', blocks: [table(['Aplicação', 'Servidor', 'Criticidade', 'Responsável', 'Monitorado?', 'Observações'], [2, 4])] },
+            { title: 'Serviços', icon: '🛰️', blocks: [table(['Serviço', 'Servidor', 'Criticidade', 'Responsável', 'Monitorado?', 'Observações'], [2, 4])] }
           ]
         },
         providerGroup('oci'), providerGroup('aws'), providerGroup('azure'), providerGroup('gcp'), providerGroup('vmware'),
@@ -88,8 +91,10 @@
             { title: 'Capacidade', icon: '📊', blocks: [{ type: 'monitor', data: { title: '', origin: 'zabbix-capacity', z: null, resumo: '', show: {} } }, images('Gráficos de capacidade')] },
             { title: 'Monitoramento', icon: '📡', blocks: [table(['Host', 'IP', 'CPU média', 'Memória média', 'Maior disco', 'Alertas', 'Status'], [6])] },
             { title: 'Servidores — Recomendações', icon: '🖥️', blocks: [table(['Servidor', 'Recurso', 'Situação', 'Ação sugerida', 'Prioridade'], [4])] },
+            { title: 'Otimização de custos', icon: '💰', blocks: [text('', 'Recursos ociosos ou sem uso'), table(['Recurso', 'Tipo', 'Situação', 'Custo mensal estimado', 'Ação sugerida'], [2])] },
             { title: 'Melhorias', icon: '🚀', blocks: [table(['Prioridade', 'Área', 'Descrição', 'Responsável', 'Prazo'], [0])] },
-            { title: 'Próximos Passos', icon: '📌', blocks: [table(['Prioridade', 'Ação / Compromisso', 'Responsável', 'Prazo', 'Status'], [0, 4])] }
+            { title: 'Próximos Passos', icon: '📌', blocks: [table(['Prioridade', 'Ação / Compromisso', 'Responsável', 'Prazo', 'Status'], [0, 4])] },
+            { title: 'Histórico de Revisões', icon: '🗂️', blocks: [table(['Versão', 'Data', 'Descrição', 'Revisor', 'Aprovadores'])] }
           ]
         }
       ],
