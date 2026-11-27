@@ -24,6 +24,8 @@
     const { items, errors } = await BT.importer.cloud.collect(key, profile);
     BT.importer.zip.prepare(items, T);
     const touched = items.length ? await BT.importer.zip.applyItems(T, items, { opts: { kpi: true, charts: true, note: true }, risks: profile.risks }) : new Set();
+    // comparativo mensal com o book do mês anterior (liga sozinho se ele existir)
+    try { await BT.blocks.get('compare').autoRefresh(T); } catch (e) { /* sem comparativo */ }
     BT.store.commit(null, 'automation');
     await BT.store.saveNow();
     return { items: items.length, sections: touched.size, errors };

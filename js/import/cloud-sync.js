@@ -312,7 +312,7 @@
               const t = sh.topology || {};
               if ((t.networks || []).length) items.push({ id: BT.uid('zi'), api: true, kind: 'blocks', include: true, provider: p, account, primary, path: `${label} · Topologia de rede (${t.networks.length} rede${t.networks.length !== 1 ? 's' : ''})`,
                 destTitle: 'Networking', newTitleHint: 'Networking', origin: 'topology-' + k, replaceEmptyType: 'image', entry: { name: 'Topologia' },
-                blocks: [{ type: 'topology', data: { title: 'Topologia de rede', provider: p, account, origin: 'topology-' + k, style: 'compact', hidden: [], model: t } }], dest: '', newTitle: '', how: 'new', note: '' });
+                blocks: [{ type: 'topology', data: { title: 'Topologia de rede', provider: p, account, origin: 'topology-' + k, style: (BT.data.defaults && BT.data.defaults.blocks().topologyStyle) || 'compact', hidden: [], model: t } }], dest: '', newTitle: '', how: 'new', note: '' });
               return;
             }
             if (sh.kind === 'vulns') {
@@ -372,8 +372,8 @@
     const scope = h('div', { class: 'cprow', role: 'radiogroup', 'aria-label': 'Quais recursos' }, [[false, 'Todos os recursos'], [true, 'Só os criados no mês']].map(([v, l]) =>
       h('label', { class: 'cp' }, [h('input', { type: 'radio', name: 'sync-scope', checked: newOnly === v, onchange: () => (newOnly = v) }), l])));
     // backup: o que foi feito no mês, as políticas de agendamento ou os dois
-    let backupMode = defs.backupMode || 'both';
-    const bkScope = h('div', { class: 'cprow', role: 'radiogroup', 'aria-label': 'O que trazer de backup' }, [['both', 'Backups feitos e políticas'], ['jobs', 'Só os backups feitos no mês'], ['policies', 'Só as políticas / agendamentos']].map(([v, l]) =>
+    let backupMode = defs.backupMode || 'policies';
+    const bkScope = h('div', { class: 'cprow', role: 'radiogroup', 'aria-label': 'O que trazer de backup' }, [['policies', 'Só as políticas / agendamentos'], ['jobs', 'Só os backups feitos no mês'], ['both', 'Backups feitos e políticas']].map(([v, l]) =>
       h('label', { class: 'cp' }, [h('input', { type: 'radio', name: 'sync-bk', checked: backupMode === v, onchange: () => (backupMode = v) }), l])));
     zbxBox.append(h('div', { class: 'lbl', style: { margin: '16px 0 8px' } }, 'Zabbix — severidades dos alertas'), h('div', { class: 'cprow' }, ZSEV.map(([v, l]) => chk(zbxSev, v, l))),
       h('label', { class: 'switch', style: { marginTop: '10px' } }, [zbxAll, 'Incluir servidores sem nenhum alerta no período (Monitoramento)']));

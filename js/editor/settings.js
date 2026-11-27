@@ -75,6 +75,7 @@
     $('set-compare').onchange = (e) => (S.defaults.comparativo = e.target.checked);
     $('set-add-extra').onclick = () => { S.defaults.extraGroups.push({ title: 'Novo menu', icon: '📁', separator: true, sections: [{ title: 'Nova seção' }] }); drawExtras(); };
     $('set-save').onclick = save;
+    drawTeamDefaults();
     drawTheme(); drawTree(); drawExtras();
     let last = 'prefs'; try { last = localStorage.getItem('bt-settings-panel') || last; } catch (e) { /* nada */ }
     show(which || last);
@@ -201,9 +202,46 @@
     try { await fn(); } finally { btn.disabled = false; if (btn.textContent.startsWith('⏳')) btn.textContent = txt; }
   }
 
+  // ── Padrões da equipe: o que já vem marcado nos books novos e nas importações (BT.data.defaults) ──
+  function drawTeamDefaults() {
+    const box = $('set-team-defaults'); if (!box) return; box.innerHTML = '';
+    const D = BT.data.defaults;
+    const cur = D.load(S.defaults); // de fábrica + o que a equipe já salvou
+    const b = S.defaults.blockDefaults = JSON.parse(JSON.stringify(cur.blocks));
+    const im = S.defaults.importDefaults = JSON.parse(JSON.stringify(cur.import));
+    const chk = (obj, k, label) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: !!obj[k], onchange: (e) => (obj[k] = e.target.checked) }), label]);
+    const inList = (arr, v, label) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: arr.includes(v), onchange: (e) => { const i = arr.indexOf(v); if (e.target.checked && i < 0) arr.push(v); if (!e.target.checked && i >= 0) arr.splice(i, 1); } }), label]);
+    const radio = (obj, k, name, opts) => h('div', { class: 'cprow', role: 'radiogroup' }, opts.map(([v, l]) => h('label', { class: 'cp' }, [h('input', { type: 'radio', name, checked: obj[k] === v, onchange: () => (obj[k] = v) }), l])));
+    box.append(
+      h('div', { class: 'subt' }, '✅ O que já vem marcado nos books novos'),
+      h('div', { class: 'set-help' }, 'Vale para books criados do zero. Um book copiado (⧉ próximo mês) mantém o que estava no original.'),
+      h('div', { class: 'lbl', style: { margin: '10px 0 6px' } }, '📈 Comparativo mensal'),
+      h('div', { class: 'cprow' }, [chk(b, 'compareHideUnchanged', 'Ocultar itens sem mudança')]),
+      h('div', { class: 'set-help' }, 'O comparativo liga sozinho quando existe o book do mês anterior; sem ele, fica desligado.'),
+      h('div', { class: 'lbl', style: { margin: '12px 0 6px' } }, '🛡️ Cloud Security Score (todas as clouds)'),
+      h('div', { class: 'cprow' }, [chk(b.scoreShow, 'recs', '💡 Recomendações'), chk(b.scoreShow, 'alerts', '🚨 Problemas / alertas'), chk(b.scoreShow, 'charts', '📊 Gráficos de risco'),
+        chk(b.scoreShow, 'compare', '↔️ Comparativo com o mês passado'), chk(b.scoreShow, 'evolution', '📈 Gráfico de evolução')]),
+      h('div', { class: 'set-help' }, 'Comparativo e evolução só aparecem quando há pontuação de um mês anterior.'),
+      h('div', { class: 'lbl', style: { margin: '12px 0 6px' } }, '🗺️ Topologia de rede'),
+      radio(b, 'topologyStyle', 'td-topo', [['compact', '▦ Compacto'], ['detailed', '🗺️ Detalhado']]),
+      h('div', { class: 'subt' }, '📥 Importação padrão da equipe'),
+      h('div', { class: 'set-help' }, 'O que já vem marcado ao sincronizar e ao revisar uma importação. Quem salvar os próprios padrões em Usuário › Importação padrão usa os dele.'),
+      h('div', { class: 'lbl', style: { margin: '10px 0 6px' } }, '📡 Zabbix — severidades dos alertas'),
+      h('div', { class: 'cprow' }, [[5, '🟥 Desastre'], [4, '🟧 Alta'], [3, '🟨 Média'], [2, '🟦 Atenção'], [1, 'ℹ️ Informação'], [0, '⬜ Não classificado']].map(([v, l]) => inList(im.zabbixSeverities, v, l))),
+      h('div', { class: 'cprow', style: { marginTop: '6px' } }, [chk(im, 'zabbixAllHosts', 'Incluir servidores sem nenhum alerta no período (Monitoramento)')]),
+      h('div', { class: 'lbl', style: { margin: '12px 0 6px' } }, '🛡️ Segurança — riscos das recomendações e alertas'),
+      h('div', { class: 'cprow' }, (BT.blocks.RISK_LEVELS || []).map(([k, l]) => inList(im.risks, k, l))),
+      h('div', { class: 'lbl', style: { margin: '12px 0 6px' } }, '🗄️ Backup'),
+      radio(im, 'backupMode', 'td-bk', [['policies', 'Só as políticas / agendamentos'], ['jobs', 'Só os backups feitos no mês'], ['both', 'Backups feitos e políticas']]),
+      h('div', { class: 'cprow', style: { marginTop: '10px' } }, [h('button', { type: 'button', class: 'btn btn-ghost btn-xs', onclick: () => { S.defaults.blockDefaults = JSON.parse(JSON.stringify(D.FACTORY.blocks)); S.defaults.importDefaults = JSON.parse(JSON.stringify(D.FACTORY.import)); drawTeamDefaults(); } }, '↺ Voltar ao padrão de fábrica')])
+    );
+  }
+
   async function save() {
     try {
+      if (!S.defaults.importDefaults.zabbixSeverities.length) throw new Error('Escolha ao menos uma severidade do Zabbix nos padrões da equipe.');
       await BT.api.saveSettings({ defaults: S.defaults });
+      BT.data.defaults.load(S.defaults); // vale já nesta tela
       BT.ui.toast('Opções de book salvas ✓ — valem para os próximos books', { type: 'ok' });
     } catch (e) { BT.ui.toast(e.message, { type: 'err' }); }
   }

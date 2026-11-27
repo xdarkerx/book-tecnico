@@ -128,6 +128,8 @@
         try { cfg = (await BT.api.getSettings()).defaults || {}; } catch (e) {}
         applyDefaults(st, tpl.id, cfg);
       }
+      // padrões da equipe nos blocos (comparativo, Cloud Security, topologia). Book copiado não passa por aqui.
+      if (BT.data.defaults) BT.data.defaults.applyToNewBook(st);
       return BT.store.migrate(st);
     },
     applyDefaults

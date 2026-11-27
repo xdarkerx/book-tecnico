@@ -15,13 +15,23 @@
     get isAdmin() { return !A.info.enabled || !!(A.info.user && A.info.user.role === 'admin'); },
     get lockEnabled() { return !!(A.info.lock && A.info.lock.enabled && A.info.user); },
 
-    /** Padrões de importação do usuário (Configurações › Usuário › Importação padrão).
-     *  Com login: ficam no usuário (qualquer computador). Sem login: neste navegador. */
+    /** Padrões de importação: os do usuário (Configurações › Usuário › Importação padrão), se ele salvou;
+     *  senão, os da equipe (Configurações › Opções de book). Com login: no usuário. Sem login: neste navegador. */
     importDefaults() {
-      const DEF = { zabbixSeverities: [0, 1, 2, 3, 4, 5], risks: ['critica', 'alta', 'media', 'baixa', 'info'], newOnly: false, zabbixAllHosts: true, backupMode: 'both' };
+      const team = (BT.data.defaults && BT.data.defaults.import()) || {};
+      const mine = A.myImportDefaults();
+      return Object.assign({}, team, mine || {});
+    },
+    /** Só os padrões que o usuário salvou (null = segue o da equipe). */
+    myImportDefaults() {
       let d = A.info.user && A.info.user.prefs && A.info.user.prefs.importDefaults;
-      if (!d) { try { d = JSON.parse(localStorage.getItem('bt-import-defaults') || 'null'); } catch (e) { d = null; } }
-      return Object.assign({}, DEF, d || {});
+      if (!d && !A.info.user) { try { d = JSON.parse(localStorage.getItem('bt-import-defaults') || 'null'); } catch (e) { d = null; } }
+      return d && Object.keys(d).length ? d : null;
+    },
+    /** Volta a seguir o padrão da equipe. */
+    async resetImportDefaults() {
+      try { localStorage.removeItem('bt-import-defaults'); } catch (e) { /* sem armazenamento */ }
+      if (A.info.user) { await BT.api.savePrefs({ importDefaults: null }); A.info.user.prefs = Object.assign({}, A.info.user.prefs, { importDefaults: null }); }
     },
     async saveImportDefaults(d) {
       try { localStorage.setItem('bt-import-defaults', JSON.stringify(d)); } catch (e) { /* sem armazenamento */ }
@@ -35,6 +45,8 @@
     async init() {
       if (BT.api.mode !== 'server') return true;
       try { A.info = await BT.api.authMe(); } catch (e) { return true; }
+      // padrões da equipe (o que vem marcado nos books novos e nas importações)
+      if (!A.info.enabled || A.info.user) { try { BT.data.defaults.load((await BT.api.getSettings()).defaults || {}); } catch (e) { /* usa os de fábrica */ } }
       const err = new URLSearchParams(location.search).get('login_erro');
       if (A.info.enabled && !A.info.user) { screen(A.info.needsSetup ? 'setup' : 'login', err); return false; }
       const pref = A.info.user && A.info.user.prefs && A.info.user.prefs.theme;

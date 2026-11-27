@@ -137,6 +137,20 @@ assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state
   assert.ok(!/vpc-hml/.test(s2) && !/TRANSIT GATEWAY/.test(s2)); ok('topologia: desenha redes, hub, internet e on-prem; rede oculta (e o hub só dela) sai do desenho');
 }
 
+// padrões da equipe: book novo recebe as opções; bloco com opção gravada (book copiado/antigo) fica como estava
+{
+  BT.data = BT.data || {}; load('defaults.js', 'data');
+  const D = BT.data.defaults;
+  assert.deepStrictEqual(JSON.parse(JSON.stringify([D.import().zabbixSeverities, D.import().zabbixAllHosts, D.import().risks, D.import().backupMode])), [[5, 4], false, ['critica', 'alta'], 'policies']); ok('padrões de fábrica: Zabbix só Desastre e Alta, sem servidores sem alerta, riscos Crítica e Alta, backup só políticas');
+  const st = { groups: [{ sections: [{ blocks: [{ type: 'compare', data: { hideUnchanged: false } }, { type: 'score', data: {} }, { type: 'score', data: { show: { alerts: true } } }, { type: 'topology', data: { style: 'detailed' } }] }] }] };
+  D.applyToNewBook(st);
+  const [cmp, sc, scKept, topo] = st.groups[0].sections[0].blocks.map((b) => b.data);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify([cmp.hideUnchanged, sc.show, scKept.show, topo.style])), [true, { recs: true, alerts: false, charts: true, compare: true, evolution: true }, { alerts: true }, 'compact']);
+  ok('book novo: comparativo oculta itens sem mudança, Cloud Security só com recomendações e gráficos (alertas desligados), topologia compacta');
+  D.load({ blockDefaults: { topologyStyle: 'detailed', scoreShow: { alerts: true } }, importDefaults: { backupMode: 'both' } });
+  assert.deepStrictEqual([D.blocks().topologyStyle, D.blocks().scoreShow.alerts, D.blocks().scoreShow.recs, D.import().backupMode, D.import().zabbixSeverities.length], ['detailed', true, true, 'both', 2]); ok('padrão da equipe salvo nas configurações substitui o de fábrica (o resto continua)');
+  D.load({});
+}
 // comparativo: busca a pontuação nos books dos meses anteriores
 (async () => {
   const books = { '2026-10': { groups: [{ sections: [{ blocks: [{ type: 'score', data: { items: [{ label: 'OCI · Tenancy', value: '80' }, { label: 'Outro', value: '10' }] } }] }] }] }, '2026-09': { groups: [{ sections: [{ blocks: [{ type: 'score', data: { items: [{ label: 'OCI · Tenancy', value: '' }] } }] }] }] } };

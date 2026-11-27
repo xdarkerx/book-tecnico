@@ -352,6 +352,19 @@ Os limites que geram recomendações (padrão CPU 80%, memória 80%, disco 85%) 
 dos triggers é a mesma do book original: falha de coleta, swap, latência de I/O, serviços parados e jobs de
 backup não contam como consumo. Sincronizar de novo **atualiza** os blocos, sem duplicar.
 
+#### Padrões da equipe (o que já vem marcado)
+Em **⚙️ Configurações › Opções de book** ficam os padrões da equipe. Valem para books **criados do zero**; um book
+copiado (⧉ próximo mês) mantém o que estava no original e os books antigos não mudam.
+
+| Onde | Padrão de fábrica |
+|---|---|
+| Comparativo mensal | "Ocultar itens sem mudança" ligado. Liga sozinho quando existe o book do mês anterior; sem ele, fica desligado |
+| Cloud Security Score (todas as clouds) | Recomendações e gráficos de risco ligados; problemas/alertas desligados; comparativo e evolução ligados (só aparecem com pontuação de um mês anterior) |
+| Topologia de rede | Compacto |
+| Sincronização e importação | Zabbix só Desastre e Alta; servidores sem alerta de fora; riscos de segurança só Crítica e Alta; backup só políticas / agendamentos |
+
+Quem salvar os próprios padrões em **Usuário › Importação padrão** usa os dele (com **↺ Voltar ao padrão da equipe**).
+
 #### Topologia de rede (desenho automático)
 Ao sincronizar **🌐 Redes**, cada cloud (e cada conta) ganha no seu **Networking** um bloco **🗺️ Topologia de rede**
 desenhado a partir da API, no lugar da imagem vazia de topologia:

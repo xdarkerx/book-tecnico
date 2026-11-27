@@ -58,6 +58,24 @@
     return true;
   }
 
+  /** Ao abrir o book (e antes do book automático exportar): busca o book do mês de comparação em todos os blocos.
+   *  Sem book naquele mês, o comparativo fica desligado; com book, ligado — a não ser que o usuário tenha mudado na mão. */
+  async function autoRefresh(state) {
+    let changed = false;
+    for (const g of (state && state.groups) || []) for (const s of g.sections || []) for (const b of s.blocks || []) {
+      if (b.type !== 'compare') continue;
+      const d = b.data;
+      const before = JSON.stringify([d.prev && d.prev.metrics, d.prev && d.prev.key, d.enabled]);
+      try { await refresh(d); } catch (e) { continue; }
+      if (!d.userToggled) d.enabled = !d.prev.missing;
+      if (JSON.stringify([d.prev && d.prev.metrics, d.prev && d.prev.key, d.enabled]) !== before) changed = true;
+    }
+    return changed;
+  }
+  BT.on && BT.on('session:opened', async () => {
+    try { if (await autoRefresh(BT.store.state)) BT.store.commit(null, 'compare-auto'); } catch (e) { /* sem servidor */ }
+  });
+
   /** Linhas do comparativo: [{id,label,prev,cur,diff}] */
   function rowsOf(d, state) {
     const cur = metricsOf(state || BT.store.state);
@@ -100,7 +118,7 @@
       if (!rows.length) return true;
       return !!d.hideIfNoDiff && rows.every((r) => r.diff === 0);
     },
-    metricsOf, rowsOf,
+    metricsOf, rowsOf, autoRefresh,
 
     editor(block, ctx) {
       const d = block.data;
@@ -109,7 +127,7 @@
       const k = curKey();
 
       // ── liga/desliga ──
-      const onOff = h('label', { class: 'switch cmp-switch' }, [h('input', { type: 'checkbox', checked: d.enabled !== false, onchange: (e) => { d.enabled = e.target.checked; body.style.display = d.enabled ? '' : 'none'; ctx.save(); } }), h('b', {}, 'Ativar comparativo neste book')]);
+      const onOff = h('label', { class: 'switch cmp-switch' }, [h('input', { type: 'checkbox', checked: d.enabled !== false, onchange: (e) => { d.enabled = e.target.checked; d.userToggled = true; body.style.display = d.enabled ? '' : 'none'; ctx.save(); } }), h('b', {}, 'Ativar comparativo neste book')]);
 
       // ── mês de comparação ──
       const status = h('span', { class: 'cmp-status' });
