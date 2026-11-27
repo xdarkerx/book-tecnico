@@ -13,7 +13,7 @@
       // Cloud Security Score: recomendações e gráficos de risco ligados; problemas/alertas desligados (muitos itens);
       // comparativo e evolução ligados, mas só aparecem quando há pontuação de um mês anterior
       scoreShow: { recs: true, alerts: false, charts: true, compare: true, evolution: true },
-      topologyStyle: 'compact'
+      topologyStyle: 'tree' // hierárquico: raiz → switches/hubs → redes, com ícones
     },
     import: {
       zabbixSeverities: [5, 4],   // Desastre e Alta
@@ -48,7 +48,7 @@
       if (!blk || !blk.data) return blk;
       if (blk.type === 'compare') blk.data.hideUnchanged = !!b.compareHideUnchanged;
       if (blk.type === 'score' && !blk.data.show) blk.data.show = Object.assign({}, b.scoreShow);
-      if (blk.type === 'topology') blk.data.style = b.topologyStyle || 'compact';
+      if (blk.type === 'topology') blk.data.style = b.topologyStyle || 'tree';
       return blk;
     }
   };

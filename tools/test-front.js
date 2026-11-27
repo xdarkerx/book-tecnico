@@ -123,10 +123,12 @@ assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state
   const T = BT.blocks.get('topology');
   const d = { title: 'Topologia', provider: 'aws', model: { networks: [{ id: 'a', name: 'vpc-prd', cidr: '10.0.0.0/16', subnets: [{ name: 'pub', cidr: '10.0.1.0/24', public: true }], gateways: [{ type: 'Internet GW', name: '' }] }, { id: 'b', name: 'vpc-hml', cidr: '10.1.0.0/16', subnets: [], gateways: [] }],
     hubs: [{ id: 'tgw', type: 'Transit Gateway', name: 'tgw-core' }], links: [{ a: 'a', b: 'internet', type: 'internet' }, { a: 'b', b: 'tgw', type: 'attach' }, { a: 'tgw', b: 'onprem', type: 'vpn', label: 'VPN · matriz' }] } };
-  const c = T.svg(d); // compacto (padrão)
+  const tr = T.svg(d); // hierárquico (padrão): raiz, switch do hub e redes com ícones
+  assert.ok(/<path d="M/.test(tr) && /TRANSIT GATEWAY/.test(tr) && /vpc-prd/.test(tr) && /vpc-hml/.test(tr) && /on-premises: VPN/.test(tr) && />AWS</.test(tr)); ok('topologia hierárquica (padrão): raiz, switch do hub com o on-premises e as redes ligadas por linhas');
+  const c = T.svg(Object.assign({}, d, { style: 'compact', styleByUser: true })); // compacto, escolhido no editor
   assert.ok(/vpc-prd/.test(c) && /TRANSIT GATEWAY/.test(c) && /1 rede anexada · on-premises:/.test(c) && />VPN</.test(c) && !/ON-PREMISES/.test(c) && />TGW</.test(c) && />Internet</.test(c) && />NAT</.test(c) === false && !/10\.0\.1\.0\/24/.test(c) && /1 subnet \(1 púb\.\)/.test(c));
-  assert.ok(/10\.0\.1\.0\/24/.test(T.svg(Object.assign({}, d, { style: 'compact', showSubnets: true })))); ok('topologia compacta: cartões com etiquetas (Internet, TGW), hub com redes anexadas, subnets só se pedir');
-  d.style = 'detailed';
+  assert.ok(/10\.0\.1\.0\/24/.test(T.svg(Object.assign({}, d, { style: 'compact', styleByUser: true, showSubnets: true })))); ok('topologia compacta: cartões com etiquetas (Internet, TGW), hub com redes anexadas, subnets só se pedir');
+  d.style = 'detailed'; d.styleByUser = true;
   const s = T.svg(d);
   assert.ok(/vpc-prd/.test(s) && /vpc-hml/.test(s) && /TRANSIT GATEWAY/.test(s) && />Internet</.test(s) && /On-premises/.test(s) && /VPN · matriz/.test(s));
   assert.ok(T.isEmpty({ data: { model: { networks: [] } } }) && !T.isEmpty({ data: d }));
@@ -145,8 +147,8 @@ assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state
   const st = { groups: [{ sections: [{ blocks: [{ type: 'compare', data: { hideUnchanged: false } }, { type: 'score', data: {} }, { type: 'score', data: { show: { alerts: true } } }, { type: 'topology', data: { style: 'detailed' } }] }] }] };
   D.applyToNewBook(st);
   const [cmp, sc, scKept, topo] = st.groups[0].sections[0].blocks.map((b) => b.data);
-  assert.deepStrictEqual(JSON.parse(JSON.stringify([cmp.hideUnchanged, sc.show, scKept.show, topo.style])), [true, { recs: true, alerts: false, charts: true, compare: true, evolution: true }, { alerts: true }, 'compact']);
-  ok('book novo: comparativo oculta itens sem mudança, Cloud Security só com recomendações e gráficos (alertas desligados), topologia compacta');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify([cmp.hideUnchanged, sc.show, scKept.show, topo.style])), [true, { recs: true, alerts: false, charts: true, compare: true, evolution: true }, { alerts: true }, 'tree']);
+  ok('book novo: comparativo oculta itens sem mudança, Cloud Security só com recomendações e gráficos (alertas desligados), topologia hierárquica');
   D.load({ blockDefaults: { topologyStyle: 'detailed', scoreShow: { alerts: true } }, importDefaults: { backupMode: 'both' } });
   assert.deepStrictEqual([D.blocks().topologyStyle, D.blocks().scoreShow.alerts, D.blocks().scoreShow.recs, D.import().backupMode, D.import().zabbixSeverities.length], ['detailed', true, true, 'both', 2]); ok('padrão da equipe salvo nas configurações substitui o de fábrica (o resto continua)');
   D.load({});

@@ -388,11 +388,10 @@ desenhado a partir da API, no lugar da imagem vazia de topologia:
 | Azure | VNets e subnets, gateway de VPN/ExpressRoute, Azure Firewall, Bastion, NAT, peerings e conexões VPN/ExpressRoute |
 | GCP | Redes VPC e subnets por região, Cloud NAT, Cloud VPN, Interconnect, peerings e saída para a internet |
 
-Dois estilos: **Compacto** (padrão: um cartão pequeno por rede, com etiquetas de Internet, DRG/Transit Gateway, peering,
-VPN e gateways; os DRGs/Transit Gateways aparecem em cartões com as redes anexadas e as ligações com o on-premises,
-como "VPN ×6" e "FastConnect") e **Detalhado** (subnets e linhas até cada rede). No editor
-dá para trocar o estilo, esconder redes e ligar/desligar subnets e gateways. Essas escolhas continuam na próxima
-sincronização. O desenho sai igual no HTML e no PDF, e como imagem no Word.
+Três estilos: **Hierárquico** (padrão: árvore de cima para baixo — a cloud ou o vCenter no topo, os switches/hubs
+como vDS, vSwitch, DRG e Transit Gateway desenhados como equipamentos, e as redes embaixo, com linhas em ângulo reto),
+**Compacto** (cartões com etiquetas) e **Detalhado** (subnets e linhas até cada rede). No editor dá para trocar o
+estilo, esconder redes e ligar/desligar subnets e gateways; a escolha feita no editor continua na próxima sincronização.
 
 #### Vulnerabilidades (CVEs): clouds, Wazuh e Microsoft Defender
 A seção **Operações › Vulnerabilidades** recebe uma linha por **CVE**, com severidade, CVSS, servidores afetados,

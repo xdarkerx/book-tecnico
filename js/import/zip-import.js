@@ -259,7 +259,10 @@
 
       const sectionFor = (it) => {
         if (it.dest !== '__new__') return findSec(T, it.dest).section;
-        const key = (it.provider || '') + '|' + (it.account || '') + '|' + it.newTitle;
+        const cloudP0 = it.provider && !it.global && it.provider !== 'generic' && !BT.data.providers[it.provider]?.tool;
+        // nome final antes da chave: a planilha ("Redes") e a topologia ("Networking") da mesma conta caem na MESMA seção
+        if (cloudP0 && /^redes?$/i.test(norm(it.newTitle || ''))) it.newTitle = 'Networking';
+        const key = (it.provider || '') + '|' + (it.account || '') + '|' + norm(it.newTitle);
         if (newSections[key]) return newSections[key];
         const cloudP = it.provider && !it.global && it.provider !== 'generic' && !BT.data.providers[it.provider]?.tool;
         let g = cloudP ? accountGroups(T, it)[0] || null : null;
@@ -358,7 +361,7 @@
             fresh.forEach((b) => { if (b.type === 'score' && prev && prev.type === 'score') ['show', 'compareWith', 'note'].forEach((k) => { if (prev.data[k] !== undefined) b.data[k] = prev.data[k]; }); });
             // bloco novo sem anterior: opções padrão da equipe
             fresh.forEach((b) => { if (b.type === 'score' && !b.data.show && BT.data.defaults) BT.data.defaults.applyToBlock(b); });
-            fresh.forEach((b) => { if (b.type === 'topology' && prev && prev.type === 'topology') ['title', 'hidden', ...(prev.data.style ? ['style', 'showSubnets', 'showGateways'] : [])].forEach((k) => { if (prev.data[k] !== undefined) b.data[k] = prev.data[k]; }); });
+            fresh.forEach((b) => { if (b.type === 'topology' && prev && prev.type === 'topology') ['title', 'hidden', ...(prev.data.styleByUser ? ['style', 'styleByUser', 'showSubnets', 'showGateways'] : [])].forEach((k) => { if (prev.data[k] !== undefined) b.data[k] = prev.data[k]; }); });
             sec.blocks.splice(at, 0, ...fresh);
           }
           if (it.kind === 'image') {
