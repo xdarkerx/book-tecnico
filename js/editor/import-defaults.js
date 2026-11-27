@@ -9,12 +9,13 @@
   function render() {
     const box = document.getElementById('set-import'); if (!box) return; box.innerHTML = '';
     const d = BT.auth.importDefaults();
+    const own = !!BT.auth.myImportDefaults(); // o usuário tem padrões próprios? (senão segue o da equipe)
     const sev = new Set(d.zabbixSeverities.map(Number));
     const risks = new Set(d.risks);
     const chk = (set, v, label) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: set.has(v), onchange: (e) => (e.target.checked ? set.add(v) : set.delete(v)) }), label]);
     const allHosts = h('input', { type: 'checkbox', checked: d.zabbixAllHosts !== false });
     let newOnly = !!d.newOnly;
-    let backupMode = d.backupMode || 'both';
+    let backupMode = d.backupMode || 'policies';
     const msg = h('div');
     const save = async () => {
       msg.innerHTML = '';
@@ -29,6 +30,8 @@
         h('div', { class: 'subt', style: { marginTop: 0 } }, '📥 Importação padrão'),
         h('div', { class: 'set-help' }, ['O que já vem marcado ao sincronizar e ao revisar uma importação, em todos os books. Dá para mudar em cada importação. ',
           BT.auth.user ? 'Fica salvo no seu usuário (vale em qualquer computador).' : 'Sem login, fica salvo neste navegador.']),
+        h('div', { class: 'db-pill ' + (own ? 'warn' : 'ok'), style: { margin: '8px 0' } }, own ? '✏️ Você está usando os seus padrões (não os da equipe).' : '👥 Seguindo o padrão da equipe (Configurações › Opções de book). Salvar aqui cria os seus.'),
+        own ? h('button', { type: 'button', class: 'btn btn-ghost btn-xs', onclick: async () => { await BT.auth.resetImportDefaults(); BT.ui.toast('Voltou a seguir o padrão da equipe ✓', { type: 'ok' }); render(); } }, '↺ Voltar ao padrão da equipe') : null,
         h('div', { class: 'lbl', style: { margin: '14px 0 8px' } }, '📡 Zabbix — severidades dos alertas'),
         h('div', { class: 'cprow' }, ZSEV.map(([v, l]) => chk(sev, v, l))),
         h('label', { class: 'switch', style: { marginTop: '10px' } }, [allHosts, 'Incluir servidores sem nenhum alerta no período (Monitoramento)']),
@@ -38,7 +41,7 @@
         h('div', { class: 'cprow', role: 'radiogroup' }, [[false, 'Todos os recursos'], [true, 'Só os criados no mês do book']].map(([v, l]) =>
           h('label', { class: 'cp' }, [h('input', { type: 'radio', name: 'imp-scope', checked: newOnly === v, onchange: () => (newOnly = v) }), l]))),
         h('div', { class: 'lbl', style: { margin: '18px 0 8px' } }, '🗄️ Backup'),
-        h('div', { class: 'cprow', role: 'radiogroup' }, [['both', 'Backups feitos e políticas'], ['jobs', 'Só os backups feitos no mês'], ['policies', 'Só as políticas / agendamentos']].map(([v, l]) =>
+        h('div', { class: 'cprow', role: 'radiogroup' }, [['policies', 'Só as políticas / agendamentos'], ['jobs', 'Só os backups feitos no mês'], ['both', 'Backups feitos e políticas']].map(([v, l]) =>
           h('label', { class: 'cp' }, [h('input', { type: 'radio', name: 'imp-bk', checked: backupMode === v, onchange: () => (backupMode = v) }), l]))),
         h('div', { class: 'set-help', style: { marginTop: '8px' } }, 'Os backups feitos são sempre só os do mês do book.')
       ]),

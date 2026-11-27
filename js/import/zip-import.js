@@ -323,7 +323,8 @@
             // score: ZIP e API se substituem (origens "score-…"); um bloco feito à mão (sem origem) fica
             const same = (b) => b.data && b.data.origin && (b.data.origin === it.origin || (/^score-/.test(it.origin) && b.type === 'score' && /^score-/.test(b.data.origin)));
             let at = sec.blocks.findIndex(same);
-            const prev = at >= 0 ? sec.blocks[at] : null;
+            // bloco anterior: o da mesma origem ou o vazio do template que este vai substituir (herda as opções dele)
+            const prev = at >= 0 ? sec.blocks[at] : (it.replaceEmptyType && sec.blocks.find((b) => b.type === it.replaceEmptyType && BT.blocks.isEmpty(b))) || null;
             sec.blocks = sec.blocks.filter((b) => !same(b) && !(it.replaceEmptyType && b.type === it.replaceEmptyType && BT.blocks.isEmpty(b)));
             if (at < 0 || at > sec.blocks.length) at = 0;
             const fresh = it.blocks.map((b) => Object.assign(BT.core.utils.clone(b), { id: BT.uid('blk'), include: true }));
@@ -333,6 +334,8 @@
             // topologia: mantém o que foi ajustado no mês anterior (título, redes ocultas, subnets/gateways)
             // score: mantém o que mostrar no book e o mês escolhido para o comparativo
             fresh.forEach((b) => { if (b.type === 'score' && prev && prev.type === 'score') ['show', 'compareWith', 'note'].forEach((k) => { if (prev.data[k] !== undefined) b.data[k] = prev.data[k]; }); });
+            // bloco novo sem anterior: opções padrão da equipe
+            fresh.forEach((b) => { if (b.type === 'score' && !b.data.show && BT.data.defaults) BT.data.defaults.applyToBlock(b); });
             fresh.forEach((b) => { if (b.type === 'topology' && prev && prev.type === 'topology') ['title', 'hidden', ...(prev.data.style ? ['style', 'showSubnets', 'showGateways'] : [])].forEach((k) => { if (prev.data[k] !== undefined) b.data[k] = prev.data[k]; }); });
             sec.blocks.splice(at, 0, ...fresh);
           }
