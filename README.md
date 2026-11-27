@@ -353,7 +353,7 @@ dos triggers é a mesma do book original: falha de coleta, swap, latência de I/
 backup não contam como consumo. Sincronizar de novo **atualiza** os blocos, sem duplicar.
 
 #### Padrões da equipe (o que já vem marcado)
-Em **⚙️ Configurações › Opções de book** ficam os padrões da equipe. Valem para books **criados do zero**; um book
+Em **⚙️ Configurações › Administrador › 📋 Padrões da equipe** (só administradores) ficam os padrões da equipe. Valem para books **criados do zero**; um book
 copiado (⧉ próximo mês) mantém o que estava no original e os books antigos não mudam.
 
 | Onde | Padrão de fábrica |

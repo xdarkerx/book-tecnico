@@ -242,7 +242,12 @@ async function api(req, res, url) {
     // "Sair" do ícone da bandeja (BookTecnico.exe): fecha o banco direitinho antes de encerrar
     case 'POST /api/local/quit': if (!LOCAL) break; send(res, 200, { ok: true }); setTimeout(() => shutdown('Sair'), 100); return;
     case 'GET /api/settings': return send(res, 200, await storage.getSettings());
-    case 'PUT /api/settings': return send(res, 200, await storage.saveSettings(await readBody(req)));
+    case 'PUT /api/settings': {
+      const b = await readBody(req);
+      // padrões da equipe (o que vem marcado nos books novos e nas importações): só administradores, com login ligado
+      if (auth.enabled() && me && me.user.role !== 'admin' && b && b.defaults) { delete b.defaults.blockDefaults; delete b.defaults.importDefaults; }
+      return send(res, 200, await storage.saveSettings(b));
+    }
     case 'GET /api/settings/storage': return send(res, 200, await storage.status());
     case 'POST /api/settings/storage': {
       const b = await readBody(req); const from = storage.kind();

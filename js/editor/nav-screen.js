@@ -265,6 +265,8 @@
     let conns = null;
     if (BT.api.mode === 'server' && F.cliente) { try { conns = await BT.api.getConnections(F.cliente); } catch (e) {} }
     const configured = conns ? Object.entries(conns.providers || {}).filter(([, c]) => c && c.enabled !== false).map(([p]) => p) : [];
+    F.sync = configured.length > 0; // com conexões feitas, puxar os dados já vem marcado
+    const provLabels = [...new Set(configured.map((p) => (BT.data.providers[p.split('~')[0]] || { label: p }).label))].join(', '); // "aws~hml" = 2ª conta da AWS
 
     const areaIn = h('input', { class: 'inp', list: 'dl-areas-nb', value: F.area, placeholder: 'ex.: InfraCloud', oninput: (e) => { F.area = e.target.value; F.areaTouched = true; } });
     const tplGrid = h('div', { class: 'tpl-grid' });
@@ -313,7 +315,7 @@
         tplGrid,
         clientBooks.length ? h('div', { class: 'nb-copy' }, [h('span', { class: 'lbl' }, 'Ou copiar de um book anterior'), copySel,
           h('select', { class: 'inp inp-sm', onchange: (e) => (F.copyMode = e.target.value) }, [h('option', { value: 'structure' }, 'Estrutura e textos'), h('option', { value: 'all' }, 'Tudo (inclusive dados)')])]) : null,
-        configured.length ? h('label', { class: 'switch', style: { marginTop: '14px' } }, [h('input', { type: 'checkbox', onchange: (e) => (F.sync = e.target.checked) }), `Puxar dados da cloud ao criar (${configured.map((p) => BT.data.providers[p].label).join(', ')})`]) : null
+        configured.length ? h('label', { class: 'switch', style: { marginTop: '14px' } }, [h('input', { type: 'checkbox', checked: F.sync, onchange: (e) => (F.sync = e.target.checked) }), `Puxar dados da cloud ao criar (${provLabels})`]) : null
       ],
       footer: [
         h('button', { class: 'btn btn-ghost btn-sm', onclick: () => m.close() }, 'Cancelar'),
