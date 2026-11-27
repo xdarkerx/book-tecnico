@@ -109,7 +109,7 @@ function serveStatic(req, res, pathname) {
 }
 
 // ── credenciais: nunca devolvemos segredos ao navegador ────
-const SECRET = { oci: ['keyPem', 'passphrase'], aws: ['secretAccessKey', 'sessionToken'], azure: ['clientSecret'], gcp: ['serviceAccountJson'], zabbix: ['apiToken', 'password'], glpi: ['appToken', 'userToken', 'password'], wazuh: ['password', 'indexerPassword'], defender: ['clientSecret'] };
+const SECRET = { oci: ['keyPem', 'passphrase'], aws: ['secretAccessKey', 'sessionToken'], azure: ['clientSecret'], gcp: ['serviceAccountJson'], vmware: ['password'], zabbix: ['apiToken', 'password'], glpi: ['appToken', 'userToken', 'password'], wazuh: ['password', 'indexerPassword'], defender: ['clientSecret'] };
 const MASK = '••••••••';
 // várias contas por provedor: "aws" é a primeira, "aws~xyz" as demais (ex.: PRD e HML)
 const provType = (k) => String(k || '').split('~')[0];

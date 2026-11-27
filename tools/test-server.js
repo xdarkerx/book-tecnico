@@ -741,6 +741,54 @@ async function main() {
   });
   const zt = (await cloudIdx.pull('azure', { tenantId: 't3', clientId: 'c', clientSecret: 's' }, ['network'])).results.find((s) => s.kind === 'topology').topology;
   assert.deepStrictEqual([zt.networks[0].gateways.map((g) => g.type).join(','), zt.networks[0].subnets.map((s) => s.name).join(','), zt.links.map((l) => l.type).sort().join(',')], ['VPN / ExpressRoute GW,NAT GW', 'snet-app', 'peering,vpn']); ok('Azure: topologia com GatewaySubnet como gateway, NAT, peering e VPN do gateway');
+
+  // ── VMware vCenter (menu On-Premises) ──
+  const vcHits = [];
+  const vcFetch = (style) => { global.fetch = async (url, o = {}) => {
+    const u = new URL(String(url)); const J = (b, st = 200) => new Response(JSON.stringify(b), { status: st });
+    const p = u.pathname; vcHits.push((o.method || 'GET') + ' ' + p + u.search);
+    if (style === 'rest' && p.startsWith('/api/')) return J({ error_type: 'NOT_FOUND' }, 404);
+    const wrap = (b) => (style === 'rest' ? { value: b } : b);
+    if (p.endsWith('/session') && o.method === 'POST') { assert.ok(/^Basic /.test(o.headers.authorization)); return J(style === 'rest' ? { value: 'T2' } : 'TOKEN'); }
+    if (o.method === 'DELETE') return J({});
+    assert.strictEqual(o.headers['vmware-api-session-id'], style === 'rest' ? 'T2' : 'TOKEN');
+    const q = Object.fromEntries(u.searchParams); const path = p.replace(/^\/(api|rest)/, '');
+    if (path === '/vcenter/datacenter') return J(wrap([{ datacenter: 'dc-1', name: 'DC-SP' }]));
+    if (path === '/vcenter/cluster') return J(wrap([{ cluster: 'domain-c1', name: 'Cluster-PRD' }, { cluster: 'domain-c2', name: 'Cluster-HML' }]));
+    if (path === '/vcenter/host') return J(wrap(q.clusters === 'domain-c1' ? [{ host: 'host-1', name: 'esx01' }] : q.clusters === 'domain-c2' ? [{ host: 'host-2', name: 'esx02' }]
+      : [{ host: 'host-1', name: 'esx01' }, { host: 'host-2', name: 'esx02' }, { host: 'host-3', name: 'esx03-standalone' }]));
+    if (path === '/vcenter/vm' && q.hosts) return J(wrap({ 'host-1': [{ vm: 'vm-1', name: 'SRV-SQL-01', power_state: 'POWERED_ON', cpu_count: 4, memory_size_MiB: 16384 }], 'host-2': [{ vm: 'vm-2', name: 'SRV-APP-HML', power_state: 'POWERED_OFF', cpu_count: 2, memory_size_MiB: 4096 }] }[q.hosts] || []));
+    if (path === '/vcenter/vm') return J(wrap([{ vm: 'vm-1' }, { vm: 'vm-2' }]));
+    if (path === '/vcenter/vm/vm-1/guest/identity') return J(wrap({ ip_address: '10.0.0.10', full_name: { default_message: 'Microsoft Windows Server 2019 (64-bit)' }, host_name: 'srv-sql-01.local' }));
+    if (path === '/vcenter/vm/vm-2/guest/identity') return J({ error_type: 'SERVICE_UNAVAILABLE' }, 503); // VM desligada / sem VMware Tools
+    if (path === '/vcenter/vm/vm-2') return J(wrap({ guest_OS: 'RHEL_8_64' }));
+    if (path === '/vcenter/datastore') return J(wrap([{ name: 'DS-01', type: 'VMFS', capacity: 1099511627776, free_space: 274877906944 }]));
+    if (path === '/vcenter/network') return J(wrap([{ name: 'VLAN10-PRD', type: 'DISTRIBUTED_PORTGROUP' }]));
+    if (path === '/appliance/system/version') return J(wrap({ version: '8.0.2', build: '22617221' }));
+    return J({ error_type: 'NOT_FOUND' }, 404);
+  }; };
+  const vcfg = { url: 'https://vcenter.local/', user: 'leitura@vsphere.local', password: 'x' };
+  vcFetch('api');
+  const vsrv = (await cloudIdx.pull('vmware', vcfg, ['servers'])).results[0].rows;
+  const sql = vsrv.find((r) => r.VM === 'SRV-SQL-01'), app = vsrv.find((r) => r.VM === 'SRV-APP-HML');
+  assert.deepStrictEqual([vsrv.length, sql['Primary IP Address'], sql['OS according to the VMware Tools'], sql.Powerstate, sql.Cluster, sql.Host, sql.Datacenter, sql.CPUs, sql.Memory],
+    [2, '10.0.0.10', 'Microsoft Windows Server 2019 (64-bit)', 'poweredOn', 'Cluster-PRD', 'esx01', 'DC-SP', '4', '16384']);
+  assert.deepStrictEqual([app.Powerstate, app['OS according to the VMware Tools'], app['Primary IP Address']], ['poweredOff', 'rhel 8 64', '']); ok('vCenter: VMs com IP e SO do VMware Tools, cluster, host e datacenter (sem Tools: SO da configuração)');
+  assert.ok(vcHits.some((h) => /^DELETE \/api\/session/.test(h))); ok('vCenter: encerra a sessão no fim');
+  const only = (await cloudIdx.pull('vmware', Object.assign({}, vcfg, { clusters: 'cluster-prd' }), ['servers'])).results[0].rows;
+  assert.deepStrictEqual(only.map((r) => r.VM), ['SRV-SQL-01']); ok('vCenter: filtro por cluster');
+  const vst = (await cloudIdx.pull('vmware', vcfg, ['storage'])).results[0].rows[0];
+  assert.deepStrictEqual([vst.Name, vst['Capacity MiB'], vst['In Use MiB'], vst.Type], ['DS-01', '1048576', '786432', 'Datastore VMFS']); ok('vCenter: datastores com capacidade e uso (formato RVTools)');
+  const vall = await cloudIdx.pull('vmware', vcfg, ['network', 'tenant', 'backup', 'score', 'vulns']);
+  assert.deepStrictEqual([vall.errors.length, vall.results.map((r) => r.kind).join(','), vall.results[0].rows[0]['Port Group']], [0, 'network,tenant', 'VLAN10-PRD']);
+  const vten = vall.results[1].rows[0];
+  assert.deepStrictEqual([vten.vCenter, vten['Versão'], vten.Clusters, vten['Hosts ESXi'], vten.VMs], ['vcenter.local', '8.0.2 build 22617221', 'Cluster-PRD, Cluster-HML', '3', '2 (1 ligadas)']);
+  ok('vCenter: redes, Geral (versão, clusters, hosts e VMs); backup, Security Score e CVEs ficam de fora sem erro');
+  vcFetch('rest'); vcHits.length = 0;
+  const vold = (await cloudIdx.pull('vmware', vcfg, ['servers'])).results[0].rows;
+  assert.ok(vold.length === 2 && vcHits.some((h) => h.startsWith('POST /rest/com/vmware/cis/session'))); ok('vCenter 6.5–7.0: usa a API antiga (/rest) quando a nova não existe');
+  const tst = await cloudIdx.test('vmware', vcfg);
+  assert.ok(tst.ok && /API antiga/.test(tst.message) && /3 host/.test(tst.message), tst.message); ok('vCenter: testar conexão mostra a versão da API, hosts e VMs');
   global.fetch = realFetch;
   console.log(`\n${passed} testes ok`);
 }

@@ -14,7 +14,8 @@
     oci: ['Tenancy', 'OCID', 'Região principal', 'Regiões assinadas', 'Descrição'],
     aws: ['Conta', 'Account ID', 'Alias', 'ARN', 'Regiões'],
     azure: ['Tenant', 'Tenant ID', 'Assinatura', 'Subscription ID', 'Estado'],
-    gcp: ['Projeto', 'Project ID', 'Número', 'Organização / Pasta']
+    gcp: ['Projeto', 'Project ID', 'Número', 'Organização / Pasta'],
+    vmware: ['vCenter', 'Versão', 'Datacenters', 'Clusters', 'Hosts ESXi', 'VMs']
   };
   BT.data.TENANT_COLUMNS = TENANT;
 

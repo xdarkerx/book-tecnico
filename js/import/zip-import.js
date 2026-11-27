@@ -121,7 +121,13 @@
   /** Menus da cloud/conta do item. A 1ª conta (primary) assume o menu da cloud ainda sem conta (ex.: "AWS" vira "AWS · PRD"). */
   function accountGroups(T, it) {
     const exact = T.groups.filter((g) => g.provider === it.provider && (g.account || '') === (it.account || ''));
-    if (exact.length || !it.account || !it.primary) return exact;
+    if (exact.length) return exact;
+    // vCenter: o menu "On-Premises" do book (mesmo sem provedor marcado, ex.: "On-Prem", "On Premise")
+    if (it.provider === 'vmware' && (!it.account || it.primary)) {
+      const onprem = T.groups.filter((g) => !g.provider && /on.?prem/i.test(g.title || ''));
+      if (onprem.length) return onprem; // usa o menu como está (título e aparência do book não mudam)
+    }
+    if (!it.account || !it.primary) return exact;
     return T.groups.filter((g) => g.provider === it.provider && !g.account);
   }
 
@@ -257,7 +263,7 @@
         const cloudP = it.provider && !it.global && it.provider !== 'generic' && !BT.data.providers[it.provider]?.tool;
         let g = cloudP ? accountGroups(T, it)[0] || null : null;
         if (!g && it.groupHint) g = T.groups.find((x) => norm(x.title).includes(norm(it.groupHint)));
-        if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: p.label + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true });
+        if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: (it.provider === 'vmware' ? 'VMware / On-Prem' : p.label) + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true });
           // fica logo depois do último menu da mesma cloud (ex.: AWS · HML depois de AWS · PRD)
           const last = T.groups.map((x) => x.provider).lastIndexOf(it.provider);
           if (last >= 0) T.groups.splice(last + 1, 0, g); else T.groups.push(g);
@@ -291,7 +297,7 @@
         for (const it of items.filter((i) => i.include && i.account && i.primary)) {
           if (T.groups.some((g) => g.provider === it.provider && g.account === it.account)) continue;
           const g = T.groups.find((x) => x.provider === it.provider && !x.account);
-          if (g) { g.account = it.account; g.title = (BT.data.providers[it.provider]?.label || g.title) + ' · ' + it.account; }
+          if (g) { g.account = it.account; g.title = (it.provider === 'vmware' ? 'VMware / On-Prem' : BT.data.providers[it.provider]?.label || g.title) + ' · ' + it.account; }
         }
         for (const it of items.filter((i) => i.include)) {
           if (it.kind === 'logo') { T.meta.logoCliente = await U.compressImage(await U.readAsDataURL(await it.entry.file()), 600); continue; }
