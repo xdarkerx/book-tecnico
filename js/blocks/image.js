@@ -81,7 +81,7 @@
     render(b, ctx) {
       const d = b.data;
       return BT.blocks.titleHtml(b, ctx) + `<div class="bimgs l-${d.layout || 'grid2'}">` + d.images.map((im) =>
-        `<figure class="biitem" style="margin:0"><img src="${im.src}" alt="${BT.esc(im.caption || im.name || '')}">${im.caption ? `<figcaption class="bicap">${BT.esc(im.caption)}</figcaption>` : ''}</figure>`).join('') + '</div>';
+        `<figure class="biitem" style="margin:0"><img src="${BT.safeSrc(im.src)}" alt="${BT.esc(im.caption || im.name || '')}">${im.caption ? `<figcaption class="bicap">${BT.esc(im.caption)}</figcaption>` : ''}</figure>`).join('') + '</div>';
     },
 
     /** Word: grade em tabela, largura em px (o Word ignora max-width). */
@@ -93,7 +93,7 @@
       for (let i = 0; i < d.images.length; i += cols) {
         rows += '<tr>' + d.images.slice(i, i + cols).map((im) => {
           const dims = im._w && im._h ? `width="${w}" height="${Math.round(w * im._h / im._w)}"` : `width="${w}"`;
-          return `<td width="${Math.floor(100 / cols)}%" valign="top" style="padding:4pt;border:1px solid #e8e6f8"><img src="${im.src}" ${dims} style="display:block">` +
+          return `<td width="${Math.floor(100 / cols)}%" valign="top" style="padding:4pt;border:1px solid #e8e6f8"><img src="${BT.safeSrc(im.src)}" ${dims} style="display:block">` +
             (im.caption ? `<p style="margin:3pt 0 0;font-family:Arial;font-size:8pt;color:#6a7294">${BT.esc(im.caption)}</p>` : '') + '</td>';
         }).join('') + '</tr>';
       }

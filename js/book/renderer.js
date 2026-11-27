@@ -53,7 +53,7 @@
     html.push('<div class="book-page-rule"></div>');
     html.push(`<div class="bcov">
       <div class="bd1"></div><div class="bd2"></div><div class="bcov-line"></div><div class="bcov-edge"></div>
-      <div class="blr"><img src="${BT.data.LOGO_WHITE}" alt="inventCloud">${M.logoCliente ? `<img class="client-logo" src="${M.logoCliente}" alt="">` : ''}</div>
+      <div class="blr"><img src="${BT.data.LOGO_WHITE}" alt="inventCloud">${BT.safeSrc(M.logoCliente) ? `<img class="client-logo" src="${BT.safeSrc(M.logoCliente)}" alt="">` : ''}</div>
       <div class="bclbl">Book Técnico</div>
       <div class="bcn">${esc(M.nome)}</div>
       ${M.subtitulo ? `<div class="bcs">${esc(M.subtitulo)}</div>` : ''}
@@ -79,7 +79,7 @@
       if (group.separator) {
         html.push(`<div class="bwl-sep"><div class="bwl-sep-line"></div><div class="bwl-sep-body">
           <div class="bwl-sep-label">inventCloud · Book Técnico</div>
-          <div class="bwl-sep-title">${esc(group.provider ? BT.data.providers[group.provider].display + (group.account ? ' · ' + group.account : '') : group.title)}</div>
+          <div class="bwl-sep-title">${esc(group.provider && BT.data.providers[group.provider] ? BT.data.providers[group.provider].display + (group.account ? ' · ' + group.account : '') : group.title)}</div>
           <div class="bwl-sep-sub">${esc(group.subtitle || `Ambiente: ${M.nome} · ${M.mesRef}`)}</div></div></div>`);
       }
       sections.forEach(({ section, blocks }) => {

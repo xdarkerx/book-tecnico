@@ -34,6 +34,14 @@
     return res.innerHTML.replace(/<p><\/p>/g, '').trim();
   };
 
+  /** Endereço de imagem seguro para src="…": só imagem em data:, http(s) ou arquivo do próprio app.
+   *  Um book importado (projeto .book.json) não consegue fechar o atributo e injetar script (ex.: x" onerror="…). */
+  BT.safeSrc = (u) => {
+    const s = String(u || '').trim();
+    if (!/^(data:image\/(png|jpe?g|gif|webp|svg\+xml|bmp)[;,]|https?:\/\/|assets\/)/i.test(s)) return '';
+    return s.replace(/"/g, '%22').replace(/</g, '%3C').replace(/>/g, '%3E');
+  };
+
   /** Converte texto puro (com quebras de linha) em HTML de parágrafos. */
   BT.core.textToHtml = (t) => String(t || '').split(/\n{2,}/).map((p) => '<p>' + BT.esc(p).replace(/\n/g, '<br>') + '</p>').join('');
 })(window.BT);

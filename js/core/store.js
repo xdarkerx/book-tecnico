@@ -20,6 +20,8 @@
   let sessionId = null;
   let saveTimer = null;
   let dirty = false;
+  let rev = 0;                      // conta as mudanças: só fica "salvo" se nada mudou durante a gravação
+  let chain = Promise.resolve();    // gravações uma de cada vez, na ordem (uma antiga nunca chega depois da nova)
 
   const S = {
     get state() { return state; },
@@ -38,21 +40,34 @@
 
     scheduleSave() {
       if (!state || !sessionId || S.readOnly) return;
-      dirty = true;
+      dirty = true; rev++;
       BT.emit('store:saving');
       clearTimeout(saveTimer);
       saveTimer = setTimeout(S.saveNow, 400);
     },
 
-    async saveNow() {
+    /** Grava agora. As gravações entram numa fila: se uma ainda está em andamento (book grande, rede lenta),
+     *  a próxima espera ela terminar — antes, as duas iam juntas e a mais antiga podia chegar por último
+     *  e sobrescrever a mais nova no servidor. Devolve uma promessa que termina quando esta gravação terminar. */
+    saveNow() {
       clearTimeout(saveTimer);
-      if (!state || !sessionId || S.readOnly) return;
-      try { await BT.session.save(sessionId, state); dirty = false; BT.emit('store:saved'); }
-      catch (e) {
-        if (e.status === 423) { dirty = false; BT.emit('store:locked', e); return; } // outra pessoa está editando
-        if (e.status === 401) return; // login expirou: a tela de login já apareceu
-        console.error(e); BT.emit('store:save-error', e);
-      }
+      if (!state || !sessionId || S.readOnly) return chain;
+      const id = sessionId, st = state;
+      const run = async () => {
+        if (S.readOnly || (id === sessionId && !dirty)) return; // nada novo desde a última gravação
+        const myRev = rev;
+        try {
+          await BT.session.save(id, st);
+          if (id === sessionId && rev === myRev) dirty = false; // mudou durante a gravação: continua pendente
+          BT.emit('store:saved');
+        } catch (e) {
+          if (e.status === 423) { dirty = false; BT.emit('store:locked', e); return; } // outra pessoa está editando
+          if (e.status === 401) return; // login expirou: a tela de login já apareceu
+          console.error(e); BT.emit('store:save-error', e);
+        }
+      };
+      chain = chain.then(run, run);
+      return chain;
     },
 
     /** Chamado ao recarregar/fechar: grava cópia síncrona + dispara o IndexedDB. */

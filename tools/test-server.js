@@ -123,6 +123,13 @@ async function main() {
   };
   let me0 = (await call('GET', '/api/auth/me')).data;
   assert.deepStrictEqual([me0.enabled, me0.needsSetup, me0.user], [false, true, null]); ok('login desligado por padrão; pede configuração inicial');
+  // entradas inválidas: erro claro (400/404), nunca erro interno (500)
+  for (const [m, p, body] of [['PUT', '/api/connections?cliente=acme', 'null'], ['PUT', '/api/templates', 'null'], ['POST', '/api/auth/login', '[]'], ['PUT', '/api/session?sid=a', '7'],
+    ['PUT', '/api/connections?cliente=acme', { providers: { constructor: {}, oci: 'x', aws: null } }], ['POST', '/api/cloud/pull?cliente=acme', { provider: '__proto__', kinds: 'x' }], ['POST', '/api/cloud/test?cliente=acme', { provider: 'constructor' }]]) {
+    const st = (await call(m, p, body)).status;
+    assert.ok(st < 500, `${m} ${p} → ${st}`);
+  }
+  ok('entradas inválidas (corpo "null", provedor "__proto__"/"constructor", kinds em texto) dão erro claro, não 500');
   assert.strictEqual((await call('PUT', '/api/auth/config', { enabled: true })).status, 400); ok('não liga o login sem administrador');
   assert.strictEqual((await call('POST', '/api/auth/setup', { username: 'admin', name: 'Ana Admin', password: 'curta' })).status, 400); ok('senha curta recusada');
   const setup = await call('POST', '/api/auth/setup', { username: 'Admin', name: 'Ana Admin', password: 'senha-forte-1' });

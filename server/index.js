@@ -75,7 +75,11 @@ function readBuffer(req, max = MAX_BODY) {
 }
 async function readBody(req) {
   const raw = await readRaw(req);
-  try { return raw ? JSON.parse(raw) : {}; } catch (e) { throw httpError(400, 'JSON inválido.'); }
+  let v;
+  try { v = raw ? JSON.parse(raw) : {}; } catch (e) { throw httpError(400, 'JSON inválido.'); }
+  // as rotas esperam um objeto: "null", número ou lista quebravam a leitura dos campos (erro 500)
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) throw httpError(400, 'O conteúdo precisa ser um objeto JSON.');
+  return v;
 }
 /** Formulário HTML (application/x-www-form-urlencoded) — usado pela resposta SAML. */
 async function readForm(req) { return Object.fromEntries(new URLSearchParams(await readRaw(req, 2 * 1024 * 1024))); }
@@ -109,15 +113,16 @@ const SECRET = { oci: ['keyPem', 'passphrase'], aws: ['secretAccessKey', 'sessio
 const MASK = '••••••••';
 // várias contas por provedor: "aws" é a primeira, "aws~xyz" as demais (ex.: PRD e HML)
 const provType = (k) => String(k || '').split('~')[0];
+const isProv = (k) => Object.prototype.hasOwnProperty.call(SECRET, provType(k)); // não aceita "constructor", "__proto__"…
 function maskConnections(c) {
   const out = JSON.parse(JSON.stringify(c || { providers: {} }));
-  for (const [p, cfg] of Object.entries(out.providers || {})) for (const f of SECRET[provType(p)] || []) if (cfg[f]) cfg[f] = MASK;
+  for (const [p, cfg] of Object.entries(out.providers || {})) for (const f of (isProv(p) && SECRET[provType(p)]) || []) if (cfg && cfg[f]) cfg[f] = MASK;
   return out;
 }
 function mergeConnections(old, incoming) {
   const out = { nome: incoming.nome || old.nome, providers: {} };
   for (const [p, cfg] of Object.entries(incoming.providers || {})) {
-    if (!SECRET[provType(p)] || !cfg || typeof cfg !== 'object') continue;
+    if (!isProv(p) || !cfg || typeof cfg !== 'object') continue;
     const from = typeof cfg._from === 'string' ? cfg._from : p; // conta que mudou de chave (ex.: a primeira foi removida)
     out.providers[p] = Object.assign({}, cfg); delete out.providers[p]._from;
     for (const f of SECRET[provType(p)]) if (cfg[f] === MASK) out.providers[p][f] = (old.providers?.[from] || {})[f] || '';

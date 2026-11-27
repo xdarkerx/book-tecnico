@@ -14,7 +14,7 @@
       return h('div', {}, [row, BT.blocks.titleInput(block, ctx, 'Título do destaque (opcional)'),
         BT.blocks.richText(block.data.html, (html) => { block.data.html = html; ctx.save(); }, 'Conteúdo do destaque…')]);
     },
-    render: (b) => `<div class="bcall ${b.data.tone}">${b.data.title ? `<div class="bcall-title">${BT.esc(b.data.title)}</div>` : ''}${BT.core.sanitizeHtml(b.data.html)}</div>`,
+    render: (b) => `<div class="bcall ${TONES[b.data.tone] ? b.data.tone : 'info'}">${b.data.title ? `<div class="bcall-title">${BT.esc(b.data.title)}</div>` : ''}${BT.core.sanitizeHtml(b.data.html)}</div>`,
     word(b) {
       const [, bg, fg] = TONES[b.data.tone] || TONES.info;
       return `<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:8pt 0"><tr><td style="background:${bg};border-left:3pt solid ${fg};padding:9pt 12pt;font-family:Arial;font-size:10pt;color:#3d4466">

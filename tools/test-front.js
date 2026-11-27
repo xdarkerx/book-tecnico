@@ -151,6 +151,12 @@ assert.ok(new RegExp(B.ZEBRA).test(defs.score.word(sec2, { target: 'word', state
   assert.deepStrictEqual([D.blocks().topologyStyle, D.blocks().scoreShow.alerts, D.blocks().scoreShow.recs, D.import().backupMode, D.import().zabbixSeverities.length], ['detailed', true, true, 'both', 2]); ok('padrão da equipe salvo nas configurações substitui o de fábrica (o resto continua)');
   D.load({});
 }
+// imagens e logo: um book importado não consegue injetar script pelo src (x" onerror="…)
+{
+  load('sanitize.js', 'core');
+  assert.deepStrictEqual(['data:image/png;base64,AA', 'https://x/a.png', 'assets/img/l.svg', 'x" onerror="alert(1)', 'javascript:alert(1)', 'data:text/html,<b>', 'data:image/png;base64,A"x'].map(BT.safeSrc),
+    ['data:image/png;base64,AA', 'https://x/a.png', 'assets/img/l.svg', '', '', '', 'data:image/png;base64,A%22x']); ok('imagens: src só aceita imagem (data:, http(s), assets) e não fecha o atributo');
+}
 // comparativo: busca a pontuação nos books dos meses anteriores
 (async () => {
   const books = { '2026-10': { groups: [{ sections: [{ blocks: [{ type: 'score', data: { items: [{ label: 'OCI · Tenancy', value: '80' }, { label: 'Outro', value: '10' }] } }] }] }] }, '2026-09': { groups: [{ sections: [{ blocks: [{ type: 'score', data: { items: [{ label: 'OCI · Tenancy', value: '' }] } }] }] }] } };

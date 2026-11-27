@@ -16,7 +16,7 @@
   }
 
   function separator(group, M) {
-    const title = group.provider ? BT.data.providers[group.provider].display + (group.account ? ' · ' + group.account : '') : group.title;
+    const title = group.provider && BT.data.providers[group.provider] ? BT.data.providers[group.provider].display + (group.account ? ' · ' + group.account : '') : group.title; // provedor desconhecido (projeto de outra versão): usa o título
     return `<br clear="all" style="page-break-before:always">
       <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 12pt"><tr>
       <td width="6" style="background:#5E3FE1;width:4pt">&nbsp;</td>
@@ -31,7 +31,7 @@
     const metaCell = (l, v) => `<td valign="top" style="padding:0 10pt 0 0"><p style="margin:0;font-family:Consolas,monospace;font-size:6.5pt;color:#8a8fae;letter-spacing:2px;text-transform:uppercase">${l}</p><p style="margin:3pt 0 0;font-family:Arial;font-size:10pt;font-weight:bold;color:#ffffff">${esc(v)}</p></td>`;
     return `<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse"><tr><td style="background:#0a0c1a;padding:36pt 34pt 30pt">
       <table width="100%" cellspacing="0" cellpadding="0"><tr><td><img src="${BT.data.LOGO_WHITE}" width="172" height="32"></td>
-      ${M.logoCliente ? `<td align="right"><img src="${M.logoCliente}" width="120" data-fit="1"></td>` : ''}</tr></table>
+      ${BT.safeSrc(M.logoCliente) ? `<td align="right"><img src="${BT.safeSrc(M.logoCliente)}" width="120" data-fit="1"></td>` : ''}</tr></table>
       <p style="margin:40pt 0 0;font-family:Consolas,monospace;font-size:8pt;color:#8a8fae;letter-spacing:5px;text-transform:uppercase">— Book Técnico</p>
       <p style="margin:6pt 0 0;font-family:Arial;font-size:30pt;font-weight:bold;color:#ffffff;line-height:110%">${esc(M.nome)}</p>
       ${M.subtitulo ? `<p style="margin:8pt 0 0;font-family:Consolas,monospace;font-size:10pt;color:#9da2c0">${esc(M.subtitulo)}</p>` : ''}
