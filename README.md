@@ -327,6 +327,13 @@ usa esse):
 Funciona com a API nova (vSphere 7.0 U2 ou mais novo) e a antiga (6.5 a 7.0). Backup, Security Score e CVEs não vêm
 do vCenter (ficam de fora sem erro).
 
+#### Oracle VM 3.x (OVM Manager) — também no menu On-Premises
+Em **Conexões › 🟥 Oracle VM** informe a URL do OVM Manager (a porta 7002 entra sozinha), usuário e senha. Opcional: só
+alguns server pools. Vai para o mesmo menu **On-Premises** do book (o do VMware, se existir; sem ele, cria
+"On-Premises (Oracle VM)"): **Servidores** (VMs com SO, estado, CPU, memória, server pool e servidor OVS; o IP só quando o
+guest reporta ao OVM), **Storage** (repositórios), **Networking**, **Geral** (versão, server pools, servidores e VMs) e
+**Baseline**. Com vCenter e Oracle VM no mesmo cliente, cada um vira uma tabela na mesma seção.
+
 #### Zabbix e GLPI (monitoramento e chamados)
 Configure-os nas mesmas **Conexões** do cliente. A sincronização usa o **período do book** (do primeiro ao
 último dia do mês), que pode ser ajustado.

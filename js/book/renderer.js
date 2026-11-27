@@ -79,7 +79,7 @@
       if (group.separator) {
         html.push(`<div class="bwl-sep"><div class="bwl-sep-line"></div><div class="bwl-sep-body">
           <div class="bwl-sep-label">inventCloud · Book Técnico</div>
-          <div class="bwl-sep-title">${esc(group.provider && BT.data.providers[group.provider] ? BT.data.providers[group.provider].display + (group.account ? ' · ' + group.account : '') : group.title)}</div>
+          <div class="bwl-sep-title">${esc(group.provider && BT.data.providers[group.provider] && !['vmware', 'ovm'].includes(group.provider) ? BT.data.providers[group.provider].display + (group.account ? ' · ' + group.account : '') : group.title)}</div>
           <div class="bwl-sep-sub">${esc(group.subtitle || `Ambiente: ${M.nome} · ${M.mesRef}`)}</div></div></div>`);
       }
       sections.forEach(({ section, blocks }) => {

@@ -789,6 +789,42 @@ async function main() {
   assert.ok(vold.length === 2 && vcHits.some((h) => h.startsWith('POST /rest/com/vmware/cis/session'))); ok('vCenter 6.5–7.0: usa a API antiga (/rest) quando a nova não existe');
   const tst = await cloudIdx.test('vmware', vcfg);
   assert.ok(tst.ok && /API antiga/.test(tst.message) && /3 host/.test(tst.message), tst.message); ok('vCenter: testar conexão mostra a versão da API, hosts e VMs');
+
+  // ── Oracle VM 3.x (OVM Manager) → menu On-Premises ──
+  const ovmHits = [];
+  global.fetch = async (url, o = {}) => {
+    const u = new URL(String(url)); const J = (b, st = 200) => new Response(JSON.stringify(b), { status: st });
+    ovmHits.push(u.host + u.pathname);
+    assert.ok(/^Basic /.test(o.headers.authorization) && o.headers.accept === 'application/json');
+    const ref = (value, name) => ({ value, name, type: 'x', uri: 'u' });
+    switch (u.pathname.replace('/ovm/core/wsapi/rest', '')) {
+      case '/Vm': return J([
+        { id: ref('0004fb00006000001', 'SRV-ORA-DB01'), name: 'SRV-ORA-DB01', vmRunState: 'RUNNING', cpuCount: 8, currentCpuCount: 8, memory: 32768, currentMemory: 32768, osType: 'Oracle Linux 7', serverPoolId: ref('p1', 'Pool-PRD'), serverId: ref('s1', 'ovs01') },
+        { id: ref('0004fb00006000002', 'SRV-APP-HML'), name: 'SRV-APP-HML', vmRunState: 'STOPPED', cpuCount: 2, memory: 4096, osType: 'Microsoft Windows Server 2016', serverPoolId: ref('p2', 'Pool-HML'), serverId: ref('s2', 'ovs02') }]);
+      case '/Server': return J([{ id: ref('s1', 'ovs01'), name: 'ovs01', serverPoolId: ref('p1', 'Pool-PRD') }, { id: ref('s2', 'ovs02'), name: 'ovs02', serverPoolId: ref('p2', 'Pool-HML') }]);
+      case '/ServerPool': return J([{ id: ref('p1', 'Pool-PRD'), name: 'Pool-PRD' }, { id: ref('p2', 'Pool-HML'), name: 'Pool-HML' }]);
+      case '/VirtualNic': return J([{ id: ref('n1', 'nic'), vmId: ref('0004fb00006000001', 'SRV-ORA-DB01'), ipAddresses: [{ address: '10.1.0.20' }, { address: 'fe80::1' }] }]);
+      case '/FileSystem': return J([{ id: ref('fs1', 'fs'), size: 2199023255552, freeSize: 549755813888 }]);
+      case '/Repository': return J([{ id: ref('r1', 'REPO-01'), name: 'REPO-01', fileSystemId: ref('fs1', 'fs') }]);
+      case '/Network': return J([{ id: ref('net1', 'VM-PRD'), name: 'VM-PRD', roles: ['VIRTUAL_MACHINE'] }]);
+      case '/Manager': return J([{ managerVersion: '3.4.6.2105' }]);
+    }
+    return J({ error: 'x' }, 404);
+  };
+  const ocfgVm = { url: 'ovmm.local', user: 'admin', password: 'x' };
+  const osrv = (await cloudIdx.pull('ovm', ocfgVm, ['servers'])).results[0].rows;
+  const db1 = osrv.find((r) => r.Name === 'SRV-ORA-DB01');
+  assert.deepStrictEqual([osrv.length, db1['IP Address'], db1['Operating System'], db1.Status, db1.Cluster, db1.Host, db1.CPUs, db1['Memory (MB)']], [2, '10.1.0.20', 'Oracle Linux 7', 'running', 'Pool-PRD', 'ovs01', '8', '32768']);
+  assert.ok(ovmHits.every((h) => h.startsWith('ovmm.local:7002/ovm/core/wsapi/rest/'))); ok('Oracle VM: VMs com IP (sem o fe80), SO, estado, server pool e servidor OVS; porta 7002 e caminho da API completados');
+  assert.deepStrictEqual((await cloudIdx.pull('ovm', Object.assign({}, ocfgVm, { pools: 'pool-hml' }), ['servers'])).results[0].rows.map((r) => r.Name), ['SRV-APP-HML']); ok('Oracle VM: filtro por server pool');
+  const ost = (await cloudIdx.pull('ovm', ocfgVm, ['storage'])).results[0].rows[0];
+  assert.deepStrictEqual([ost.Name, ost.Capacity, ost.Used], ['REPO-01', '2048 GB', '1536 GB']); ok('Oracle VM: repositórios com capacidade e uso');
+  const oall = await cloudIdx.pull('ovm', ocfgVm, ['network', 'tenant', 'backup', 'score']);
+  const oten = oall.results[1].rows[0];
+  assert.deepStrictEqual([oall.errors.length, oall.results[0].rows[0]['Network Name'], oten['OVM Manager'], oten['Versão'], oten['Server Pools'], oten.VMs], [0, 'VM-PRD', 'ovmm.local:7002', '3.4.6.2105', 'Pool-PRD, Pool-HML', '2 (1 ligadas)']);
+  ok('Oracle VM: redes e Geral (versão, server pools, VMs); backup e Security Score ficam de fora sem erro');
+  const otst = await cloudIdx.test('ovm', ocfgVm);
+  assert.ok(otst.ok && /3\.4\.6/.test(otst.message) && /2 VM/.test(otst.message), otst.message); ok('Oracle VM: testar conexão mostra versão, pools, servidores e VMs');
   global.fetch = realFetch;
   console.log(`\n${passed} testes ok`);
 }

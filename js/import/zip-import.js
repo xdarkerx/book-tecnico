@@ -122,9 +122,9 @@
   function accountGroups(T, it) {
     const exact = T.groups.filter((g) => g.provider === it.provider && (g.account || '') === (it.account || ''));
     if (exact.length) return exact;
-    // vCenter: o menu "On-Premises" do book (mesmo sem provedor marcado, ex.: "On-Prem", "On Premise")
-    if (it.provider === 'vmware' && (!it.account || it.primary)) {
-      const onprem = T.groups.filter((g) => !g.provider && /on.?prem/i.test(g.title || ''));
+    // vCenter e Oracle VM: o menu "On-Premises" do book (o do VMware, ou um "On-Prem"/"On Premise" sem provedor)
+    if ((it.provider === 'vmware' || it.provider === 'ovm') && (!it.account || it.primary)) {
+      const onprem = T.groups.filter((g) => !g.account && ((it.provider === 'ovm' && g.provider === 'vmware') || (!g.provider && /on.?prem/i.test(g.title || ''))));
       if (onprem.length) return onprem; // usa o menu como está (título e aparência do book não mudam)
     }
     if (!it.account || !it.primary) return exact;
@@ -263,7 +263,7 @@
         const cloudP = it.provider && !it.global && it.provider !== 'generic' && !BT.data.providers[it.provider]?.tool;
         let g = cloudP ? accountGroups(T, it)[0] || null : null;
         if (!g && it.groupHint) g = T.groups.find((x) => norm(x.title).includes(norm(it.groupHint)));
-        if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: (it.provider === 'vmware' ? 'VMware / On-Prem' : p.label) + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true });
+        if (!g && cloudP) { const p = BT.data.providers[it.provider]; g = BT.store.makeGroup({ title: (it.provider === 'vmware' ? 'VMware / On-Prem' : it.provider === 'ovm' ? 'On-Premises (Oracle VM)' : p.label) + (it.account ? ' · ' + it.account : ''), icon: p.icon, provider: it.provider, account: it.account || '', separator: true });
           // fica logo depois do último menu da mesma cloud (ex.: AWS · HML depois de AWS · PRD)
           const last = T.groups.map((x) => x.provider).lastIndexOf(it.provider);
           if (last >= 0) T.groups.splice(last + 1, 0, g); else T.groups.push(g);

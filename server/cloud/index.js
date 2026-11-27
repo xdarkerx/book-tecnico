@@ -5,7 +5,7 @@
  * Os resultados têm colunas com os mesmos nomes dos exports das consoles,
  * então os mapeadores do front (js/import/mappers) funcionam igual a um CSV.
  */
-const connectors = { oci: require('./oci'), aws: require('./aws'), azure: require('./azure'), gcp: require('./gcp'), vmware: require('./vmware'), zabbix: require('./zabbix'), glpi: require('./glpi'), wazuh: require('./wazuh'), defender: require('./defender') };
+const connectors = { oci: require('./oci'), aws: require('./aws'), azure: require('./azure'), gcp: require('./gcp'), vmware: require('./vmware'), ovm: require('./ovm'), zabbix: require('./zabbix'), glpi: require('./glpi'), wazuh: require('./wazuh'), defender: require('./defender') };
 // monitoramento / chamados / vulnerabilidades: um único "tipo" de dado, com período
 const TOOLS = ['zabbix', 'glpi', 'wazuh', 'defender'];
 const ALL = ['servers', 'storage', 'network', 'baseline', 'backup', 'tenant', 'score', 'vulns'];

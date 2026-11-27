@@ -16,7 +16,7 @@
   }
 
   function separator(group, M) {
-    const title = group.provider && BT.data.providers[group.provider] ? BT.data.providers[group.provider].display + (group.account ? ' · ' + group.account : '') : group.title; // provedor desconhecido (projeto de outra versão): usa o título
+    const title = group.provider && BT.data.providers[group.provider] && !['vmware', 'ovm'].includes(group.provider) ? BT.data.providers[group.provider].display + (group.account ? ' · ' + group.account : '') : group.title; // provedor desconhecido (projeto de outra versão): usa o título
     return `<br clear="all" style="page-break-before:always">
       <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 12pt"><tr>
       <td width="6" style="background:#5E3FE1;width:4pt">&nbsp;</td>

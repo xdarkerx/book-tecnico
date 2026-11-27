@@ -12,7 +12,7 @@
   const h = BT.h;
   const P = () => BT.data.providers;
   const KINDS = [['servers', '🖥️ Servidores', 'servidores'], ['storage', '💾 Storage', 'storage'], ['network', '🌐 Redes', 'networking'], ['backup', '🗄️ Backup (só do mês)', 'backup'], ['baseline', '📦 Baseline', 'baseline'], ['tenant', '🏷️ Geral (tenant)', 'geral'], ['score', '🛡️ Security Score', 'score'], ['vulns', '🐞 Vulnerabilidades (CVEs)', 'vulnerabilidades']];
-  const ORDER = ['oci', 'aws', 'azure', 'gcp', 'vmware', 'zabbix', 'glpi', 'wazuh', 'defender'];
+  const ORDER = ['oci', 'aws', 'azure', 'gcp', 'vmware', 'ovm', 'zabbix', 'glpi', 'wazuh', 'defender'];
 
   const FORMS = {
     oci: {
@@ -36,6 +36,11 @@
       help: 'Preenche o menu <b>On-Premises</b> (VMware) do book: <b>Servidores</b> (VMs com IP, SO, CPU, memória, cluster e host), <b>Storage</b> (datastores), <b>Networking</b> (port groups), <b>Baseline</b> e <b>Geral</b> (vCenter, versão, clusters e hosts). Um usuário com a função <b>Somente leitura</b> no vCenter basta. IP e SO vêm do VMware Tools.',
       fields: [['url', 'URL do vCenter', 'https://vcenter.empresa.local'], ['user', 'Usuário', 'leitura@vsphere.local'], ['password', 'Senha', '', 'secret'],
         ['clusters', 'Clusters (separados por vírgula; vazio = todos)', 'Cluster-PRD, Cluster-HML'], ['insecure', 'Aceitar certificado autoassinado', '', 'check']]
+    },
+    ovm: {
+      help: 'Oracle VM 3.x (OVM Manager): preenche o menu <b>On-Premises</b> do book — <b>Servidores</b> (VMs com SO, estado, CPU, memória, server pool e servidor OVS), <b>Storage</b> (repositórios), <b>Networking</b>, <b>Baseline</b> e <b>Geral</b> (versão, server pools e servidores). Use um usuário do OVM Manager (a API fica na porta 7002). O IP das VMs só aparece quando o guest reporta ao OVM.',
+      fields: [['url', 'URL do OVM Manager', 'https://ovmm.empresa.local:7002'], ['user', 'Usuário', 'admin'], ['password', 'Senha', '', 'secret'],
+        ['pools', 'Server pools (separados por vírgula; vazio = todos)', 'Pool-PRD, Pool-HML'], ['insecure', 'Aceitar certificado autoassinado', '', 'check']]
     },
     zabbix: {
       help: 'Preenche <b>Capacidade</b> (relatório com resumo executivo, top hosts CPU/memória/disco e gráficos), <b>Monitoramento</b> (hosts) e <b>Servidores — Recomendações</b> (onde aumentar RAM, CPU ou disco). Use um <b>API token</b> (Usuários › Tokens de API) com acesso de leitura aos host groups.',
@@ -114,7 +119,7 @@
     const drawTabs = () => {
       tabs.innerHTML = '';
       ORDER.forEach((p, i) => {
-        if (i === 5 || i === 7) tabs.appendChild(h('span', { class: 'cx-sep' }));
+        if (i === 6 || i === 8) tabs.appendChild(h('span', { class: 'cx-sep' }));
         tabs.appendChild(h('button', { class: p === cur ? 'on' : '', onclick: () => { cur = p; curKey = p; drawTabs(); drawForm(); } }, [P()[p].icon + ' ' + P()[p].label + (accountsOf(data.providers, p).length > 1 ? ` (${accountsOf(data.providers, p).length})` : ''), h('span', { class: 'dot' + (accountsOf(data.providers, p).some((k) => isOn(data.providers[k])) ? ' ok' : '') })]));
       });
     };
@@ -269,6 +274,7 @@
     return items;
   }
 
+  const ONPREM_DEST = { servers: ['Servidores', 'servers'], storage: ['Storage', 'storage'], network: ['Networking', 'network'] };
   const ALL_KINDS = ['servers', 'storage', 'network', 'backup', 'baseline', 'tenant', 'score'];
   /** Busca os dados das conexões do cliente e monta os itens da revisão (sem tela). Usada pela janela de sincronização
    *  e pela geração automática no servidor. pf (perfil): { sources: ['oci','aws~hml'…] (vazio = todas), kinds, newOnly,
@@ -333,7 +339,9 @@
               return;
             }
             const kind = KINDS.find((x) => x[0] === sh.kind) || [sh.kind, sh.name, sh.kind];
-            items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, kind[2]], entry: { name: kind[1].replace(/^\S+\s/, ''), path: '' },
+            // Oracle VM: vai para o menu On-Premises do book (que pode ser o do VMware), na seção de mesmo nome
+            const onprem = p === 'ovm' && ONPREM_DEST[sh.kind] ? { destTitle: ONPREM_DEST[sh.kind][0], newTitleHint: ONPREM_DEST[sh.kind][0], forceMapper: ONPREM_DEST[sh.kind][1] } : {};
+            items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, kind[2]], entry: { name: kind[1].replace(/^\S+\s/, ''), path: '' }, ...onprem,
               parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
           });
         } catch (e) { errors.push(`${label}: ${e.message}`); }
