@@ -26,18 +26,31 @@ async function session(cfg) {
   const insecure = !!cfg.insecure;
   // alguns vCenter 7.0 recusam a criação da sessão sem Content-Type (erro 500 "Missing Content-Type header")
   const auth = { authorization: 'Basic ' + Buffer.from(cfg.user + ':' + cfg.password).toString('base64'), 'content-type': 'application/json', accept: 'application/json' };
+  // "não existe aqui": a API nova não está neste vCenter (404/405/400/501 ou resposta que não é JSON)
+  const notHere = (e) => [400, 404, 405, 501].includes(e.status) || e instanceof SyntaxError;
   let token = null; let style = 'api';
+  // API nova (/api): só vale se o inventário também responder. O vCenter 6.7 aceita /api/session,
+  // mas /api/vcenter/... dá 405 ("HTTP method GET is not supported") — nesse caso usa a antiga (/rest).
   try {
-    token = await (await U.request(base + '/api/session', { method: 'POST', headers: auth, insecure })).json();
-  } catch (e) {
-    if (e.status !== 404) throw friendly(e);
-    style = 'rest'; // vCenter 6.5–7.0
+    const t = await (await U.request(base + '/api/session', { method: 'POST', headers: auth, insecure })).json();
+    if (typeof t === 'string' && t) {
+      try { await U.request(base + '/api/vcenter/datacenter', { headers: { 'vmware-api-session-id': t, accept: 'application/json' }, insecure }); token = t; }
+      catch (e) {
+        if (!notHere(e)) throw e;
+        U.request(base + '/api/session', { method: 'DELETE', headers: { 'vmware-api-session-id': t }, insecure }).catch(() => {});
+      }
+    }
+  } catch (e) { if (!notHere(e)) throw friendly(e); }
+  if (!token) {
+    style = 'rest'; // vCenter 6.5, 6.7 e 7.0 até o U1
     try { token = (await (await U.request(base + '/rest/com/vmware/cis/session', { method: 'POST', headers: auth, insecure })).json()).value; }
     catch (e2) { throw friendly(e2); }
   }
   if (!token) throw new Error('O vCenter não devolveu a sessão.');
   const headers = { 'vmware-api-session-id': token, accept: 'application/json' };
   const get = async (path) => {
+    // na API antiga os filtros se chamam filter.clusters, filter.hosts, filter.datacenters
+    if (style === 'rest') path = path.replace(/([?&])(clusters|datacenters|hosts)=/g, '$1filter.$2=');
     const url = base + (style === 'api' ? '/api' : '/rest') + path;
     const j = await (await U.request(url, { headers, insecure, timeout: 120000 })).json();
     return style === 'rest' && j && j.value !== undefined ? j.value : j;

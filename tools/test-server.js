@@ -748,16 +748,22 @@ async function main() {
     const u = new URL(String(url)); const J = (b, st = 200) => new Response(JSON.stringify(b), { status: st });
     const p = u.pathname; vcHits.push((o.method || 'GET') + ' ' + p + u.search);
     if (style === 'rest' && p.startsWith('/api/')) return J({ error_type: 'NOT_FOUND' }, 404);
-    const wrap = (b) => (style === 'rest' ? { value: b } : b);
+    // vCenter 6.7: aceita /api/session, mas o inventário em /api dá 405
+    if (style === '67' && p === '/api/session' && o.method === 'POST') return J('TOKEN67');
+    if (style === '67' && p.startsWith('/api/')) return J({ servlet: 'servlet 3', message: 'HTTP method GET is not supported by this URL', url: p, status: '405' }, 405);
+    const old = style !== 'api'; // API antiga: { value: … } e filtros "filter.clusters"
+    const wrap = (b) => (old ? { value: b } : b);
     if (p.endsWith('/session') && o.method === 'POST') {
       assert.ok(/^Basic /.test(o.headers.authorization));
       // como alguns vCenter 7.0: sem Content-Type, erro 500 com página HTML do Jetty
       if (!o.headers['content-type']) return new Response('<html><head><title>Error 500 javax.servlet.ServletException: Missing Content-Type header</title></head><body><h2>HTTP ERROR 500</h2></body></html>', { status: 500 });
-      return J(style === 'rest' ? { value: 'T2' } : 'TOKEN');
+      return J(old ? { value: 'T2' } : 'TOKEN');
     }
     if (o.method === 'DELETE') return J({});
-    assert.strictEqual(o.headers['vmware-api-session-id'], style === 'rest' ? 'T2' : 'TOKEN');
-    const q = Object.fromEntries(u.searchParams); const path = p.replace(/^\/(api|rest)/, '');
+    assert.strictEqual(o.headers['vmware-api-session-id'], old ? 'T2' : 'TOKEN');
+    const raw = Object.fromEntries(u.searchParams);
+    const q = old ? Object.fromEntries(Object.entries(raw).filter(([k]) => k.startsWith('filter.')).map(([k, v]) => [k.slice(7), v])) : raw; // a antiga ignora filtro sem "filter."
+    const path = p.replace(/^\/(api|rest)/, '');
     if (path === '/vcenter/datacenter') return J(wrap([{ datacenter: 'dc-1', name: 'DC-SP' }]));
     if (path === '/vcenter/cluster') return J(wrap([{ cluster: 'domain-c1', name: 'Cluster-PRD' }, { cluster: 'domain-c2', name: 'Cluster-HML' }]));
     if (path === '/vcenter/host') return J(wrap(q.clusters === 'domain-c1' ? [{ host: 'host-1', name: 'esx01' }] : q.clusters === 'domain-c2' ? [{ host: 'host-2', name: 'esx02' }]
@@ -792,14 +798,21 @@ async function main() {
   vcFetch('rest'); vcHits.length = 0;
   const vold = (await cloudIdx.pull('vmware', vcfg, ['servers'])).results[0].rows;
   assert.ok(vold.length === 2 && vcHits.some((h) => h.startsWith('POST /rest/com/vmware/cis/session'))); ok('vCenter 6.5–7.0: usa a API antiga (/rest) quando a nova não existe');
+  assert.ok(vcHits.some((h) => h.includes('filter.hosts=host-1')) && vold.find((r) => r.VM === 'SRV-SQL-01').Cluster === 'Cluster-PRD'); ok('vCenter API antiga: filtros no formato dela (filter.hosts, filter.clusters…)');
+  vcFetch('67'); vcHits.length = 0;
+  const v67 = (await cloudIdx.pull('vmware', vcfg, ['servers'])).results[0].rows;
+  assert.deepStrictEqual([v67.length, v67.find((r) => r.VM === 'SRV-SQL-01').Host], [2, 'esx01']);
+  assert.ok(vcHits.some((h) => h === 'POST /api/session') && vcHits.some((h) => h.startsWith('POST /rest/com/vmware/cis/session'))); ok('vCenter 6.7: /api/session responde mas o inventário dá 405 — passa para a API antiga sozinho');
   const tst = await cloudIdx.test('vmware', vcfg);
   assert.ok(tst.ok && /API antiga/.test(tst.message) && /3 host/.test(tst.message), tst.message); ok('vCenter: testar conexão mostra a versão da API, hosts e VMs');
   vcFetch('api');
   assert.strictEqual((await cloudIdx.pull('vmware', Object.assign({}, vcfg, { url: '172.16.35.100' }), ['servers'])).results[0].rows.length, 2); ok('vCenter: endereço sem https:// (só IP ou nome) funciona; a sessão vai com Content-Type');
   // falha de acesso: uma linha só, sem página HTML, sem tentar os outros tipos
-  global.fetch = async () => new Response('<html><head><title>Error 500 javax.servlet.ServletException: Missing Content-Type header</title></head><body>…</body></html>', { status: 500 });
+  let vcalls = 0;
+  global.fetch = async () => { vcalls++; return new Response('<html><head><title>Error 500 javax.servlet.ServletException: Missing Content-Type header</title></head><body>…</body></html>', { status: 500 }); };
   const vfail = await cloudIdx.pull('vmware', vcfg, ['servers', 'storage', 'network', 'baseline', 'tenant']);
   assert.strictEqual(vfail.errors.length, 1);
+  assert.ok(vcalls <= 3, `tentou ${vcalls} vezes`); // só as novas tentativas do primeiro tipo; os outros nem são chamados
   assert.ok(/^servers, storage, network, baseline, tenant$/.test(vfail.errors[0].kind) && /Missing Content-Type header/.test(vfail.errors[0].message) && !/<html|<title/.test(vfail.errors[0].message), JSON.stringify(vfail.errors));
   ok('vCenter: erro de acesso vira uma linha só (todos os tipos), com o título do erro em vez da página HTML');
   assert.ok(/Endereço do vCenter inválido/.test((await cloudIdx.test('vmware', Object.assign({}, vcfg, { url: 'http://[bad' }))).message)); ok('vCenter: endereço inválido explica o formato esperado');

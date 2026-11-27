@@ -62,7 +62,7 @@ module.exports = {
         console.error(`[${provider}/${kind}]`, e.message); errors.push({ kind, message: e.message });
         // on-premises (vCenter/Oracle VM): falha de acesso (rede, login, sessão) faz os outros tipos falharem igual — para aqui.
         // Nas clouds não: um serviço pode falhar (ex.: Security Hub desligado) e os outros funcionarem.
-        if (c.KINDS && (!e.status || e.status === 401 || e.status === 403 || /\/session|recusou|inválido|Informe/i.test(e.message))) { // só vCenter/Oracle VM: tudo depende da mesma sessão
+        if (c.KINDS && (!e.status || e.status === 401 || e.status === 403 || /\/session|recusou|inválido|Informe/i.test(e.message))) { // só vCenter/Oracle VM: tudo depende da mesma sessão
           const rest = want.slice(want.indexOf(kind) + 1).filter((k) => !c.KINDS || c.KINDS.includes(k));
           if (rest.length) errors[errors.length - 1].kind += ', ' + rest.join(', ');
           break;
