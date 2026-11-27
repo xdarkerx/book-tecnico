@@ -3,6 +3,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+/** Corpo de erro legível: página HTML (ex.: erro do Tomcat/Jetty) vira só o título; espaços colapsados. */
+function errText(body) {
+  let t = String(body || '');
+  if (/<html|<title|<body/i.test(t)) {
+    const title = (t.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1];
+    t = title || t.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  }
+  return t.replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+
 /** Requisição HTTPS aceitando certificado autoassinado (Zabbix/GLPI internos). */
 function requestInsecure(url, opts = {}) {
   const https = require('https');
@@ -13,7 +23,7 @@ function requestInsecure(url, opts = {}) {
       res.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
         const r = { ok: res.statusCode < 400, status: res.statusCode, headers: { get: (k) => res.headers[k.toLowerCase()] }, text: async () => body, json: async () => JSON.parse(body) };
-        if (!r.ok) { const e = new Error(`${res.statusCode} em ${u.host}${u.pathname}: ${body.slice(0, 400)}`); e.status = res.statusCode; return reject(e); }
+        if (!r.ok) { const e = new Error(`${res.statusCode} em ${u.host}${u.pathname}: ${errText(body)}`); e.status = res.statusCode; return reject(e); }
         resolve(r);
       });
     });
@@ -36,7 +46,7 @@ async function request(url, opts = {}, tries = 3) {
     clearTimeout(t);
     if ((res.status === 429 || res.status >= 500) && i + 1 < tries) { await sleep(800 * (i + 1)); continue; }
     if (!res.ok) {
-      const body = (await res.text()).slice(0, 400).replace(/\s+/g, ' ');
+      const body = errText(await res.text());
       const e = new Error(`${res.status} em ${new URL(url).host}${new URL(url).pathname}: ${body}`); e.status = res.status; throw e;
     }
     return res;
@@ -96,4 +106,4 @@ function sheet(kind, name, rows) {
   return { kind, name, fields, rows: rows.map((r) => Object.fromEntries(fields.map((f) => [f, r[f] === undefined || r[f] === null ? '' : String(r[f])]))) };
 }
 
-module.exports = { request, sleep, pool, readIni, expand, readFile, list, last, parseXml, child, all, text, find, sheet };
+module.exports = { errText, request, sleep, pool, readIni, expand, readFile, list, last, parseXml, child, all, text, find, sheet };

@@ -749,7 +749,12 @@ async function main() {
     const p = u.pathname; vcHits.push((o.method || 'GET') + ' ' + p + u.search);
     if (style === 'rest' && p.startsWith('/api/')) return J({ error_type: 'NOT_FOUND' }, 404);
     const wrap = (b) => (style === 'rest' ? { value: b } : b);
-    if (p.endsWith('/session') && o.method === 'POST') { assert.ok(/^Basic /.test(o.headers.authorization)); return J(style === 'rest' ? { value: 'T2' } : 'TOKEN'); }
+    if (p.endsWith('/session') && o.method === 'POST') {
+      assert.ok(/^Basic /.test(o.headers.authorization));
+      // como alguns vCenter 7.0: sem Content-Type, erro 500 com página HTML do Jetty
+      if (!o.headers['content-type']) return new Response('<html><head><title>Error 500 javax.servlet.ServletException: Missing Content-Type header</title></head><body><h2>HTTP ERROR 500</h2></body></html>', { status: 500 });
+      return J(style === 'rest' ? { value: 'T2' } : 'TOKEN');
+    }
     if (o.method === 'DELETE') return J({});
     assert.strictEqual(o.headers['vmware-api-session-id'], style === 'rest' ? 'T2' : 'TOKEN');
     const q = Object.fromEntries(u.searchParams); const path = p.replace(/^\/(api|rest)/, '');
@@ -789,6 +794,15 @@ async function main() {
   assert.ok(vold.length === 2 && vcHits.some((h) => h.startsWith('POST /rest/com/vmware/cis/session'))); ok('vCenter 6.5–7.0: usa a API antiga (/rest) quando a nova não existe');
   const tst = await cloudIdx.test('vmware', vcfg);
   assert.ok(tst.ok && /API antiga/.test(tst.message) && /3 host/.test(tst.message), tst.message); ok('vCenter: testar conexão mostra a versão da API, hosts e VMs');
+  vcFetch('api');
+  assert.strictEqual((await cloudIdx.pull('vmware', Object.assign({}, vcfg, { url: '172.16.35.100' }), ['servers'])).results[0].rows.length, 2); ok('vCenter: endereço sem https:// (só IP ou nome) funciona; a sessão vai com Content-Type');
+  // falha de acesso: uma linha só, sem página HTML, sem tentar os outros tipos
+  global.fetch = async () => new Response('<html><head><title>Error 500 javax.servlet.ServletException: Missing Content-Type header</title></head><body>…</body></html>', { status: 500 });
+  const vfail = await cloudIdx.pull('vmware', vcfg, ['servers', 'storage', 'network', 'baseline', 'tenant']);
+  assert.strictEqual(vfail.errors.length, 1);
+  assert.ok(/^servers, storage, network, baseline, tenant$/.test(vfail.errors[0].kind) && /Missing Content-Type header/.test(vfail.errors[0].message) && !/<html|<title/.test(vfail.errors[0].message), JSON.stringify(vfail.errors));
+  ok('vCenter: erro de acesso vira uma linha só (todos os tipos), com o título do erro em vez da página HTML');
+  assert.ok(/Endereço do vCenter inválido/.test((await cloudIdx.test('vmware', Object.assign({}, vcfg, { url: 'http://[bad' }))).message)); ok('vCenter: endereço inválido explica o formato esperado');
 
   // ── Oracle VM 3.x (OVM Manager) → menu On-Premises ──
   const ovmHits = [];

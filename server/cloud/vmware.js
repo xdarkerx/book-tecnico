@@ -7,7 +7,14 @@
  */
 const U = require('./util');
 
-const trim = (u) => String(u || '').replace(/\/+$/, '').replace(/\/(api|rest|ui)$/, '');
+/** Endereço do vCenter: aceita "vcenter.local", "172.16.0.10", "https://vcenter/ui"… → https://host[:porta] */
+function trim(u) {
+  let s = String(u || '').trim();
+  if (!s) return '';
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+  try { const x = new URL(s); return `${x.protocol}//${x.host}`; }
+  catch (e) { throw new Error(`Endereço do vCenter inválido: "${u}". Use, por exemplo, https://vcenter.empresa.local ou https://172.16.0.10`); }
+}
 const mib = (bytes) => (bytes == null ? '' : String(Math.round(Number(bytes) / 1048576)));
 const POWER = { POWERED_ON: 'poweredOn', POWERED_OFF: 'poweredOff', SUSPENDED: 'suspended' };
 
@@ -17,18 +24,19 @@ async function session(cfg) {
   if (!cfg.user || !cfg.password) throw new Error('Informe o usuário e a senha do vCenter.');
   const base = trim(cfg.url);
   const insecure = !!cfg.insecure;
-  const auth = 'Basic ' + Buffer.from(cfg.user + ':' + cfg.password).toString('base64');
+  // alguns vCenter 7.0 recusam a criação da sessão sem Content-Type (erro 500 "Missing Content-Type header")
+  const auth = { authorization: 'Basic ' + Buffer.from(cfg.user + ':' + cfg.password).toString('base64'), 'content-type': 'application/json', accept: 'application/json' };
   let token = null; let style = 'api';
   try {
-    token = await (await U.request(base + '/api/session', { method: 'POST', headers: { authorization: auth }, insecure })).json();
+    token = await (await U.request(base + '/api/session', { method: 'POST', headers: auth, insecure })).json();
   } catch (e) {
     if (e.status !== 404) throw friendly(e);
     style = 'rest'; // vCenter 6.5–7.0
-    try { token = (await (await U.request(base + '/rest/com/vmware/cis/session', { method: 'POST', headers: { authorization: auth }, insecure })).json()).value; }
+    try { token = (await (await U.request(base + '/rest/com/vmware/cis/session', { method: 'POST', headers: auth, insecure })).json()).value; }
     catch (e2) { throw friendly(e2); }
   }
   if (!token) throw new Error('O vCenter não devolveu a sessão.');
-  const headers = { 'vmware-api-session-id': token };
+  const headers = { 'vmware-api-session-id': token, accept: 'application/json' };
   const get = async (path) => {
     const url = base + (style === 'api' ? '/api' : '/rest') + path;
     const j = await (await U.request(url, { headers, insecure, timeout: 120000 })).json();

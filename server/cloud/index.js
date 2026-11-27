@@ -58,8 +58,20 @@ module.exports = {
           results.push(...sheets);
         }
       }
-      catch (e) { console.error(`[${provider}/${kind}]`, e.message); errors.push({ kind, message: e.message }); }
+      catch (e) {
+        console.error(`[${provider}/${kind}]`, e.message); errors.push({ kind, message: e.message });
+        // on-premises (vCenter/Oracle VM): falha de acesso (rede, login, sessão) faz os outros tipos falharem igual — para aqui.
+        // Nas clouds não: um serviço pode falhar (ex.: Security Hub desligado) e os outros funcionarem.
+        if (c.KINDS && (!e.status || e.status === 401 || e.status === 403 || /\/session|recusou|inválido|Informe/i.test(e.message))) { // só vCenter/Oracle VM: tudo depende da mesma sessão
+          const rest = want.slice(want.indexOf(kind) + 1).filter((k) => !c.KINDS || c.KINDS.includes(k));
+          if (rest.length) errors[errors.length - 1].kind += ', ' + rest.join(', ');
+          break;
+        }
+      }
     }
-    return { provider, pulledAt: Date.now(), results, errors };
+    // a mesma mensagem em vários tipos vira uma linha só ("servers, storage: …")
+    const merged = [];
+    for (const er of errors) { const m = merged.find((x) => x.message === er.message); if (m) m.kind += ', ' + er.kind; else merged.push(Object.assign({}, er)); }
+    return { provider, pulledAt: Date.now(), results, errors: merged };
   }
 };
