@@ -12,3 +12,5 @@
 /desktop/node_modules/
 /books-gerados/*
 !/books-gerados/.gitkeep
+# app local montado (npm run build:exe)
+/dist/

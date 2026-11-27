@@ -54,6 +54,6 @@ function openWindow(url) {
   const p = await start({ port, host: '127.0.0.1' });
   const w = local.who();
   console.log(`  👤 ${w.user} em ${w.machine}`);
-  console.log('  ⚠  Feche esta janela para encerrar o Book Técnico.\n');
+  console.log(process.env.BOOK_LAUNCHER === 'exe' ? '  ⚠  Para encerrar: ícone do Book Técnico perto do relógio › Sair.\n' : '  ⚠  Feche esta janela para encerrar o Book Técnico.\n');
   openWindow(`http://127.0.0.1:${p}/`);
 })().catch((e) => { console.error('\n  ✖ Não foi possível abrir o Book Técnico: ' + e.message + '\n'); setTimeout(() => process.exit(1), 120000); });

@@ -239,6 +239,8 @@ async function api(req, res, url) {
       return send(res, 200, Object.assign(r, { counts: await storage.api.counts() }));
     }
     case 'GET /api/edits': if (!LOCAL) break; return send(res, 200, await logs.edits(q));
+    // "Sair" do ícone da bandeja (BookTecnico.exe): fecha o banco direitinho antes de encerrar
+    case 'POST /api/local/quit': if (!LOCAL) break; send(res, 200, { ok: true }); setTimeout(() => shutdown('Sair'), 100); return;
     case 'GET /api/settings': return send(res, 200, await storage.getSettings());
     case 'PUT /api/settings': return send(res, 200, await storage.saveSettings(await readBody(req)));
     case 'GET /api/settings/storage': return send(res, 200, await storage.status());

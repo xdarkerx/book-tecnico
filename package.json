@@ -10,6 +10,7 @@
     "build:styles": "node tools/build-book-styles.js",
     "test": "node tools/test-server.js && node tools/test-edge.js && node tools/test-front.js && node tools/test-local.js",
     "local": "node server/local-app.js",
+    "build:exe": "node tools/build-exe.js",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f book-tecnico"

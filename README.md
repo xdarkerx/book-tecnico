@@ -11,6 +11,10 @@ Esta branch roda o Book Técnico **só nesta máquina**, sem servidor nem contai
 3. Dê **duplo clique em `Book-Tecnico.cmd`**. O app abre numa janela própria (Edge em modo app). Uma janela de
    console fica minimizada: feche-a para encerrar o app.
 
+**Executável (sem instalar o Node.js):** `npm run build:exe` gera `dist/BookTecnico-app-local.zip` com o
+`BookTecnico.exe`, o Node.js embutido (`runtime/`) e o app (`app/`). Extraia a pasta e abra o `BookTecnico.exe`: o app
+abre numa janela e fica um ícone perto do relógio (**Abrir** / **Sair**). Log: `%APPDATA%\BookTecnicopp.log`.
+
 O que muda em relação ao site:
 - **Sem login.** Quem edita é o **usuário do Windows** e a **máquina**.
 - **Histórico de edições** (⚙️ Configurações › Aplicativo): quem editou cada book, de qual máquina e quando. Fica
