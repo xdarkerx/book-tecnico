@@ -167,8 +167,8 @@
       const p = it.parsed;
       if (!it.provider) it.provider = BT.importer.detect.provider(p.sheets[0].fields, it.path, p.sheets.map((s) => s.name));
       if (!keepDest) {
-        // conta nomeada (ex.: AWS · HML): procura só no menu daquela conta
-        const scope = it.account ? { groups: accountGroups(T, it) } : T;
+        // conta nomeada (ex.: AWS · HML): procura só no menu daquela conta — menos o baseline, que é do book todo (Baseline Geral)
+        const scope = it.account && !(it.tokens || []).includes('baseline') ? { groups: accountGroups(T, it) } : T;
         const { hit, alias } = matchSection(scope, it.tokens, it.provider);
         it.dest = hit ? hit.section.id : '__new__';
         it.newTitle = hit ? '' : prettify(it.entry.name);
@@ -252,6 +252,7 @@
     const riskSel = new Set(o.risks || (BT.blocks.RISK_LEVELS || []).map((x) => x[0]));
       const touched = new Set();
       const filledTables = new Set();
+      const baselineTables = new Map(); // seção → tabela do baseline já preenchida nesta importação (as outras fontes somam nela)
       const newSections = {};
       const zipImageBlock = new Map(); // seção → bloco de imagem usado nesta importação
       const today = U.today();
@@ -269,7 +270,11 @@
           if (last >= 0) T.groups.splice(last + 1, 0, g); else T.groups.push(g);
         }
         if (!g) g = T.groups[T.groups.length - 1] || (T.groups.push(BT.store.makeGroup({ title: 'Book', icon: '📄' })), T.groups[0]);
-        const s = BT.store.makeSection({ title: it.newTitle || 'Importados', icon: it.kind === 'image' ? '🖼️' : '📄' });
+        // menu de cloud/conta (ex.: 2º vCenter): mesmos nomes e ícones do menu padrão ("Redes" → "Networking")
+        let title = it.newTitle || 'Importados';
+        if (g.provider && /^redes?$/i.test(norm(title))) title = 'Networking';
+        const SEC_ICON = { geral: '🏷️', servidores: '🖥️', networking: '🌐', seguranca: '🔒', storage: '💾', backup: '📦', baseline: '🌐', vulnerabilidades: '🛡️' };
+        const s = BT.store.makeSection({ title, icon: it.kind === 'image' ? '🖼️' : SEC_ICON[norm(title)] || '📄' });
         // menu de cloud: mantém a ordem padrão (Geral, Servidores, Networking, Segurança, Storage, Backup)
         const RANK = ['geral', 'servidores', 'networking', 'seguranca', 'storage', 'backup'];
         const rank = (t) => { const i = RANK.indexOf(norm(t)); return i < 0 ? RANK.length : i; };
@@ -309,10 +314,21 @@
             const columns = cols.map((c) => ({ name: c.name, badge: !!c.badge }));
             const note = opts.note ? (it.api ? `Fonte: ${BT.data.providers[it.provider].tool ? '' : 'API '}${BT.data.providers[it.provider].label}${it.account ? ' · ' + it.account : ''}${it.periodLabel ? ' · ' + it.periodLabel : ''} · sincronizado em ${today}` : `Fonte: ${it.path} · ${BT.data.providers[it.provider || 'generic'].label} · importado em ${today}`) : '';
             let table = null;
+            if (it.mapper === 'baseline') {
+              const amb = cols.findIndex((c) => c.key === 'ambiente');
+              if (it.account && amb >= 0) rows.forEach((r) => { if (r[amb] && !r[amb].includes(it.account)) r[amb] = `${r[amb]} · ${it.account}`; });
+              const prevTable = baselineTables.get(sec.id);
+              if (prevTable) { // 2ª fonte em diante: soma na mesma tabela e junta a fonte na nota
+                BT.importer._applyToTable(prevTable, 'append', columns, rows, '');
+                if (note) prevTable.data.note = [prevTable.data.note, note.replace(/^Fonte: /, '')].filter(Boolean).join(' · ');
+                continue;
+              }
+            }
             if (it.how !== 'new') table = sec.blocks.find((b) => b.type === 'table' && !filledTables.has(b.id));
             if (table) BT.importer._applyToTable(table, it.how, columns, rows, note);
             else { table = BT.importer._tableBlock('', columns, rows, note); sec.blocks.push(table); }
             filledTables.add(table.id);
+            if (it.mapper === 'baseline') baselineTables.set(sec.id, table);
             if (opts.charts && it.how !== 'append') BT.importer.insertCharts(sec, table, BT.importer.distCharts(it.mapper, table.id, cols));
             if (opts.kpi && it.mapper !== 'raw' && it.how !== 'append') {
               const m2 = BT.importer.mappers[it.mapper];

@@ -9,7 +9,9 @@
     'microsoft.sql/servers': 'SQL Servers', 'microsoft.sql/servers/databases': 'SQL Databases', 'microsoft.web/sites': 'App Services', 'microsoft.web/serverfarms': 'App Service Plans',
     'microsoft.recoveryservices/vaults': 'Recovery Vaults', 'microsoft.keyvault/vaults': 'Key Vaults', 'microsoft.compute/snapshots': 'Snapshots', 'microsoft.network/dnszones': 'DNS Zones',
     'BootVolume': 'Boot Volumes', 'NetworkSecurityGroup': 'NSGs', 'SecurityList': 'Security Lists', 'AutonomousDatabase': 'Autonomous DB', 'PublicIp': 'IPs Públicos', 'Drg': 'DRGs', 'VolumeBackup': 'Backups de volume' };
-  const KNOWN = Object.assign({}, OCI, AZURE, OTHERS);
+  // vCenter e Oracle VM (sincronização): mesmas categorias do Baseline Geral
+  const ONPREM = { 'Virtual Machine': 'Servidores', 'Host ESXi': 'Hosts ESXi', 'Cluster': 'Clusters', 'Datacenter': 'Datacenters', 'Oracle VM Server': 'Servidores OVS', 'Server Pool': 'Server Pools' };
+  const KNOWN = Object.assign({}, OCI, AZURE, OTHERS, ONPREM);
 
   function typeColumn(fields) {
     const pri = ['resource_type', 'Resource Type', 'TYPE', 'Type', 'ResourceType', 'Tipo', 'Kind', 'Service'];
