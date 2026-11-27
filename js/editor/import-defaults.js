@@ -23,6 +23,7 @@
       try {
         await BT.auth.saveImportDefaults({ zabbixSeverities: [...sev], risks: [...risks], newOnly, zabbixAllHosts: allHosts.checked, backupMode });
         BT.ui.toast(BT.auth.user ? 'Padrões de importação salvos no seu usuário ✓' : 'Padrões de importação salvos neste navegador ✓', { type: 'ok' });
+        render(); // mostra que agora são os seus
       } catch (e) { msg.appendChild(h('div', { class: 'db-result err' }, e.message)); }
     };
     box.append(
@@ -30,8 +31,7 @@
         h('div', { class: 'subt', style: { marginTop: 0 } }, '📥 Importação padrão'),
         h('div', { class: 'set-help' }, ['O que já vem marcado ao sincronizar e ao revisar uma importação, em todos os books. Dá para mudar em cada importação. ',
           BT.auth.user ? 'Fica salvo no seu usuário (vale em qualquer computador).' : 'Sem login, fica salvo neste navegador.']),
-        h('div', { class: 'db-pill ' + (own ? 'warn' : 'ok'), style: { margin: '8px 0' } }, own ? '✏️ Você está usando os seus padrões (não os da equipe).' : '👥 Seguindo o padrão da equipe (Configurações › Opções de book). Salvar aqui cria os seus.'),
-        own ? h('button', { type: 'button', class: 'btn btn-ghost btn-xs', onclick: async () => { await BT.auth.resetImportDefaults(); BT.ui.toast('Voltou a seguir o padrão da equipe ✓', { type: 'ok' }); render(); } }, '↺ Voltar ao padrão da equipe') : null,
+        h('div', { class: 'db-pill ' + (own ? 'warn' : 'ok'), style: { margin: '8px 0' } }, own ? '✏️ Você está usando os seus padrões (não os da equipe). "↺ Redefinir" volta ao padrão da equipe.' : `👥 Seguindo o padrão da equipe (${BT.api.local ? 'Aplicativo' : 'Administrador'} › Padrões da equipe). Salvar aqui cria os seus.`),
         h('div', { class: 'lbl', style: { margin: '14px 0 8px' } }, '📡 Zabbix — severidades dos alertas'),
         h('div', { class: 'cprow' }, ZSEV.map(([v, l]) => chk(sev, v, l))),
         h('label', { class: 'switch', style: { marginTop: '10px' } }, [allHosts, 'Incluir servidores sem nenhum alerta no período (Monitoramento)']),
@@ -45,7 +45,13 @@
           h('label', { class: 'cp' }, [h('input', { type: 'radio', name: 'imp-bk', checked: backupMode === v, onchange: () => (backupMode = v) }), l]))),
         h('div', { class: 'set-help', style: { marginTop: '8px' } }, 'Os backups feitos são sempre só os do mês do book.')
       ]),
-      h('div', { class: 'set-actions' }, [msg, h('button', { class: 'btn btn-primary btn-sm', onclick: save }, 'Salvar')]));
+      h('div', { class: 'set-actions' }, [msg,
+        // redefinir: apaga os seus padrões e volta a usar o padrão da equipe (definido pelo administrador)
+        h('button', { class: 'btn btn-ghost btn-sm', disabled: !own, title: own ? 'Apaga os seus padrões e usa o padrão da equipe' : 'Você já está usando o padrão da equipe', onclick: async () => {
+          if (!(await BT.ui.modal.confirm('Apagar os seus padrões de importação e voltar a usar o padrão da equipe?', { okText: 'Redefinir', title: '↺ Redefinir' }))) return;
+          try { await BT.auth.resetImportDefaults(); BT.ui.toast('Redefinido: usando o padrão da equipe ✓', { type: 'ok' }); render(); } catch (e) { BT.ui.toast(e.message, { type: 'err' }); }
+        } }, '↺ Redefinir'),
+        h('button', { class: 'btn btn-primary btn-sm', onclick: save }, 'Salvar')]));
   }
 
   BT.editor = BT.editor || {};
