@@ -1,5 +1,5 @@
 /* ═══ Canvas da seção + moldura dos blocos ═══ */
-.sec-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:6px}
+.sec-head{display:flex;align-items:center;gap:12px;margin-bottom:6px} /* ícone, título e ⋯ centralizados na mesma linha */
 .sec-icon{width:42px;height:42px;border-radius:10px;background:rgba(94,63,225,.15);border:1px solid var(--bd);font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sec-icon:hover{border-color:var(--p)}
 .sec-title-in{flex:1;background:transparent;border:none;border-bottom:1px dashed var(--bd);font-size:20px;font-weight:700;color:var(--tx);outline:none;padding:4px 2px;min-width:0;width:100%}

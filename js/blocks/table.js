@@ -177,7 +177,7 @@
       }
 
       // ── Barra de ações ────────────────────────────────
-      const search = h('input', { class: 'inp inp-sm tb-search', placeholder: '🔍 Filtrar linhas', oninput: U.debounce((e) => { filter = e.target.value; draw(); }, 200) });
+      const search = h('input', { class: 'inp inp-xs tb-search', placeholder: '🔍 Filtrar linhas', oninput: U.debounce((e) => { filter = e.target.value; draw(); }, 200) });
       const compact = h('input', { type: 'checkbox', checked: !!d.compact, onchange: (e) => { d.compact = e.target.checked; save(); } });
       const more = (e) => BT.ui.contextMenu(e.clientX, e.clientY, [
         { label: '🧹 Remover linhas vazias', onClick: () => { d.rows = d.rows.filter(rowHasData); save(); draw(); } },

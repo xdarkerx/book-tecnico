@@ -105,7 +105,7 @@
     const cid = h('input', { class: 'inp', value: c.graph.clientId });
     const secret = h('input', { class: 'inp', type: 'password', value: c.graph.clientSecret, autocomplete: 'new-password' });
     const baseF = h('input', { class: 'inp', value: b.baseFolder || '', placeholder: '\\\\servidor\\books   ou   /exports (no container)' });
-    const testTo = h('input', { class: 'inp', placeholder: 'seu@email.com', style: { maxWidth: '280px' } });
+    const testTo = h('input', { class: 'inp inp-sm', placeholder: 'seu@email.com', style: { maxWidth: '280px' } });
     const msg = h('div');
     const smtpBox = h('div', {}, [h('div', { class: 'fg fg2' }, [fld('Servidor SMTP', host), fld('Porta', port, '587 (STARTTLS) ou 465 (SSL)')]),
       h('label', { class: 'switch', style: { margin: '8px 0' } }, [secure, 'Conexão SSL direta (porta 465)']),

@@ -51,7 +51,8 @@ module.exports = {
               const before = sh.rows.length; let noDate = 0;
               sh.rows = sh.rows.filter((r) => { const d = String(r['Criado em'] || ''); if (!d) { noDate++; return false; } return d >= from && d <= to; });
               sh.name += ' — criados no período';
-              if (noDate) errors.push({ kind, message: `${noDate} de ${before} item(ns) sem data de criação na API ficaram de fora (ex.: redes da AWS).` });
+              const api = { vmware: 'do vCenter', ovm: 'do Oracle VM' }[provider] || 'da cloud';
+              if (noDate) errors.push({ kind, message: `${noDate} de ${before} item(ns) ficaram de fora: a API ${api} não informa a data de criação (use "Todos os recursos" para trazê-los).` });
             }
           }
           results.push(...sheets);

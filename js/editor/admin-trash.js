@@ -28,7 +28,7 @@
       h('div', { class: 'tr-tools' }, [
         h('input', { class: 'inp inp-sm', type: 'search', placeholder: 'Buscar por nome, GUID ou quem excluiu', 'aria-label': 'Buscar na lixeira', value: filter, oninput: (e) => { filter = e.target.value; draw(); } }),
         h('select', { class: 'inp inp-sm', 'aria-label': 'Tipo', onchange: (e) => { type = e.target.value; draw(); } }, [['', 'Tudo'], ['client', 'Clientes'], ['year', 'Anos'], ['book', 'Books']].map(([v, l]) => h('option', { value: v, selected: v === type }, l))),
-        h('span', { class: 'tr-days' }, ['Apagar sozinho após ', days, ' dias ', h('button', { class: 'btn btn-ghost btn-xs', onclick: async () => {
+        h('span', { class: 'tr-days' }, ['Apagar sozinho após ', days, ' dias ', h('button', { class: 'btn btn-ghost btn-sm', onclick: async () => {
           try { const r = await BT.api.trashSettings(days.value); BT.ui.toast(`Itens da lixeira serão apagados após ${r.days} dia(s).`, { type: 'ok' }); } catch (e) { BT.ui.toast(e.message, { type: 'err' }); }
         } }, 'Salvar')])
       ]),

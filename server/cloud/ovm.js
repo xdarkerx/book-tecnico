@@ -16,8 +16,8 @@ const base = (cfg) => {
   return `${u.protocol}//${u.host}/ovm/core/wsapi/rest`;
 };
 function client(cfg) {
+  const b = base(cfg); // primeiro a URL, depois usuário e senha (mesma ordem da tela)
   if (!cfg.user || !cfg.password) throw new Error('Informe o usuário e a senha do OVM Manager.');
-  const b = base(cfg);
   const headers = { authorization: 'Basic ' + Buffer.from(cfg.user + ':' + cfg.password).toString('base64'), accept: 'application/json' };
   return async (path) => {
     try { return await (await U.request(b + path, { headers, insecure: !!cfg.insecure, timeout: 120000 })).json(); }
