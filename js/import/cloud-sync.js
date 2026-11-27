@@ -326,6 +326,12 @@
                 blocks: [{ type: 'topology', data: { title: 'Topologia de rede', provider: p, account, origin: 'topology-' + k, style: (BT.data.defaults && BT.data.defaults.blocks().topologyStyle) || 'compact', hidden: [], model: t } }], dest: '', newTitle: '', how: 'new', note: '' });
               return;
             }
+            if (sh.kind === 'security') {
+              // vCenter: checagens de segurança (versões, alarmes, Tools, snapshots…) na seção Segurança do menu On-Premises
+              items.push({ id: BT.uid('zi'), api: true, kind: 'data', include: true, provider: p, account, primary, path: `${label} · ${sh.name}`, tokens: [p, 'seguranca'], entry: { name: 'Segurança', path: '' },
+                destTitle: 'Segurança', newTitleHint: 'Segurança', forceMapper: 'raw', parsed: { name: sh.name, sheets: [{ name: sh.name, fields: sh.fields, rows: sh.rows, aoa: [] }] }, dest: '', newTitle: '', how: 'new', note: '' });
+              return;
+            }
             if (sh.kind === 'vulns') {
               // CVEs da cloud (VSS, Inspector, Defender for Cloud, SCC) em Operações › Vulnerabilidades
               items.push(...vulnItems(sh, { provider: p, account, primary, label, key: k, severities: vsev }));

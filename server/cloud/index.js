@@ -43,7 +43,10 @@ module.exports = {
           got.filter((r) => r && r.kind === 'warning').forEach((w) => errors.push({ kind, message: w.message }));
           results.push(...got.filter((r) => !(r && r.kind === 'warning')));
         } else {
-          const sheets = await c.pull(cfg, kind, opts);
+          const got = await c.pull(cfg, kind, opts);
+          // avisos parciais (ex.: a planilha de redes veio, a topologia não) vão para a lista de erros da tela
+          got.filter((r) => r && r.kind === 'warning').forEach((w) => errors.push({ kind, message: w.message }));
+          const sheets = got.filter((r) => !(r && r.kind === 'warning'));
           if (opts.newOnly && NEW_ONLY.includes(kind)) {
             // só os criados no período; quem não informa data de criação fica de fora (e a tela avisa)
             const from = opts.from || '0000', to = opts.to || '9999';
@@ -62,7 +65,7 @@ module.exports = {
         console.error(`[${provider}/${kind}]`, e.message); errors.push({ kind, message: e.message });
         // on-premises (vCenter/Oracle VM): falha de acesso (rede, login, sessão) faz os outros tipos falharem igual — para aqui.
         // Nas clouds não: um serviço pode falhar (ex.: Security Hub desligado) e os outros funcionarem.
-        if (c.KINDS && (!e.status || e.status === 401 || e.status === 403 || /\/session|recusou|inválido|Informe/i.test(e.message))) { // só vCenter/Oracle VM: tudo depende da mesma sessão
+        if (c.KINDS && (e.status === 401 || e.status === 403 || /^Falha de rede|\/session|recusou|inválido|Informe/i.test(e.message))) { // só vCenter/Oracle VM: tudo depende da mesma sessão
           const rest = want.slice(want.indexOf(kind) + 1).filter((k) => !c.KINDS || c.KINDS.includes(k));
           if (rest.length) errors[errors.length - 1].kind += ', ' + rest.join(', ');
           break;

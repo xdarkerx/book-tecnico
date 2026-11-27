@@ -16,7 +16,6 @@
   }
   function init() {
     render();
-    document.getElementById('pl-import').addEventListener('click', () => BT.importer.wizard.open());
   }
   BT.editor.palette = { init, render };
 })(window.BT);

@@ -131,29 +131,12 @@
       <main class="scroll" id="canvas-scroll">
         <div class="ct" id="view"><!-- render: js/editor/canvas.js ou cover-form.js --></div>
       </main>
-      <!-- ═══ html/palette.html — Paleta de blocos (arrastar e soltar) + atalhos de dados de cloud. Recolhida = só ícones (js/editor/panels.js) ═══ -->
+      <!-- ═══ html/palette.html — Paleta de blocos (arrastar e soltar). Recolhida = só ícones (js/editor/panels.js).
+           Sincronizar e importar ficam no menu ☁️ Dados de cloud do topo (html/header.html). ═══ -->
       <!-- ═══ PALETA de blocos (arrastar e soltar) ═══ -->
       <aside class="palette" id="palette">
         <button class="pl-toggle" id="pl-toggle" title="Recolher / expandir blocos"><span class="pl-tg-ic">⇥</span><span class="pl-tg-lbl">Blocos</span></button>
-        <!-- dados de cloud no topo: com muitos blocos, a sincronização ficava fora da tela -->
-        <div class="pl-head pl-head-cloud">
-          <div class="pl-title">Dados de cloud</div>
-        </div>
-        <div class="pl-list">
-          <button class="pl-item pl-item-cloud" id="pl-sync" title="Sincronizar (clouds · on-premises · ferramentas)">
-            <span class="pl-ic">🔄</span>
-            <span><b>Sincronizar</b><small>Clouds, vCenter, Oracle VM e ferramentas direto das APIs</small></span>
-          </button>
-          <button class="pl-item pl-item-cloud" id="pl-import" title="Importar CSV/XLSX">
-            <span class="pl-ic">☁️</span>
-            <span><b>Importar CSV/XLSX</b><small>OCI · AWS · Azure · GCP · VMware</small></span>
-          </button>
-          <button class="pl-item pl-item-cloud" id="pl-zip" title="Importar ZIP">
-            <span class="pl-ic">📦</span>
-            <span><b>Importar ZIP</b><small>Preenche várias seções de uma vez</small></span>
-          </button>
-        </div>
-        <div class="pl-head pl-head-2">
+        <div class="pl-head">
           <div class="pl-title">Blocos</div>
           <div class="pl-sub">Arraste para a seção ou clique para adicionar ao final</div>
         </div>

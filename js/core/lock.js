@@ -36,7 +36,7 @@
     BT.store.readOnly = on;
     document.body.classList.toggle('bk-readonly', on);
     ['view', 'palette'].forEach((id) => { const el = document.getElementById(id); if (el) el.inert = on; });
-    document.querySelectorAll('.sb-actions, #dd-import, #pl-zip, #pl-sync').forEach((el) => { el.inert = on; });
+    document.querySelectorAll('.sb-actions, #dd-import').forEach((el) => { el.inert = on; });
   }
 
   /** Ao abrir um book: tenta ficar com ele. */

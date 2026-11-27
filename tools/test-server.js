@@ -790,11 +790,12 @@ async function main() {
   assert.deepStrictEqual(only.map((r) => r.VM), ['SRV-SQL-01']); ok('vCenter: filtro por cluster');
   const vst = (await cloudIdx.pull('vmware', vcfg, ['storage'])).results[0].rows[0];
   assert.deepStrictEqual([vst.Name, vst['Capacity MiB'], vst['In Use MiB'], vst.Type], ['DS-01', '1048576', '786432', 'Datastore VMFS']); ok('vCenter: datastores com capacidade e uso (formato RVTools)');
-  const vall = await cloudIdx.pull('vmware', vcfg, ['network', 'tenant', 'backup', 'score', 'vulns']);
-  assert.deepStrictEqual([vall.errors.length, vall.results.map((r) => r.kind).join(','), vall.results[0].rows[0]['Port Group']], [0, 'network,tenant', 'VLAN10-PRD']);
+  const vall = await cloudIdx.pull('vmware', vcfg, ['network', 'tenant', 'vulns']);
+  // sem a API SOAP (/sdk) liberada: a planilha de redes vem e a topologia vira um aviso
+  assert.deepStrictEqual([vall.results.map((r) => r.kind).join(','), vall.errors.length, /Topologia do vCenter não veio/.test(vall.errors[0].message), vall.results[0].rows[0]['Port Group']], ['network,tenant', 1, true, 'VLAN10-PRD']);
   const vten = vall.results[1].rows[0];
   assert.deepStrictEqual([vten.vCenter, vten['Versão'], vten.Clusters, vten['Hosts ESXi'], vten.VMs], ['vcenter.local', '8.0.2 build 22617221', 'Cluster-PRD, Cluster-HML', '3', '2 (1 ligadas)']);
-  ok('vCenter: redes, Geral (versão, clusters, hosts e VMs); backup, Security Score e CVEs ficam de fora sem erro');
+  ok('vCenter: redes, Geral (versão, clusters, hosts e VMs); sem a SOAP a topologia vira aviso; CVEs ficam de fora sem erro');
   vcFetch('rest'); vcHits.length = 0;
   const vold = (await cloudIdx.pull('vmware', vcfg, ['servers'])).results[0].rows;
   assert.ok(vold.length === 2 && vcHits.some((h) => h.startsWith('POST /rest/com/vmware/cis/session'))); ok('vCenter 6.5–7.0: usa a API antiga (/rest) quando a nova não existe');
@@ -852,6 +853,112 @@ async function main() {
   ok('Oracle VM: redes e Geral (versão, server pools, VMs); backup e Security Score ficam de fora sem erro');
   const otst = await cloudIdx.test('ovm', ocfgVm);
   assert.ok(otst.ok && /3\.4\.6/.test(otst.message) && /2 VM/.test(otst.message), otst.message); ok('Oracle VM: testar conexão mostra versão, pools, servidores e VMs');
+
+  // ── vCenter pela API SOAP (/sdk): vCenter antigo sem REST, topologia, segurança e snapshots ──
+  require('../server/cloud/vsphere-soap')._cache.clear();
+  const DAY = 86400000; const nowIso = (d) => new Date(Date.now() - d * DAY).toISOString();
+  const X = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const val = (v) => {
+    if (v && v._mor) return `<val type="${v._mor[0]}" xsi:type="ManagedObjectReference">${v._mor[1]}</val>`;
+    if (v && v._array) return `<val xsi:type="ArrayOf${v._array}">${v.items.map((i) => `<${v._array}>${body(i)}</${v._array}>`).join('')}</val>`;
+    if (v && typeof v === 'object') return `<val xsi:type="x">${body(v)}</val>`;
+    return `<val xsi:type="xsd:string">${X(v)}</val>`;
+  };
+  const body = (o) => Object.entries(o).map(([k, v]) => [].concat(v).map((x) => (x && x._mor ? `<${k} type="${x._mor[0]}">${x._mor[1]}</${k}>` : x && typeof x === 'object' ? `<${k}>${body(x)}</${k}>` : `<${k}>${X(x)}</${k}>`)).join('')).join('');
+  const OBJ = {
+    Datacenter: [{ id: 'datacenter-1', name: 'DC-SP', parent: { _mor: ['Folder', 'group-d1'] } }],
+    Folder: [{ id: 'group-h4', name: 'host', parent: { _mor: ['Datacenter', 'datacenter-1'] } }, { id: 'group-n5', name: 'network', parent: { _mor: ['Datacenter', 'datacenter-1'] } }, { id: 'group-s6', name: 'datastore', parent: { _mor: ['Datacenter', 'datacenter-1'] } }],
+    ClusterComputeResource: [{ id: 'domain-c1', name: 'Cluster-PRD', parent: { _mor: ['Folder', 'group-h4'] } }],
+    ComputeResource: [],
+    HostSystem: [
+      { id: 'host-1', name: 'esx01', parent: { _mor: ['ClusterComputeResource', 'domain-c1'] }, 'summary.config.product.fullName': 'VMware ESXi 6.7.0', 'summary.config.product.version': '6.7.0', 'summary.config.product.build': '15160138', 'runtime.connectionState': 'connected', 'runtime.inMaintenanceMode': 'false',
+        'config.network.portgroup': { _array: 'HostPortGroup', items: [{ key: 'k1', spec: { name: 'VM Network', vlanId: '0', vswitchName: 'vSwitch0' } }, { key: 'k2', spec: { name: 'VLAN20-APP', vlanId: '20', vswitchName: 'vSwitch1' } }] },
+        'config.network.vswitch': { _array: 'HostVirtualSwitch', items: [{ name: 'vSwitch0' }] }, 'config.lockdownMode': 'lockdownDisabled' },
+      { id: 'host-2', name: 'esx02', parent: { _mor: ['ClusterComputeResource', 'domain-c1'] }, 'summary.config.product.fullName': 'VMware ESXi 8.0.2', 'summary.config.product.version': '8.0.2', 'summary.config.product.build': '22380479', 'runtime.connectionState': 'disconnected', 'runtime.inMaintenanceMode': 'false',
+        'config.network.portgroup': { _array: 'HostPortGroup', items: [{ key: 'k1', spec: { name: 'VM Network', vlanId: '0', vswitchName: 'vSwitch0' } }] }, 'config.lockdownMode': 'lockdownNormal' }],
+    VirtualMachine: [
+      { id: 'vm-1', name: 'SRV-SQL-01', 'runtime.powerState': 'poweredOn', 'runtime.host': { _mor: ['HostSystem', 'host-1'] }, 'guest.ipAddress': '10.0.0.10', 'guest.hostName': 'srv-sql-01', 'config.guestFullName': 'Microsoft Windows Server 2019 (64-bit)', 'summary.config.numCpu': '4', 'summary.config.memorySizeMB': '16384', 'config.template': 'false',
+        'guest.toolsRunningStatus': 'guestToolsRunning', 'guest.toolsVersionStatus2': 'guestToolsNeedUpgrade',
+        snapshot: { rootSnapshotList: { name: 'antes do patch', createTime: nowIso(40), childSnapshotList: { name: 'pos patch', createTime: nowIso(2) } } } },
+      { id: 'vm-2', name: 'SRV-WEB-01', 'runtime.powerState': 'poweredOn', 'runtime.host': { _mor: ['HostSystem', 'host-2'] }, 'guest.ipAddress': '10.0.0.11', 'config.guestFullName': 'Ubuntu Linux (64-bit)', 'summary.config.numCpu': '2', 'summary.config.memorySizeMB': '4096', 'config.template': 'false', 'guest.toolsRunningStatus': 'guestToolsRunning', 'guest.toolsVersionStatus2': 'guestToolsCurrent' },
+      { id: 'vm-3', name: 'TPL-WIN', 'runtime.powerState': 'poweredOff', 'config.template': 'true' }],
+    Datastore: [{ id: 'datastore-1', name: 'DS-01', parent: { _mor: ['Folder', 'group-s6'] }, 'summary.capacity': '1073741824000', 'summary.freeSpace': '32212254720', 'summary.type': 'VMFS', 'summary.accessible': 'true' }],
+    Network: [{ id: 'network-1', type: 'Network', name: 'VM Network', parent: { _mor: ['Folder', 'group-n5'] }, vm: { _array: 'ManagedObjectReference', items: [] } }],
+    DistributedVirtualPortgroup: [
+      { id: 'dvportgroup-1', type: 'DistributedVirtualPortgroup', name: 'DPG-VLAN10-PRD', parent: { _mor: ['Folder', 'group-n5'] }, vm: { _mor: ['VirtualMachine', 'vm-1'] }, 'config.distributedVirtualSwitch': { _mor: ['VmwareDistributedVirtualSwitch', 'dvs-1'] }, 'config.defaultPortConfig': { vlan: { vlanId: '10' } } },
+      { id: 'dvportgroup-2', type: 'DistributedVirtualPortgroup', name: 'DSwitch-PRD-DVUplinks-1', parent: { _mor: ['Folder', 'group-n5'] }, 'config.distributedVirtualSwitch': { _mor: ['VmwareDistributedVirtualSwitch', 'dvs-1'] } }],
+    DistributedVirtualSwitch: [{ id: 'dvs-1', type: 'VmwareDistributedVirtualSwitch', name: 'DSwitch-PRD', parent: { _mor: ['Folder', 'group-n5'] } }]
+  };
+  const views = {}; let soapRest = 'none'; const soapHits = [];
+  const soapFetch = async (url, o = {}) => {
+    const u = new URL(String(url)); const b = String(o.body || '');
+    const J = (x, st = 200) => new Response(JSON.stringify(x), { status: st });
+    if (u.pathname !== '/sdk') {
+      if (soapRest === 'none') return J({ error: 'not found' }, 404);
+      // vCenter 7 com REST: só o suficiente para a API nova
+      if (u.pathname === '/api/session' && o.method === 'POST') return J('TOKEN');
+      if (u.pathname === '/api/vcenter/datacenter') return J([{ datacenter: 'datacenter-1', name: 'DC-SP' }]);
+      if (u.pathname === '/api/vcenter/network') return J([{ name: 'DPG-VLAN10-PRD', type: 'DISTRIBUTED_PORTGROUP' }]);
+      if (u.pathname === '/api/appliance/recovery/backup/schedules') return J({ default: { enable: true, recurrence_info: { days: ['MONDAY', 'THURSDAY'], hour: 23, minute: 0 }, retention_info: { max_count: 7 } } });
+      if (u.pathname === '/api/appliance/recovery/backup/job/details') return J({ '20261110-230000-x': { type: 'BACKUP', status: 'SUCCEEDED', start_time: nowIso(3) }, '20200101-x': { type: 'BACKUP', status: 'FAILED', start_time: '2020-01-01T00:00:00Z' } });
+      if (o.method === 'DELETE') return J({});
+      return J([]);
+    }
+    const act = (b.match(/<soapenv:Body><(\w+)/) || [])[1]; soapHits.push(act);
+    assert.ok(/text\/xml/.test(o.headers['content-type']) && /urn:vim25/.test(o.headers.soapaction));
+    if (act !== 'RetrieveServiceContent' && act !== 'Login') assert.ok(/vmware_soap_session/.test(o.headers.cookie || ''), 'sem cookie da sessão em ' + act);
+    const env = (x) => `<?xml version="1.0"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body>${x}</soapenv:Body></soapenv:Envelope>`;
+    const R = (x, h = {}) => new Response(env(x), { status: 200, headers: Object.assign({ 'content-type': 'text/xml' }, h) });
+    if (act === 'RetrieveServiceContent') return R(`<RetrieveServiceContentResponse xmlns="urn:vim25"><returnval><rootFolder type="Folder">group-d1</rootFolder><propertyCollector type="PropertyCollector">propertyCollector</propertyCollector><viewManager type="ViewManager">ViewManager</viewManager><sessionManager type="SessionManager">SessionManager</sessionManager><about><fullName>VMware vCenter Server 6.0.0 build-3634793</fullName><version>6.0.0</version><build>3634793</build><apiVersion>6.0</apiVersion></about></returnval></RetrieveServiceContentResponse>`);
+    if (act === 'Login') {
+      if (!/<password>x<\/password>/.test(b)) return new Response(env('<soapenv:Fault><faultcode>ServerFaultCode</faultcode><faultstring>Cannot complete login due to an incorrect user name or password.</faultstring></soapenv:Fault>'), { status: 500 });
+      return R('<LoginResponse xmlns="urn:vim25"><returnval><key>k</key></returnval></LoginResponse>', { 'set-cookie': 'vmware_soap_session="abc123"; Path=/; HttpOnly' });
+    }
+    if (act === 'CreateContainerView') { const id = 'session[v' + Object.keys(views).length + ']'; views[id] = [...b.matchAll(/<type>(\w+)<\/type>/g)].map((m) => m[1]); return R(`<CreateContainerViewResponse xmlns="urn:vim25"><returnval type="ContainerView">${id}</returnval></CreateContainerViewResponse>`); }
+    if (act === 'RetrievePropertiesEx') {
+      const paths = {}; for (const m of b.matchAll(/<propSet><type>(\w+)<\/type>((?:<pathSet>[^<]+<\/pathSet>)*)<\/propSet>/g)) paths[m[1]] = [...m[2].matchAll(/<pathSet>([^<]+)<\/pathSet>/g)].map((x) => x[1]);
+      const objs = []; const view = (b.match(/<obj type="ContainerView">([^<]+)<\/obj>/) || [])[1];
+      if (view) for (const t of views[view]) for (const ob of OBJ[t] || []) objs.push([ob.type || t, ob, paths[t]]);
+      else if (/<obj type="Folder">group-d1<\/obj>/.test(b)) objs.push(['Folder', { id: 'group-d1', triggeredAlarmState: { _array: 'AlarmState', items: [{ key: 'alarm-1.host-2', entity: { _mor: ['HostSystem', 'host-2'] }, alarm: { _mor: ['Alarm', 'alarm-1'] }, overallStatus: 'red', time: nowIso(1), acknowledged: 'false' }] } }, ['triggeredAlarmState']]);
+      else if (/<obj type="Alarm">alarm-1<\/obj>/.test(b)) objs.push(['Alarm', { id: 'alarm-1', 'info.name': 'Host connection and power state' }, ['info.name']]);
+      const xml = objs.map(([t, ob, ps]) => `<objects><obj type="${t}">${ob.id}</obj>${(ps || []).filter((p) => ob[p] !== undefined).map((p) => `<propSet><name>${p}</name>${val(ob[p])}</propSet>`).join('')}</objects>`).join('');
+      return R(`<RetrievePropertiesExResponse xmlns="urn:vim25">${objs.length ? `<returnval>${xml}</returnval>` : ''}</RetrievePropertiesExResponse>`);
+    }
+    return R(`<${act}Response xmlns="urn:vim25"/>`);
+  };
+  global.fetch = soapFetch;
+  const scfg = { url: 'vcenter60.local', user: 'leitura@vsphere.local', password: 'x' };
+  // 1) vCenter 6.0 (sem REST): tudo pela SOAP
+  const s60 = (await cloudIdx.pull('vmware', scfg, ['servers'])).results[0].rows;
+  assert.deepStrictEqual(s60.map((r) => [r.VM, r['Primary IP Address'], r.Cluster, r.Host, r.Datacenter, r.Powerstate]), [['SRV-SQL-01', '10.0.0.10', 'Cluster-PRD', 'esx01', 'DC-SP', 'poweredOn'], ['SRV-WEB-01', '10.0.0.11', 'Cluster-PRD', 'esx02', 'DC-SP', 'poweredOn']]);
+  ok('vCenter antigo (6.0, sem REST): VMs pela API SOAP com IP, cluster, host e datacenter (templates de fora)');
+  assert.ok(/API SOAP/.test((await cloudIdx.test('vmware', scfg)).message)); ok('vCenter antigo: testar conexão avisa que usa a API SOAP');
+  const st60 = (await cloudIdx.pull('vmware', scfg, ['storage'])).results[0].rows[0];
+  assert.deepStrictEqual([st60.Name, st60['Capacity MiB'], st60.Datacenter], ['DS-01', '1024000', 'DC-SP']); ok('vCenter antigo: datastores pela SOAP');
+  // 2) topologia
+  const net60 = await cloudIdx.pull('vmware', scfg, ['network']);
+  const vtp = net60.results.find((r) => r.kind === 'topology').topology;
+  assert.deepStrictEqual([vtp.hubs.map((h) => h.type + ':' + h.name).sort(), vtp.networks.map((n) => `${n.name} ${n.cidr}`).sort()],
+    [['vDS:DSwitch-PRD', 'vSwitch:vSwitch0 (padrão)', 'vSwitch:vSwitch1 (padrão)'], ['DPG-VLAN10-PRD VLAN 10', 'VLAN20-APP VLAN 20', 'VM Network sem VLAN']]);
+  assert.ok(vtp.links.some((l) => l.a === 'dvportgroup-1' && l.b === 'dvs:dvs-1') && vtp.networks.find((n) => n.name === 'VM Network').gateways.some((g) => g.type === '2 hosts')); ok('vCenter: topologia com vDS e vSwitch, port groups com VLAN, VMs e hosts (uplinks de fora)');
+  // 3) segurança
+  const vsec = (await cloudIdx.pull('vmware', scfg, ['score'])).results[0];
+  const VS = Object.fromEntries(vsec.rows.map((r) => [r.Controle, r]));
+  assert.strictEqual(vsec.kind, 'security');
+  assert.deepStrictEqual([VS['Versão do vCenter'].Status, VS['Hosts desconectados'].Status, VS['Lockdown mode'].Status, VS['VMware Tools'].Status, VS['Snapshots antigos'].Status, VS['Espaço nos datastores'].Status, VS['Alarme: Host connection and power state'].Status],
+    ['Crítico', 'Crítico', 'Atenção', 'Atenção', 'Crítico', 'Crítico', 'Crítico']);
+  assert.ok(vsec.rows.filter((r) => r.Controle === 'Versão do ESXi').map((r) => r.Status).sort().join() === 'Crítico,OK' && /esx02/.test(VS['Alarme: Host connection and power state']['Descrição']));
+  ok('vCenter: segurança (versões e suporte, hosts desconectados, lockdown, Tools, snapshots antigos, datastore cheio, alarmes)');
+  // 4) backup: vCenter 7 com REST (agendamento e execuções do VCSA) + snapshots do período pela SOAP
+  require('../server/cloud/vsphere-soap')._cache.clear(); soapRest = 'api';
+  const vbk = (await cloudIdx.pull('vmware', Object.assign({}, scfg, { url: 'vcenter70.local' }), ['backup'], { from: new Date(Date.now() - 10 * DAY).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) })).results[0].rows;
+  assert.deepStrictEqual(vbk.map((r) => `${r.Item} | ${r['Situação']} | ${r['Frequência']}`), [
+    'vCenter Server (VCSA) — agendamento default | Política ativa | seg, qui às 23:00', 'vCenter Server (VCSA) — backup | OK | Agendado', 'SRV-SQL-01 — snapshot "pos patch" | Snapshot (não é backup) | Manual']);
+  ok('vCenter: backup com o agendamento e as execuções do VCSA no período e os snapshots feitos no mês');
+  const net70 = await cloudIdx.pull('vmware', Object.assign({}, scfg, { url: 'vcenter70.local' }), ['network']);
+  assert.deepStrictEqual(net70.results.map((r) => r.kind), ['network', 'topology']); ok('vCenter 7 (REST): planilha de redes pela REST e topologia pela SOAP');
+  soapRest = 'none'; require('../server/cloud/vsphere-soap')._cache.clear();
+  assert.ok(/usuário ou a senha/.test((await cloudIdx.test('vmware', Object.assign({}, scfg, { password: 'errada' }))).message)); ok('vCenter (SOAP): senha errada dá mensagem clara');
   global.fetch = realFetch;
   console.log(`\n${passed} testes ok`);
 }

@@ -324,7 +324,19 @@ usa esse):
 | Geral | vCenter, versão, datacenters, clusters, hosts ESXi e VMs |
 | Baseline | Contagem de datacenters, clusters, hosts e VMs |
 
-Funciona com a API nova (vSphere 7.0 U2 ou mais novo) e a antiga (6.5, 6.7 e 7.0 até o U1): o app testa o inventário e escolhe sozinho. O endereço pode ser só o IP ou o nome (o https:// entra sozinho). Backup, Security Score e CVEs não vêm
+Funciona com a API nova (vSphere 7.0 U2 ou mais novo) e a antiga (6.5, 6.7 e 7.0 até o U1): o app testa o inventário e escolhe sozinho.
+**vCenter 5.5 e 6.0** (sem API REST) usam a API SOAP (`/sdk`), que existe em todas as versões. O endereço pode ser só o IP ou o nome
+(o https:// entra sozinho).
+
+Além do inventário, pela API SOAP:
+
+| Seção | O que vem |
+|---|---|
+| Networking › Topologia | Switches distribuídos (vDS) e vSwitches padrão como hubs; port groups com VLAN, quantas VMs e em quantos hosts |
+| Segurança (opção "Security Score" da sincronização) | Versão do vCenter e do ESXi com o fim do suporte da VMware, hosts desconectados ou em manutenção, lockdown mode, VMware Tools (sem Tools, desatualizado, parado), snapshots com mais de 7/30 dias, datastores com menos de 15% livre e os alarmes disparados no vCenter |
+| Backup | Agendamento (política) e execuções do backup do próprio vCenter (VCSA) no mês, e os snapshots de VM feitos no mês |
+
+Sem acesso à API SOAP, a sincronização segue com o inventário e avisa o que não veio. Backup, Security Score e CVEs não vêm
 do vCenter (ficam de fora sem erro).
 
 #### Oracle VM 3.x (OVM Manager) — também no menu On-Premises

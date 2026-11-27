@@ -14,7 +14,7 @@
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const FONT = "Inter, 'Segoe UI', Arial, sans-serif";
   const W = 960, PAD = 20, GAP = 22, MAX_SUBNETS = 8, MAX_NETS = 36;
-  const COLOR = { oci: '#c74634', aws: '#ff9900', azure: '#0078d4', gcp: '#4285f4' };
+  const COLOR = { oci: '#c74634', aws: '#ff9900', azure: '#0078d4', gcp: '#4285f4', vmware: '#6d8aa6', ovm: '#c74634' };
   const LINK = { attach: ['#5E3FE1', ''], peering: ['#00a383', '6 4'], internet: ['#8D92A7', '2 4'], vpn: ['#DC5282', '7 4'], dedicated: ['#b7860b', ''] };
   const cut = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 

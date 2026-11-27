@@ -54,8 +54,6 @@
     $('btn-session').addEventListener('click', () => { const k = BT.store.sessionId ? BT.api.keyOf(BT.store.sessionId) : {}; BT.editor.nav.show({ cliente: k.cliente, ano: k.ano }); });
     $('btn-menu').addEventListener('click', () => $('app').classList.toggle('sb-open'));
     $('sb-backdrop').addEventListener('click', () => $('app').classList.remove('sb-open'));
-    $('pl-zip').addEventListener('click', () => BT.importer.zip.pick());
-    $('pl-sync').addEventListener('click', () => BT.importer.cloud.sync());
     BT.editor.panels.init();
     $('btn-settings').addEventListener('click', () => BT.editor.settings.open());
     document.querySelectorAll('#dd-file [data-action]').forEach((b) => b.addEventListener('click', () => {
