@@ -93,8 +93,7 @@
             { title: 'Servidores — Recomendações', icon: '🖥️', blocks: [table(['Servidor', 'Recurso', 'Situação', 'Ação sugerida', 'Prioridade'], [4])] },
             { title: 'Otimização de custos', icon: '💰', blocks: [text('', 'Recursos ociosos ou sem uso'), table(['Recurso', 'Tipo', 'Situação', 'Custo mensal estimado', 'Ação sugerida'], [2])] },
             { title: 'Melhorias', icon: '🚀', blocks: [table(['Prioridade', 'Área', 'Descrição', 'Responsável', 'Prazo'], [0])] },
-            { title: 'Próximos Passos', icon: '📌', blocks: [table(['Prioridade', 'Ação / Compromisso', 'Responsável', 'Prazo', 'Status'], [0, 4])] },
-            { title: 'Histórico de Revisões', icon: '🗂️', blocks: [table(['Versão', 'Data', 'Descrição', 'Revisor', 'Aprovadores'])] }
+            { title: 'Próximos Passos', icon: '📌', blocks: [table(['Prioridade', 'Ação / Compromisso', 'Responsável', 'Prazo', 'Status'], [0, 4])] }
           ]
         }
       ],
