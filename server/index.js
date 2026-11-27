@@ -15,6 +15,9 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const localApp = require('./local');
+localApp.applyEnv(); // app local (BOOK_LOCAL=1): pasta de dados, SQLite e arquivo do banco antes de carregar o armazenamento
+const LOCAL = localApp.LOCAL;
 const storage = require('./storage');
 const { httpError, clientIp } = require('./storage/common');
 const cloud = require('./cloud');
@@ -134,7 +137,10 @@ const ADMIN_API = new Set(['POST /api/settings/storage', 'PUT /api/settings/mong
   'POST /api/auth/graph/sync', 'POST /api/auth/graph/test',
   'GET /api/trash', 'POST /api/trash/restore', 'DELETE /api/trash', 'PUT /api/trash/settings',
   'GET /api/logs', 'GET /api/mail/config', 'PUT /api/mail/config', 'POST /api/mail/test', 'GET /api/automation/base', 'PUT /api/automation/base', 'PUT /api/automation', 'POST /api/automation/run', 'GET /api/backup/config', 'PUT /api/backup/config', 'POST /api/backup/run', 'POST /api/backup/test', 'GET /api/backup/download', 'POST /api/backup/restore']);
+/** App local: rotas de site (login, usuários, MongoDB, backup do servidor, e-mail, book automático, logs completos). */
+const SITE_ONLY = /^(GET|PUT|POST|DELETE) \/api\/(users|auth\/(?!me$|prefs$)|mail\/|automation(?!\/profile$)|backup\/|logs$|settings\/mongo|settings\/storage\/delete)|^POST \/api\/settings\/storage$/;
 async function guard(req, route) {
+  if (LOCAL && SITE_ONLY.test(route)) throw httpError(404, 'Não disponível no app local.');
   const a = await auth.current(req);
   if (!auth.enabled()) return a; // login desligado: tudo liberado (como antes) — inclusive cadastrar os usuários antes de ligar
   if (PUBLIC_API.has(route)) return a;
@@ -220,7 +226,19 @@ async function api(req, res, url) {
       if (!fn) throw httpError(400, 'Ação de bloqueio desconhecida.');
       return send(res, 200, await fn());
     }
-    case 'GET /api/health': return send(res, 200, { ok: true, mode: 'server', version: VERSION, providers: cloud.list(), storage: storage.info() });
+    case 'GET /api/health': return send(res, 200, Object.assign({ ok: true, mode: 'server', version: VERSION, providers: cloud.list(), storage: storage.info() }, LOCAL ? { local: Object.assign({ dbFile: localApp.dbFile() }, localApp.who()) } : {}));
+    // ── app local: arquivo do banco e histórico de edições ──
+    case 'GET /api/local': if (!LOCAL) break;
+      return send(res, 200, Object.assign({ dbFile: localApp.dbFile(), appDir: localApp.APPDIR, suggestions: localApp.suggestions(), counts: await storage.api.counts() }, localApp.who()));
+    case 'POST /api/local/pick-folder': if (!LOCAL) break; return send(res, 200, await localApp.pickFolder((await readBody(req)).start));
+    case 'POST /api/local/db': {
+      if (!LOCAL) break;
+      const b = await readBody(req);
+      const r = localApp.setDbFile(b.path, ['move', 'use', 'new'].includes(b.mode) ? b.mode : 'move', () => storage.close());
+      if (r.changed) logs.audit('db.file', `Banco ${{ move: 'movido para', use: 'trocado para o que já estava em', new: 'novo criado em' }[r.mode]} ${r.dbFile}`);
+      return send(res, 200, Object.assign(r, { counts: await storage.api.counts() }));
+    }
+    case 'GET /api/edits': if (!LOCAL) break; return send(res, 200, await logs.edits(q));
     case 'GET /api/settings': return send(res, 200, await storage.getSettings());
     case 'PUT /api/settings': return send(res, 200, await storage.saveSettings(await readBody(req)));
     case 'GET /api/settings/storage': return send(res, 200, await storage.status());
@@ -245,7 +263,12 @@ async function api(req, res, url) {
     case 'GET /api/clients': return send(res, 200, await trash.decorateClients(await storage.api.listClients()));
     case 'GET /api/books': return send(res, 200, await storage.api.listBooks(q));
     case 'GET /api/book': return send(res, 200, await storage.api.getBook(q));
-    case 'PUT /api/book': { const body = await readBody(req); await locks.assertCanSave(q, me); return send(res, 200, await storage.api.saveBook(q, body)); }
+    case 'PUT /api/book': {
+      const body = await readBody(req); await locks.assertCanSave(q, me);
+      const r = await storage.api.saveBook(q, body);
+      if (LOCAL) logs.edit(`${(body.meta && body.meta.cliente) || q.cliente} · ${q.mes}/${q.ano} · ${(body.meta && body.meta.area) || q.area}`);
+      return send(res, 200, r);
+    }
     case 'DELETE /api/book': await locks.assertCanSave(q, me); return send(res, 200, await trash.deleteBook(q, me));
     case 'GET /api/templates': return send(res, 200, await storage.api.listTemplates());
     case 'PUT /api/templates': return send(res, 200, await storage.api.saveTemplate(await readBody(req)));
@@ -312,22 +335,32 @@ function shutdown(signal) {
   if (server.closeIdleConnections) server.closeIdleConnections();
 }
 
-if (require.main === module) {
+/** Sobe o servidor. Devolve a porta em uso. port 0 = qualquer porta livre (o app local usa). */
+function start({ port = PORT, host = LOCAL ? '127.0.0.1' : HOST } = {}) {
   storage.bootstrap().then((m) => { if (m) console.log(`  📥 Dados antigos de data/ importados para ${storage.info().label}: ${m.books} book(s), ${m.templates} template(s), ${m.connections} conexão(ões)`); })
     .catch((e) => console.error('  ⚠ Armazenamento indisponível: ' + e.message));
-  backup.startScheduler();
-  automation.start(() => server.address().port); // geração automática dos books (agenda por cliente)
-  auth.startGraphScheduler();
-  const housekeeping = () => { trash.purgeExpired().then((n) => n && logs.app('info', `Lixeira: ${n} item(ns) apagado(s) por prazo`)).catch(() => {}); logs.prune().catch(() => {}); };
+  if (!LOCAL) {
+    // só no site: backup do servidor, book automático (agenda) e sincronização de grupos do Entra ID
+    backup.startScheduler();
+    automation.start(() => server.address().port); // geração automática dos books (agenda por cliente)
+    auth.startGraphScheduler();
+  }
+  const housekeeping = () => { trash.purgeExpired().then((n) => n && logs.app('info', `Lixeira: ${n} item(ns) apagado(s) por prazo`)).catch(() => {}); logs.prune().catch(() => {}); logs.pruneEdits().catch(() => {}); };
   setTimeout(housekeeping, 30000).unref(); setInterval(housekeeping, 6 * 3600000).unref();
-  server.listen(PORT, HOST, () => {
-    const info = storage.info();
-    logs.app('info', `Servidor iniciado (v${VERSION}) em ${HOST}:${PORT} — ${info.label}`);
-    console.log(`\n  📘 Book Técnico v${VERSION} rodando em  http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
-    console.log(`  💾 Armazenamento             ${info.label} — ${info.location}`);
-    console.log(`  ☁️  Conectores               ${cloud.list().join(', ')}\n`);
-  });
   ['SIGINT', 'SIGTERM'].forEach((s) => process.on(s, () => shutdown(s)));
   process.on('unhandledRejection', (e) => console.error('  ✖ Erro não tratado:', e));
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, () => {
+      const info = storage.info(); const p = server.address().port;
+      logs.app('info', `Servidor iniciado (v${VERSION}) em ${host}:${p} — ${info.label}`);
+      console.log(`\n  📘 Book Técnico v${VERSION}${LOCAL ? ' (app local)' : ''} rodando em  http://${host === '0.0.0.0' ? 'localhost' : host}:${p}`);
+      console.log(`  💾 Armazenamento             ${info.label} — ${info.location}`);
+      console.log(`  ☁️  Conectores               ${cloud.list().join(', ')}\n`);
+      resolve(p);
+    });
+  });
 }
-module.exports = { server };
+
+if (require.main === module) start().catch((e) => { console.error('  ✖ ' + e.message); process.exit(1); });
+module.exports = { server, start };

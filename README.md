@@ -3,6 +3,26 @@
 Editor de books técnicos multicloud (OCI · AWS · Azure · GCP · VMware), com menus customizáveis,
 blocos arrastáveis e exportação para **PDF**, **Word** e **HTML**.
 
+## 💻 App local (branch `app-local`)
+Esta branch roda o Book Técnico **só nesta máquina**, sem servidor nem container:
+
+1. Instale o **Node.js 22.5 ou mais novo** (https://nodejs.org).
+2. Baixe a branch: `https://github.com/xdarkerx/book-tecnico/archive/refs/heads/app-local.zip` e extraia.
+3. Dê **duplo clique em `Book-Tecnico.cmd`**. O app abre numa janela própria (Edge em modo app). Uma janela de
+   console fica minimizada: feche-a para encerrar o app.
+
+O que muda em relação ao site:
+- **Sem login.** Quem edita é o **usuário do Windows** e a **máquina**.
+- **Histórico de edições** (⚙️ Configurações › Aplicativo): quem editou cada book, de qual máquina e quando. Fica
+  dentro do banco, então as edições feitas em outra máquina (pelo OneDrive) também aparecem.
+- **Banco SQLite num caminho escolhido** (⚙️ Configurações › Aplicativo › Banco de dados): por padrão em
+  `%APPDATA%\BookTecnicoook-tecnico.sqlite`. Dá para escolher a pasta (botão **📂 Escolher pasta…** ou os atalhos
+  do OneDrive) e **mover o banco atual**, **usar um banco que já está na pasta** (ex.: o que veio de outra máquina) ou
+  **começar um banco vazio**. O banco é um arquivo só (sem `-wal`), seguro para o OneDrive sincronizar.
+- **Fora do app local:** login e usuários, MongoDB, edição simultânea, backup do servidor, e-mail e book automático,
+  logs de requisições e de banco.
+- Não abra o mesmo banco em duas máquinas ao mesmo tempo: o OneDrive guarda a última gravação.
+
 ## Como rodar
 
 ```bash

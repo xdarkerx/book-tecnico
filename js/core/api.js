@@ -45,6 +45,11 @@
     saveConnections: (c, data) => http('PUT', '/api/connections?cliente=' + encodeURIComponent(slug(c)), data),
     cloudTest: (c, provider) => http('POST', '/api/cloud/test?cliente=' + encodeURIComponent(slug(c)), { provider }),
     getSettings: () => http('GET', '/api/settings'),
+    // app local (branch app-local): arquivo do banco e histórico de edições
+    localInfo: () => http('GET', '/api/local'),
+    localPickFolder: (start) => http('POST', '/api/local/pick-folder', { start }),
+    localSetDb: (path, mode) => http('POST', '/api/local/db', { path, mode }),
+    edits: (q = {}) => http('GET', '/api/edits?' + new URLSearchParams(q)),
     saveSettings: (s) => http('PUT', '/api/settings', s),
     switchStorage: (storage, migrate) => http('POST', '/api/settings/storage', { storage, migrate }),
     storageStatus: () => http('GET', '/api/settings/storage'),
@@ -165,7 +170,7 @@
     keyOf, slug,
     async init() {
       if (/^https?:$/.test(location.protocol)) {
-        try { const h = await (await fetch('/api/health', { cache: 'no-store' })).json(); if (h && h.mode === 'server') { A.mode = 'server'; A.providers = h.providers || []; A.storage = h.storage || null; A.version = h.version || ''; } } catch (e) { /* sem servidor */ }
+        try { const h = await (await fetch('/api/health', { cache: 'no-store' })).json(); if (h && h.mode === 'server') { A.mode = 'server'; A.providers = h.providers || []; A.storage = h.storage || null; A.version = h.version || ''; A.local = h.local || null; } } catch (e) { /* sem servidor */ }
       }
       Object.assign(A, A.mode === 'server' ? server : local);
       if (A.mode === 'local') await migrateOldSessions();

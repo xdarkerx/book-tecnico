@@ -20,7 +20,7 @@ function open() {
   finally { process.emitWarning = prev; }
   db = new DatabaseSync(FILE());
   db.exec(`
-    PRAGMA journal_mode = WAL;
+    PRAGMA journal_mode = ${/^(WAL|DELETE|TRUNCATE)$/.test(process.env.BOOK_SQLITE_JOURNAL || '') ? process.env.BOOK_SQLITE_JOURNAL : 'WAL'};
     PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS books (
       key TEXT PRIMARY KEY, cliente_slug TEXT NOT NULL, ano TEXT NOT NULL, mes TEXT NOT NULL, area_slug TEXT NOT NULL,

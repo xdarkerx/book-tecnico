@@ -8,7 +8,8 @@
     "start": "node server/index.js",
     "build": "node tools/build-book-styles.js && node tools/build-html.js",
     "build:styles": "node tools/build-book-styles.js",
-    "test": "node tools/test-server.js && node tools/test-edge.js && node tools/test-front.js",
+    "test": "node tools/test-server.js && node tools/test-edge.js && node tools/test-front.js && node tools/test-local.js",
+    "local": "node server/local-app.js",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f book-tecnico"

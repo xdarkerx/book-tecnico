@@ -18,19 +18,26 @@
     { group: 'Usuário', items: [['prefs', '🎨', 'Preferências'], ['book', '🧭', 'Opções de book'], ['import', '📥', 'Importação padrão']] },
     { group: 'Administrador', admin: true, items: [['mail', '✉️', 'E-mail e automação'], ['db', '💾', 'Banco de dados'], ['access', '🔐', 'Login e acesso'], ['lock', '🔒', 'Edição simultânea'], ['backup', '🗄️', 'Backup'], ['trash', '🗑️', 'Lixeira'], ['logs', '📜', 'Logs e auditoria']] }
   ];
-  const ADMIN_RENDER = { mail: () => BT.editor.automation.renderAdmin(), import: () => BT.editor.importDefaults.render(), access: () => BT.editor.access.render(), lock: () => BT.editor.access.render(), backup: () => BT.editor.backup.render(), trash: () => BT.editor.trash.render(), logs: () => BT.editor.logs.render(), db: () => { drawStorage(); BT.editor.backup.renderDbDelete(); } };
+  // app local: sem login, MongoDB, edição simultânea, backup do servidor nem e-mail/book automático
+  const LOCAL_PANELS = [
+    PANELS[0],
+    { group: 'Aplicativo', admin: true, items: [['localdb', '💾', 'Banco de dados'], ['history', '🕘', 'Histórico de edições'], ['trash', '🗑️', 'Lixeira']] }
+  ];
+  const panels = () => (BT.api.local ? LOCAL_PANELS : PANELS);
+  const ADMIN_RENDER = { localdb: () => BT.editor.localApp.renderDb(), history: () => BT.editor.localApp.renderHistory(), mail: () => BT.editor.automation.renderAdmin(), import: () => BT.editor.importDefaults.render(), access: () => BT.editor.access.render(), lock: () => BT.editor.access.render(), backup: () => BT.editor.backup.render(), trash: () => BT.editor.trash.render(), logs: () => BT.editor.logs.render(), db: () => { drawStorage(); BT.editor.backup.renderDbDelete(); } };
   let panel = null;
   const isAdmin = () => BT.auth.isAdmin && BT.api.mode === 'server';
 
   function drawNav() {
     const nav = $('set-nav'); nav.innerHTML = '';
-    PANELS.filter((g) => !g.admin || isAdmin()).forEach((g) => {
+    panels().filter((g) => !g.admin || isAdmin()).forEach((g) => {
       nav.appendChild(h('div', { class: 'set-nav-g' }, g.group));
       g.items.forEach(([id, ic, label]) => nav.appendChild(h('button', { class: 'set-nav-i' + (id === panel ? ' on' : ''), 'aria-current': id === panel ? 'page' : null, 'data-p': id, onclick: () => show(id) }, [h('span', { class: 'ic', 'aria-hidden': 'true' }, ic), label])));
     });
   }
   function show(id) {
-    const ok = PANELS.some((g) => (!g.admin || isAdmin()) && g.items.some((x) => x[0] === id));
+    if (BT.api.local) id = { db: 'localdb', logs: 'history' }[id] || id; // atalhos do site levam aos painéis do app local
+    const ok = panels().some((g) => (!g.admin || isAdmin()) && g.items.some((x) => x[0] === id));
     panel = ok ? id : 'prefs';
     try { localStorage.setItem('bt-settings-panel', panel); } catch (e) { /* nada */ }
     document.querySelectorAll('#settings .set-panel').forEach((el) => { el.hidden = el.dataset.panel !== panel; });

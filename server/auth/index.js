@@ -32,7 +32,8 @@ const MASK = '••••••••';
 // ── configuração ─────────────────────────────────────────
 function config() {
   const a = storage.readFileSettings().auth || {};
-  return { enabled: !!a.enabled, saml: Object.assign({}, DEF.saml, a.saml), lock: Object.assign({}, DEF.lock, a.lock),
+  // app local: sem login
+  return { enabled: !require('../local').LOCAL && !!a.enabled, saml: Object.assign({}, DEF.saml, a.saml), lock: Object.assign({}, DEF.lock, a.lock),
     groups: Object.assign({}, DEF.groups, a.groups), graph: Object.assign({}, DEF.graph, a.graph), graphState: a.graphState || {} };
 }
 const enabled = () => config().enabled;

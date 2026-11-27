@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { AsyncLocalStorage } = require('async_hooks');
 const { DATA } = require('./storage/common');
+const local = require('./local');
 
 const DIR = path.join(DATA, 'logs');
 const KINDS = ['http', 'db', 'app', 'audit'];
@@ -27,14 +28,32 @@ const file = (kind, d) => path.join(DIR, `${kind}-${d}.jsonl`);
 const scrub = (s) => String(s).replace(/([?&](sid|token|password|senha|secret)=)[^&\s]*/gi, '$1***').replace(/\/\/[^@/\s]*@/g, '//***@');
 
 function write(kind, entry) {
+  // app local: sem log de requisições e de banco; o resto leva o usuário do Windows e a máquina
+  if (local.LOCAL && (kind === 'http' || kind === 'db')) return entry;
   const store = ctx.getStore() || {};
-  const e = Object.assign({ t: Date.now() }, store.user ? { user: store.user } : {}, store.ip && kind !== 'http' ? { ip: store.ip } : {}, entry);
+  const e = local.LOCAL ? Object.assign({ t: Date.now() }, local.who(), entry)
+    : Object.assign({ t: Date.now() }, store.user ? { user: store.user } : {}, store.ip && kind !== 'http' ? { ip: store.ip } : {}, entry);
+  if (local.LOCAL && kind === 'audit') history(e.action, e.msg);
   if (e.path) e.path = scrub(e.path);
   if (e.msg) e.msg = scrub(e.msg);
   const r = ring[kind]; r.push(e); if (r.length > RING) r.splice(0, r.length - RING);
   const line = JSON.stringify(e) + '\n';
   queue = queue.then(() => fs.promises.appendFile(file(kind, day(e.t)), line)).catch(() => { /* disco cheio etc.: não derruba o app */ });
   return e;
+}
+
+// ── App local: histórico de edições (quem, de qual máquina, o quê, quando), gravado no próprio banco ──
+// Assim vai junto com o arquivo do banco (ex.: pelo OneDrive) e cada máquina vê quem mexeu.
+const EDIT_WINDOW = 30 * 60000; // várias gravações seguidas do mesmo book viram uma linha a cada 30 min
+function history(action, msg, book = '') {
+  if (!local.LOCAL) return;
+  try {
+    const st = require('./storage');
+    const w = local.who(); const t = Date.now();
+    const id = book && action === 'edit' ? `${book}|${w.user}|${w.machine}|${Math.floor(t / EDIT_WINDOW)}` : `${t}-${Math.random().toString(36).slice(2, 8)}`;
+    const r = st.api.kvSet('edits', id, Object.assign({ id, t, action, msg: String(msg || ''), book }, w));
+    if (r && r.catch) r.catch(() => {});
+  } catch (e) { /* banco indisponível: não derruba o app */ }
 }
 
 const L = {
@@ -79,6 +98,22 @@ const L = {
     return n;
   },
   flush: () => queue,
+  /** App local: registra uma edição de book (agrupa as gravações seguidas). */
+  edit: (book, msg) => history('edit', msg || 'Editou o book', book),
+  /** App local: histórico do banco, mais recente primeiro. filter: { q, limit } */
+  async edits({ q, limit = 500 } = {}) {
+    const st = require('./storage');
+    const needle = String(q || '').toLowerCase();
+    const all = (await st.api.kvList('edits')).filter((e) => !needle || JSON.stringify(e).toLowerCase().includes(needle));
+    return all.sort((a, b) => b.t - a.t).slice(0, Math.min(Number(limit) || 500, 5000));
+  },
+  /** App local: mantém só o último ano do histórico. */
+  async pruneEdits() {
+    if (!local.LOCAL) return 0;
+    const st = require('./storage'); let n = 0;
+    for (const e of await st.api.kvList('edits')) if (e.id && Date.now() - e.t > 365 * 86400000) { await st.api.kvDel('edits', e.id); n++; }
+    return n;
+  },
   DIR
 };
 module.exports = L;
