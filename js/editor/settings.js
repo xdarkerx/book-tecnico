@@ -16,9 +16,9 @@
   // ── Menus: Usuário (todos) e Administrador ─────────────
   const PANELS = [
     { group: 'Usuário', items: [['prefs', '🎨', 'Preferências'], ['book', '🧭', 'Opções de book'], ['import', '📥', 'Importação padrão']] },
-    { group: 'Administrador', admin: true, items: [['mail', '✉️', 'E-mail e automação'], ['db', '💾', 'Banco de dados'], ['access', '🔐', 'Login e acesso'], ['lock', '🔒', 'Edição simultânea'], ['backup', '🗄️', 'Backup'], ['trash', '🗑️', 'Lixeira'], ['logs', '📜', 'Logs e auditoria']] }
+    { group: 'Administrador', admin: true, items: [['defaults', '📋', 'Padrões da equipe'], ['mail', '✉️', 'E-mail e automação'], ['db', '💾', 'Banco de dados'], ['access', '🔐', 'Login e acesso'], ['lock', '🔒', 'Edição simultânea'], ['backup', '🗄️', 'Backup'], ['trash', '🗑️', 'Lixeira'], ['logs', '📜', 'Logs e auditoria']] }
   ];
-  const ADMIN_RENDER = { mail: () => BT.editor.automation.renderAdmin(), import: () => BT.editor.importDefaults.render(), access: () => BT.editor.access.render(), lock: () => BT.editor.access.render(), backup: () => BT.editor.backup.render(), trash: () => BT.editor.trash.render(), logs: () => BT.editor.logs.render(), db: () => { drawStorage(); BT.editor.backup.renderDbDelete(); } };
+  const ADMIN_RENDER = { defaults: () => { drawTeamDefaults(); $('set-save-defaults').onclick = () => save('Padrões da equipe salvos ✓ — valem para os próximos books e importações'); }, mail: () => BT.editor.automation.renderAdmin(), import: () => BT.editor.importDefaults.render(), access: () => BT.editor.access.render(), lock: () => BT.editor.access.render(), backup: () => BT.editor.backup.render(), trash: () => BT.editor.trash.render(), logs: () => BT.editor.logs.render(), db: () => { drawStorage(); BT.editor.backup.renderDbDelete(); } };
   let panel = null;
   const isAdmin = () => BT.auth.isAdmin && BT.api.mode === 'server';
 
@@ -67,8 +67,7 @@
     $('set-compare').checked = !!S.defaults.comparativo;
     $('set-compare').onchange = (e) => (S.defaults.comparativo = e.target.checked);
     $('set-add-extra').onclick = () => { S.defaults.extraGroups.push({ title: 'Novo menu', icon: '📁', separator: true, sections: [{ title: 'Nova seção' }] }); drawExtras(); };
-    $('set-save').onclick = save;
-    drawTeamDefaults();
+    $('set-save').onclick = () => save();
     drawTheme(); drawTree(); drawExtras();
     let last = 'prefs'; try { last = localStorage.getItem('bt-settings-panel') || last; } catch (e) { /* nada */ }
     show(which || last);
@@ -197,7 +196,7 @@
 
   // ── Padrões da equipe: o que já vem marcado nos books novos e nas importações (BT.data.defaults) ──
   function drawTeamDefaults() {
-    const box = $('set-team-defaults'); if (!box) return; box.innerHTML = '';
+    const box = $('set-team-defaults'); if (!box || !S) return; box.innerHTML = ''; // S: configurações ainda carregando
     const D = BT.data.defaults;
     const cur = D.load(S.defaults); // de fábrica + o que a equipe já salvou
     const b = S.defaults.blockDefaults = JSON.parse(JSON.stringify(cur.blocks));
@@ -206,7 +205,7 @@
     const inList = (arr, v, label) => h('label', { class: 'cp' }, [h('input', { type: 'checkbox', checked: arr.includes(v), onchange: (e) => { const i = arr.indexOf(v); if (e.target.checked && i < 0) arr.push(v); if (!e.target.checked && i >= 0) arr.splice(i, 1); } }), label]);
     const radio = (obj, k, name, opts) => h('div', { class: 'cprow', role: 'radiogroup' }, opts.map(([v, l]) => h('label', { class: 'cp' }, [h('input', { type: 'radio', name, checked: obj[k] === v, onchange: () => (obj[k] = v) }), l])));
     box.append(
-      h('div', { class: 'subt' }, '✅ O que já vem marcado nos books novos'),
+      h('div', { class: 'subt', style: { marginTop: '14px' } }, '✅ O que já vem marcado nos books novos'),
       h('div', { class: 'set-help' }, 'Vale para books criados do zero. Um book copiado (⧉ próximo mês) mantém o que estava no original.'),
       h('div', { class: 'lbl', style: { margin: '10px 0 6px' } }, '📈 Comparativo mensal'),
       h('div', { class: 'cprow' }, [chk(b, 'compareHideUnchanged', 'Ocultar itens sem mudança')]),
@@ -218,7 +217,7 @@
       h('div', { class: 'lbl', style: { margin: '12px 0 6px' } }, '🗺️ Topologia de rede'),
       radio(b, 'topologyStyle', 'td-topo', [['compact', '▦ Compacto'], ['detailed', '🗺️ Detalhado']]),
       h('div', { class: 'subt' }, '📥 Importação padrão da equipe'),
-      h('div', { class: 'set-help' }, 'O que já vem marcado ao sincronizar e ao revisar uma importação. Quem salvar os próprios padrões em Usuário › Importação padrão usa os dele.'),
+      h('div', { class: 'set-help' }, 'O que já vem marcado ao sincronizar e ao revisar uma importação.'),
       h('div', { class: 'lbl', style: { margin: '10px 0 6px' } }, '📡 Zabbix — severidades dos alertas'),
       h('div', { class: 'cprow' }, [[5, '🟥 Desastre'], [4, '🟧 Alta'], [3, '🟨 Média'], [2, '🟦 Atenção'], [1, 'ℹ️ Informação'], [0, '⬜ Não classificado']].map(([v, l]) => inList(im.zabbixSeverities, v, l))),
       h('div', { class: 'cprow', style: { marginTop: '6px' } }, [chk(im, 'zabbixAllHosts', 'Incluir servidores sem nenhum alerta no período (Monitoramento)')]),
@@ -230,12 +229,12 @@
     );
   }
 
-  async function save() {
+  async function save(okMsg) {
     try {
-      if (!S.defaults.importDefaults.zabbixSeverities.length) throw new Error('Escolha ao menos uma severidade do Zabbix nos padrões da equipe.');
+      if (S.defaults.importDefaults && !(S.defaults.importDefaults.zabbixSeverities || []).length) throw new Error('Escolha ao menos uma severidade do Zabbix nos padrões da equipe.');
       await BT.api.saveSettings({ defaults: S.defaults });
       BT.data.defaults.load(S.defaults); // vale já nesta tela
-      BT.ui.toast('Opções de book salvas ✓ — valem para os próximos books', { type: 'ok' });
+      BT.ui.toast(okMsg || 'Opções de book salvas ✓ — valem para os próximos books', { type: 'ok' });
     } catch (e) { BT.ui.toast(e.message, { type: 'err' }); }
   }
 

@@ -191,6 +191,13 @@ async function main() {
   const pr = (await call('GET', '/api/auth/me', undefined, { cookie: bia })).data.user.prefs.importDefaults;
   assert.deepStrictEqual(pr, { zabbixSeverities: [5, 4], risks: ['critica', 'alta'], newOnly: true, zabbixAllHosts: false }); ok('importação padrão: salva no usuário só valores válidos (severidade 9 e risco "xpto" descartados)');
   assert.ok(!(await call('GET', '/api/auth/me', undefined, { cookie: adm })).data.user.prefs.importDefaults); ok('importação padrão: é de cada usuário (o admin não herda a da Bia)');
+  await call('PUT', '/api/auth/prefs', { importDefaults: null }, { cookie: bia });
+  assert.ok(!(await call('GET', '/api/auth/me', undefined, { cookie: bia })).data.user.prefs.importDefaults); ok('importação padrão: "voltar ao padrão da equipe" apaga a do usuário');
+  // padrões da equipe: só o admin muda (o usuário comum salva as opções de book, mas sem mexer nos padrões)
+  await call('PUT', '/api/settings', { defaults: { importDefaults: { backupMode: 'jobs' }, blockDefaults: { topologyStyle: 'detailed' } } }, { cookie: adm });
+  await call('PUT', '/api/settings', { defaults: { importDefaults: { backupMode: 'both' }, blockDefaults: { topologyStyle: 'compact' }, comparativo: false } }, { cookie: bia });
+  const td = (await call('GET', '/api/settings', undefined, { cookie: adm })).data.defaults;
+  assert.deepStrictEqual([td.importDefaults.backupMode, td.blockDefaults.topologyStyle, td.comparativo], ['jobs', 'detailed', false]); ok('padrões da equipe: só o administrador altera (o usuário comum não sobrescreve)');
 
   // ── e-mail e book automático ────────────────────────────
   assert.strictEqual((await call('PUT', '/api/mail/config', { method: 'smtp', from: 'nao-e-email' }, { cookie: adm })).status, 400); ok('e-mail: remetente inválido → 400');

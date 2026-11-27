@@ -222,7 +222,12 @@ async function api(req, res, url) {
     }
     case 'GET /api/health': return send(res, 200, { ok: true, mode: 'server', version: VERSION, providers: cloud.list(), storage: storage.info() });
     case 'GET /api/settings': return send(res, 200, await storage.getSettings());
-    case 'PUT /api/settings': return send(res, 200, await storage.saveSettings(await readBody(req)));
+    case 'PUT /api/settings': {
+      const b = await readBody(req);
+      // padrões da equipe (o que vem marcado nos books novos e nas importações): só administradores, com login ligado
+      if (auth.enabled() && me && me.user.role !== 'admin' && b && b.defaults) { delete b.defaults.blockDefaults; delete b.defaults.importDefaults; }
+      return send(res, 200, await storage.saveSettings(b));
+    }
     case 'GET /api/settings/storage': return send(res, 200, await storage.status());
     case 'POST /api/settings/storage': {
       const b = await readBody(req); const from = storage.kind();

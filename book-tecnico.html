@@ -231,7 +231,6 @@
 
             <div class="subt">📈 Comparativo mensal</div>
             <label class="switch"><input type="checkbox" id="set-compare"> Incluir a seção "Comparativo mensal" nos novos books (dá para desligar em cada book)</label>
-            <div id="set-team-defaults"><!-- render: settings.js (padrões da equipe: blocos e importação) --></div>
             <div class="set-foot">
               <button class="btn btn-primary btn-sm" id="set-save">Salvar opções de book</button>
             </div>
@@ -285,6 +284,14 @@
           </div>
         </div>
 
+        <div class="set-panel" data-panel="defaults" hidden>
+          <div class="card set-card">
+            <div class="subt" style="margin-top:0">📋 Padrões da equipe</div>
+            <div class="set-help">Valem para todos os usuários. Quem salvar os próprios padrões em <b>Usuário › Importação padrão</b> usa os dele.</div>
+            <div id="set-team-defaults"><!-- render: settings.js --></div>
+            <div class="set-foot"><button class="btn btn-primary btn-sm" id="set-save-defaults">Salvar padrões da equipe</button></div>
+          </div>
+        </div>
         <div class="set-panel" data-panel="mail" hidden><div id="set-mail"><!-- render: automation-ui.js --></div></div>
         <div class="set-panel" data-panel="access" hidden><div id="set-access-login"><!-- render: access-settings.js --></div></div>
         <div class="set-panel" data-panel="lock" hidden><div id="set-access-lock"><!-- render: access-settings.js --></div></div>
